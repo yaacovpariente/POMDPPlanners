@@ -71,9 +71,9 @@ __all__ = [
     "default_robot_start_cells",
 ]
 
-from .visualizer import MultiAgentFirefightingVisualizer
 from .multiagent_firefighting_vectorized_belief import (
     FirefightingVectorizedBelief,
     FirefightingVectorizedUpdater,
     create_firefighting_belief,
 )
+from .visualizer import MultiAgentFirefightingVisualizer

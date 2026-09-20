@@ -13,9 +13,6 @@ Exports:
         default belief.
     ChicheckInvadersInitialStateDistribution: The per-episode flock prior.
     ChicheckInvadersVisualizer: Episode renderer.
-    CHICHECK_INVADERS_PAYLOAD_KIND: Payload kind of this environment's episode trace.
-    build_chicheck_invaders_trace: Builds that trace from one episode.
-    create_chicheck_invaders_belief: Builds the initial belief for an environment.
     create_chicheck_invaders_belief: Builds the scalar belief for an environment.
     create_chicheck_invaders_vectorized_belief: Builds the batched one.
     create_chicheck_invaders_state: Builds one state vector from its parts.
@@ -69,6 +66,7 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensor
 
 __all__ = [
     "CHICHECK_INVADERS_PAYLOAD_KIND",
+    "build_chicheck_invaders_trace",
     "CHICKEN_ALIVE",
     "CHICKEN_COLUMN",
     "CHICKEN_DIRECTION",
@@ -100,7 +98,6 @@ __all__ = [
     "SHIP_COLUMN_INDEX",
     "SHIP_HIT_INDEX",
     "STEP_INDEX",
-    "build_chicheck_invaders_trace",
     "camera_sees",
     "chicken_slots",
     "create_chicheck_invaders_belief",
@@ -117,13 +114,13 @@ __all__ = [
 ]
 
 from .chicheck_invaders_belief import ChicheckInvadersBelief, create_chicheck_invaders_belief
-from .visualizer import (
-    CHICHECK_INVADERS_PAYLOAD_KIND,
-    ChicheckInvadersVisualizer,
-    build_chicheck_invaders_trace,
-)
 from .chicheck_invaders_vectorized_belief import (
     ChicheckInvadersVectorizedBelief,
     ChicheckInvadersVectorizedUpdater,
     create_chicheck_invaders_vectorized_belief,
+)
+from .visualizer import (
+    CHICHECK_INVADERS_PAYLOAD_KIND,
+    ChicheckInvadersVisualizer,
+    build_chicheck_invaders_trace,
 )

@@ -9,7 +9,6 @@ Exports:
         environment's default belief.
     BattleshipVisualizer: Episode renderer.
     FleetLayoutTable: The enumerated legal layouts.
-    build_battleship_trace: Writes an episode as data for the browser viewer.
 """
 
 from POMDPPlanners.environments.battleship_pomdp.battleship_layouts import (
@@ -27,20 +26,16 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import (
     create_battleship_state,
 )
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
-from POMDPPlanners.environments.battleship_pomdp.visualizer import (
-    BATTLESHIP_PAYLOAD_KIND,
 from POMDPPlanners.environments.battleship_pomdp.battleship_vectorized_belief import (
     BattleshipVectorizedUpdater,
     BattleshipVectorizedWeightedParticleBelief,
     create_battleship_belief,
 )
-from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+from POMDPPlanners.environments.battleship_pomdp.visualizer import (
     BattleshipVisualizer,
-    build_battleship_trace,
 )
 
 __all__ = [
-    "BATTLESHIP_PAYLOAD_KIND",
     "HIT",
     "MISS",
     "BattleshipBelief",
@@ -53,7 +48,6 @@ __all__ = [
     "BattleshipStepChannel",
     "BattleshipVisualizer",
     "FleetLayoutTable",
-    "build_battleship_trace",
     "create_battleship_belief",
     "create_battleship_state",
     "get_layout_table",
