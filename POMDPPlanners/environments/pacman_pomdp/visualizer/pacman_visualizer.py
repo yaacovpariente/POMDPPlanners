@@ -11,7 +11,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.pacman_pomdp.pacman_art import character, ghost, pellet, tile
+from POMDPPlanners.environments.pacman_pomdp.visualizer.pacman_art import (
+    character,
+    ghost,
+    pellet,
+    tile,
+)
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
