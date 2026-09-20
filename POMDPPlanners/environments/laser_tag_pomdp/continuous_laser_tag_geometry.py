@@ -26,6 +26,17 @@ from __future__ import annotations
 import numpy as np
 
 # 8 laser ray unit-direction vectors: N, NE, E, SE, S, SW, W, NW
+#
+# Entries are ``(dx, dy)`` in continuous world coordinates with y pointing up,
+# so north is ``(0, +1)``.  The discrete variant's ``_LASER_DIRECTIONS`` in
+# ``laser_tag_pomdp`` stores ``(d_row, d_col)`` in row-major grid coordinates
+# with row 0 at the top, so it writes the same north as ``(-1, 0)``.  The raw
+# tuples therefore look contradictory, but the compass headings agree: the two
+# tables are related by ``(dx, dy) = (d_col, -d_row)`` for all eight entries.
+# Beam index i means the same heading in both variants and the readings are
+# directly comparable; only the tuple order and the sign of the vertical axis
+# differ.  Do not "align" one table to the other -- each is correct in its own
+# frame, and changing either breaks its environment.
 LASER_DIRECTIONS = np.array(
     [
         [0.0, 1.0],  # N

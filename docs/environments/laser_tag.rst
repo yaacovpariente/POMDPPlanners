@@ -44,6 +44,17 @@ What the agent sees and does
   tuple, the continuous one a length-8 ``np.ndarray``. Terminal grid states emit
   ``(-1.0,) * 8``.
 
+.. note::
+
+   The two variants write their direction tables in different frames, so the
+   same compass label has opposite-looking signs. The grid variant stores
+   ``(d_row, d_col)`` with row 0 at the top, making north ``(-1, 0)``; the
+   continuous variant stores ``(dx, dy)`` with y pointing up, making north
+   ``(0, +1)``. The headings themselves agree — the tables are related by
+   ``(dx, dy) = (d_col, -d_row)`` for all eight entries — so beam index *i*
+   is the same direction in both and the readings are directly comparable.
+   Only the raw tuples differ. Compare beam indices, not the vectors.
+
 The opponent moves with probability 0.4 along x, 0.4 along y and stays with
 probability 0.2. Those are nominal weights: when the robot is aligned on an
 axis the 0.4 splits 0.2/0.2 across both directions, and a blocked neighbour
