@@ -155,7 +155,7 @@ a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   align-items: center;
   justify-content: space-between;
 }
-.layout-switch { display: flex; gap: 6px; }
+.layout-switch { display: flex; gap: 6px; align-items: center; }
 
 .table-view table { background: var(--panel); }
 .table-view th, .table-view td { padding: 8px 14px 8px 0; }

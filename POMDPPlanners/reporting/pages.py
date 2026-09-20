@@ -149,6 +149,21 @@ def _chip(status: str) -> str:
     return f'<span class="chip chip-{tone}">{html(status.title())}</span>'
 
 
+def _live_toggle() -> str:
+    """The switch that plays every episode on the page at once.
+
+    Off by default: a page of playing scenes is work a reader has not asked
+    for, and the still frame is enough to choose an episode from.
+
+    Returns:
+        HTML for the switch.
+    """
+    return (
+        '<button type="button" class="tab" data-live aria-pressed="false" '
+        'title="Play every episode on this page, on repeat">Live</button>'
+    )
+
+
 def _layout_toggle() -> str:
     """The view picker that sits beside a page's heading.
 
@@ -781,7 +796,7 @@ def _thumbnail_scripts(policies: Sequence[PolicyView]) -> str:
         '<script src="/static/vendor/three.min.js"></script>'
         '<script src="/static/viewer/renderer-core.js"></script>'
         + scenes
-        + '<script src="/static/viewer/thumbs.js"></script>'
+        + '<script src="/static/viewer/scene-cards.js"></script>'
     )
 
 
@@ -826,7 +841,8 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
             (env.name, env_url(run, env.name)),
             (policy.name, None),
         ],
-        f'<div class="page-head"><h1>{html(policy.name)}</h1>{_layout_toggle()}</div>'
+        f'<div class="page-head"><h1>{html(policy.name)}</h1>'
+        f'<div class="layout-switch">{_live_toggle()}{_layout_toggle()}</div></div>'
         f'<p class="note">{len(policy.episodes)} episode(s) on '
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's own recording.</p>"

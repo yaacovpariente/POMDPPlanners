@@ -440,8 +440,11 @@ def test_a_planner_page_shows_each_episode_and_its_recorded_path(router: Router)
     # An episode with a trace also carries the canvas the 3D thumbnail is
     # drawn into, and the recording stays in the page underneath it.
     assert 'class="thumb thumb-scene"' in page and "trace_0.json" in page
-    assert "/static/viewer/thumbs.js" in page
+    assert "/static/viewer/scene-cards.js" in page
     assert "/static/viewer/scenes/light-dark.js" in page
+
+    # And the switch that plays them all at once, off until it is asked for.
+    assert 'data-live aria-pressed="false"' in page
 
 
 def test_artifact_route_serves_bytes_with_the_right_media_type(router: Router):
