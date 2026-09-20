@@ -21,6 +21,155 @@ Ported from the MDP version in `snake-rl
 <https://github.com/DragonWarrior15/snake-rl>`_, which is fully observable and
 rewards the same events.
 
+Formal definition
+-----------------
+
+Let :math:`n` = ``grid_size``, :math:`G = \{0..n{-}1\}^2` the playable cells,
+:math:`L` = ``target_length`` and :math:`\kappa` = ``starvation_limit``
+(default :math:`2n^2`).
+
+**State space.** A body (head first), a food cell, a starvation counter and a
+status tag:
+
+.. math::
+
+   s = \big(\varsigma,\; \mathbf{b},\; \phi,\; \nu\big), \qquad
+   S = \mathcal{T} \times G^{\leq L} \times (G \cup \{\varnothing\})
+   \times \{0..\kappa\}
+
+with :math:`\mathbf{b} = (b_1, \dots, b_\ell)` the occupied cells,
+:math:`\phi` the food, :math:`\nu` steps since food, and
+
+.. math::
+
+   \mathcal{T} = \{\textsf{RUNNING}, \textsf{WALL}, \textsf{SELF},
+   \textsf{WIN}, \textsf{STARVATION}\}
+
+The heading is not stored — it is recovered as :math:`b_1 - b_2`, so the body
+alone determines where the snake can go next.
+
+**Action space.** Relative to the heading, so reversing is unrepresentable:
+
+.. math::
+
+   A = \{\textsf{turn\_left},\; \textsf{straight},\; \textsf{turn\_right}\}
+     = \{0, 1, 2\}
+
+**Transition model.** Deterministic except for where the food respawns.
+Rotate the heading, step, then resolve:
+
+.. math::
+
+   h' = \mathcal{R}_a(h), \qquad b'_1 = b_1 + h'
+
+.. math::
+
+   \mathbf{b}' = \begin{cases}
+     (b'_1, b_1, \dots, b_\ell) & b'_1 = \phi \quad (\text{eat: tail held}) \\
+     (b'_1, b_1, \dots, b_{\ell-1}) & \text{otherwise} \quad (\text{tail released})
+   \end{cases}
+
+Releasing the tail is what makes the cell it has just left safe to enter. The
+counter resets on a meal, :math:`\nu' = 0` if eating else :math:`\nu + 1`, and
+the status is decided in a fixed priority order:
+
+.. math::
+
+   \varsigma' = \begin{cases}
+     \textsf{WALL} & b'_1 \notin G \\
+     \textsf{SELF} & b'_1 \in \{b'_2, \dots\} \\
+     \textsf{WIN} & |\mathbf{b}'| \geq L \\
+     \textsf{STARVATION} & \nu' \geq \kappa \\
+     \textsf{RUNNING} & \text{otherwise}
+   \end{cases}
+
+Wall and self are checked *first*: a snake that reaches its target length by
+walking into a wall has still hit the wall. The only randomness is the
+respawn, uniform over the cells the new body leaves free:
+
+.. math::
+
+   \Pr[\phi' = k] = \frac{1}{|G \setminus \mathbf{b}'|},
+   \qquad k \in G \setminus \mathbf{b}'
+
+and only when the step ate and did not win; otherwise :math:`\phi' = \phi`.
+
+**Observation space and model.** A terminal state emits one fixed sentinel
+reading. Otherwise the snake sees its own body exactly and the food through
+two channels:
+
+.. math::
+
+   o = \big(\textsf{LIVE},\; q,\; \hat{\phi},\; \mathbf{b}'\big)
+
+*Sighting.* The food is reported only when it is inside the Chebyshev window
+around the head, and then only with probability :math:`p_{\text{det}}` =
+``detection_probability``:
+
+.. math::
+
+   \Pr[\hat{\phi} = \phi'] = p_{\text{det}} \cdot
+   \mathbb{1}\big[\lVert \phi' - b'_1 \rVert_\infty \leq r\big],
+   \qquad \hat{\phi} = \varnothing \text{ otherwise}
+
+With :math:`p_{\text{det}} < 1` a silent window is not proof the food is
+elsewhere — absence of evidence stays weak evidence rather than a certainty.
+
+*Scent.* A noisy quadrant reading. Let :math:`Q(\phi' - b'_1) \subseteq
+\{0,1,2,3\}` be the quadrants compatible with the offset — two of them when the
+food shares the head's row or column, one otherwise. With :math:`\alpha` =
+``scent_accuracy``:
+
+.. math::
+
+   \Pr[q = k] = \begin{cases}
+     \alpha / |Q| & k \in Q \\
+     (1 - \alpha) / (4 - |Q|) & k \notin Q
+   \end{cases}
+
+which sums to one in the tie case too. At :math:`\alpha = 0.25` the scent is
+pure noise; at :math:`1.0` it localises the food to a quadrant in one step.
+The default :math:`0.7` makes several readings worth accumulating.
+
+**Reward function.** A pure function of :math:`(s, a)` — eating and dying are
+both settled by the deterministic half of the transition, and the respawn
+cannot change either:
+
+.. math::
+
+   R(s, a) = \begin{cases}
+     +1 & \text{the step eats} \\
+     -1 & \varsigma' \in \{\textsf{WALL}, \textsf{SELF}, \textsf{STARVATION}\} \\
+     0 & \text{otherwise, and for terminal } s
+   \end{cases}
+
+so :math:`R \in [-1, 1]`. Note a :math:`\textsf{WIN}` pays nothing beyond the
+meal that caused it.
+
+**Initial belief.** A fixed three-cell snake running west from the grid
+centre, with the food uniform over every cell it leaves free:
+
+.. math::
+
+   b_0 = \delta_{\mathbf{b}_0} \otimes
+   \mathrm{Unif}\big(G \setminus \mathbf{b}_0\big) \otimes
+   \delta_{\nu = 0} \otimes \delta_{\varsigma = \textsf{RUNNING}}
+
+The opening observation is the sentinel and nothing conditions on it: the
+belief starts from this prior, and the first real reading arrives after the
+first action.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.98`.
+Reaching the target takes hundreds of steps at :math:`n = 12`, so a shorter
+horizon would flatten the difference between finding food soon and finding it
+eventually.
+
+**Terminal set.** Anything but :math:`\textsf{RUNNING}`:
+
+.. math::
+
+   S_T = \{s : \varsigma \neq \textsf{RUNNING}\}
+
 Actions, observations and rewards
 ---------------------------------
 

@@ -37,6 +37,96 @@ What the agent sees and does
 - **Observations** (continuous) — the state plus zero-mean Gaussian noise with
   covariance ``noise_cov``.
 
+Formal definition
+-----------------
+
+Write the state as :math:`s = (x, \dot{x}, \vartheta, \dot{\vartheta})`.
+
+**State and observation spaces**
+
+.. math::
+
+   S = \Omega = \mathbb{R}^4, \qquad A = \{0, 1\}
+   \quad (\text{push left, push right})
+
+**Transition model.** The Gym CartPole physics, with :math:`m_c = 1.0`,
+:math:`m_p = 0.1`, half-length :math:`\ell = 0.5`, :math:`g = 9.8`,
+:math:`F = 10` and :math:`\tau = 0.02`. Let :math:`F_a = +F` for
+:math:`a = 1` and :math:`-F` for :math:`a = 0`. The accelerations are
+
+.. math::
+
+   \varphi &= \frac{F_a + m_p \ell \dot{\vartheta}^2 \sin\vartheta}
+     {m_c + m_p} \\
+   \ddot{\vartheta} &= \frac{g \sin\vartheta - \varphi \cos\vartheta}
+     {\ell\left(\tfrac{4}{3} -
+     \dfrac{m_p \cos^2\vartheta}{m_c + m_p}\right)} \\
+   \ddot{x} &= \varphi - \frac{m_p \ell \ddot{\vartheta} \cos\vartheta}
+     {m_c + m_p}
+
+integrated by explicit Euler (the configured default):
+
+.. math::
+
+   f(s, a) = \big(x + \tau\dot{x},\;\; \dot{x} + \tau\ddot{x},\;\;
+   \vartheta + \tau\dot{\vartheta},\;\;
+   \dot{\vartheta} + \tau\ddot{\vartheta}\big)
+
+Gaussian process noise is then added:
+
+.. math::
+
+   T(s' \mid s, a) = \mathcal{N}\big(s';\; f(s, a),\; \Sigma_T\big),
+   \qquad
+   \Sigma_T = \mathrm{diag}(10^{-4}, 10^{-4}, 2.5 \times 10^{-5}, 10^{-4})
+
+by default, overridable through ``state_transition_cov``.
+
+**Observation model.** The full state read through noise, with no dependence
+on the action:
+
+.. math::
+
+   O(o \mid s', a) = \mathcal{N}\big(o;\; s',\; \Sigma_O\big),
+   \qquad \Sigma_O = \texttt{noise\_cov}
+
+:math:`\Sigma_O` is a **required** constructor argument: the partial
+observability is entirely this matrix, so there is no sensible default. With
+:math:`\Sigma_O = 0` the problem is exactly Gym CartPole.
+
+**Reward function.** One unit per step survived:
+
+.. math::
+
+   R(s, a) = \mathbb{1}[s \notin S_T]
+
+so :math:`R \in [0, 1]`. Note it is evaluated on the state the action is taken
+*from*, so the step that leaves the limits still pays :math:`1`.
+
+**Initial belief.** Every coordinate independently uniform on a small band
+around upright:
+
+.. math::
+
+   b_0 = \mathrm{Unif}\big([-0.05,\, 0.05]^4\big)
+
+The opening observation is a real draw: a state from :math:`b_0` plus
+:math:`\mathcal{N}(0, \Sigma_O)`, so the belief starts already blurred.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required.
+
+**Terminal set.** The cart leaving its track or the pole passing 12 degrees:
+
+.. math::
+
+   S_T = \{s : |x| > 2.4 \ \text{ or }\ |\vartheta| > 12^\circ\}
+
+.. note::
+
+   :math:`S_T` is a predicate on :math:`x` and :math:`\vartheta`, which the
+   agent never observes exactly. A planner therefore cannot know it has
+   terminated; it can only hold a belief about it.
+
 Rewards
 -------
 

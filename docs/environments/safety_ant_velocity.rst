@@ -32,6 +32,104 @@ What the agent sees and does
 - **Observations** (continuous) — the 4-vector with diagonal Gaussian noise,
   ``position_noise`` on position and ``velocity_noise`` on velocity.
 
+Formal definition
+-----------------
+
+Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
+:math:`\mathbf{p}, \mathbf{v} \in \mathbb{R}^2`, and let
+:math:`\lVert \mathbf{v} \rVert` be the speed.
+
+**Spaces**
+
+.. math::
+
+   S = \Omega = \mathbb{R}^4, \qquad A = \{0, 1, 2, 3\}
+
+**Transition model.** The agent chooses a force *magnitude*; the **direction
+is drawn by the environment**:
+
+.. math::
+
+   \phi = \kappa_a \cdot \texttt{max\_force}, \qquad
+   \kappa = (0,\; 0.33,\; 0.67,\; 1.0)
+
+.. math::
+
+   \theta \sim \mathrm{Unif}(-\pi, \pi), \qquad
+   \mathbf{F} = \phi\,(\cos\theta,\; \sin\theta)
+
+The damped point-mass dynamics are then integrated semi-implicitly:
+
+.. math::
+
+   \mathbf{a} &= \frac{\mathbf{F} - c\,\mathbf{v}}{m} \\
+   \mathbf{v}' &= \mathbf{v} + \mathbf{a}\,\Delta t \\
+   \mathbf{p}' &= \mathbf{p} + \mathbf{v}'\,\Delta t
+
+with :math:`m` = ``mass``, :math:`c` = ``damping``, :math:`\Delta t` = ``dt``.
+Position is updated with the *new* velocity, not the old one.
+
+.. note::
+
+   The stochasticity here is unusual: it is in the force's **direction**, not
+   an additive Gaussian on the state. So :math:`T(\cdot \mid s, a)` is
+   supported on a *circle* in velocity space — a one-dimensional set in
+   :math:`\mathbb{R}^4` — rather than having a density over it. For
+   :math:`a = 0` the transition is deterministic, since :math:`\phi = 0`
+   makes :math:`\theta` irrelevant.
+
+**Observation model.** The full state with independent diagonal noise:
+
+.. math::
+
+   O(o \mid s', a) = \mathcal{N}(o;\; s',\; \Sigma_O), \qquad
+   \Sigma_O = \mathrm{diag}\big(\sigma_p^2,\, \sigma_p^2,\,
+   \sigma_v^2,\, \sigma_v^2\big)
+
+with :math:`\sigma_p` = ``position_noise``, :math:`\sigma_v` =
+``velocity_noise``. The action does not enter.
+
+**Reward function.** Paid for speed, penalized for exceeding the limit — both
+read off the state the action is taken **from**:
+
+.. math::
+
+   R(s, a) = \lVert \mathbf{v} \rVert \cdot
+   \texttt{movement\_reward\_scale}
+   + \texttt{safety\_violation\_penalty} \cdot
+   \mathbb{1}\big[\lVert \mathbf{v} \rVert > \tau\big]
+
+with :math:`\tau` = ``safe_velocity_threshold``. This is the whole tension:
+:math:`R` grows linearly in speed right up to :math:`\tau`, then falls off a
+cliff of :math:`-100` by default. Because the agent only ever sees
+:math:`\lVert \mathbf{v} \rVert` through noise of width :math:`\sigma_v`, it
+cannot know which side of :math:`\tau` it is on — it can only trade expected
+speed against the probability of having crossed.
+
+**Initial belief.** Position uniform in a unit box, velocity exactly zero:
+
+.. math::
+
+   b_0 = \mathrm{Unif}\big([-1, 1]^2\big) \otimes \delta_{\mathbf{0}}
+
+.. note::
+
+   ``initial_observation_dist`` returns the *state* distribution, not a draw
+   through :math:`O`. The opening "observation" is therefore a noiseless
+   state sample, which is not what the observation model would produce.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required.
+
+**Terminal set.** A 50 % margin above the penalty threshold:
+
+.. math::
+
+   S_T = \{s : \lVert \mathbf{v} \rVert > 1.5\,\tau\}
+
+so there is a band :math:`\tau < \lVert \mathbf{v} \rVert \leq 1.5\tau` where
+the agent is being penalized every step but the episode continues — it can
+still brake back under the limit.
+
 Rewards
 -------
 

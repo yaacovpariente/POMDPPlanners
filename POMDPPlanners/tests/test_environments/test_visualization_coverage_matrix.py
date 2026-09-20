@@ -233,9 +233,8 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         package="mountain_car_pomdp",
         label="MountainCar",
         hooks=(("mountain_car_pomdp/mountain_car_pomdp.py", "MountainCarPOMDP"),),
-        # Shares a page with SanityPOMDP, so the section heading is the check.
-        docs_page="simple.rst",
-        docs_section="MountainCarPOMDP",
+        docs_page="mountain_car.rst",
+        docs_section=None,
         images=("docs/images/mountaincar_recorded_history.gif",),
     ),
     EnvironmentFamily(
@@ -803,9 +802,9 @@ def test_missing_docs_page_is_reported_with_the_family_name():
 
 def test_missing_docs_section_is_reported_with_the_family_name():
     """A family sharing a page is named together with the heading that is absent."""
-    family = _family_with(label="Widget", docs_page="simple.rst", docs_section="WidgetPOMDP")
+    family = _family_with(label="Widget", docs_page="tiger.rst", docs_section="WidgetPOMDP")
     assert find_missing_docs(family) == [
-        "Widget: documentation missing -- docs/environments/simple.rst has no "
+        "Widget: documentation missing -- docs/environments/tiger.rst has no "
         '"WidgetPOMDP" section.'
     ]
 
