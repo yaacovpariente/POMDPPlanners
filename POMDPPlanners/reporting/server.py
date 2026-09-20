@@ -167,6 +167,9 @@ class Router:
         if not tail:
             return self._ok(pages.environment_page(run, env))
 
+        if tail == ["chart"]:
+            return self._ok(pages.chart_builder_page(run, env))
+
         if tail[0] != "policy" or len(tail) < 2:
             return self._not_found("Malformed environment URL")
         policy = env.policy(tail[1])

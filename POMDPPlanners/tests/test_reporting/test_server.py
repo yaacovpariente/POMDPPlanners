@@ -8,6 +8,7 @@ slower and flakier. One test does stand a real server up, to prove the
 artifact bytes actually reach a client.
 """
 
+import json
 import shutil
 import threading
 from http import HTTPStatus
@@ -287,6 +288,59 @@ def test_a_store_with_no_file_metadata_is_read_from_the_database_beside_it(tmp_p
 
     assert tracking_uri_for(file_store) == f"file://{file_store}"
     assert tracking_uri_for(sql_store) == f"sqlite:///{database}"
+
+
+def test_the_chart_builder_hands_over_the_metrics_and_the_choices(router: Router):
+    """The chart page carries the run's numbers and the controls over them.
+
+    Purpose: A figure for a paper is the author's choice of planners, metric
+    and wording, so the page ships the metrics as data and draws in the
+    browser. Nothing is plotted that the run did not log.
+
+    Given: The fixture run's trace environment, with two planners.
+    When: Its chart page renders.
+    Then: Both planners and their metrics are in the embedded data, and the
+        controls and both downloads are on the page.
+    """
+    _, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+
+    status, _, body = _get(router, f"{base}/env/{TRACE_ENV}/chart")
+    assert status == HTTPStatus.OK
+
+    start = body.index('<script type="application/json" id="chart-data">') + len(
+        '<script type="application/json" id="chart-data">'
+    )
+    data = json.loads(body[start : body.index("</script>", start)])
+    assert data["environment"] == TRACE_ENV
+    assert {p["name"] for p in data["policies"]} == {"PFT_DPW", "POMCP"}
+    pft = next(p for p in data["policies"] if p["name"] == "PFT_DPW")
+    assert pft["metrics"]["average_return"] == pytest.approx(-12.5)
+    assert pft["metrics"]["average_return" + data["ci"]["lower"]] == pytest.approx(-18.0)
+
+    for control in ("chart-metric", "chart-title", "chart-y", "chart-x", "chart-policies"):
+        assert f'id="{control}"' in body
+    assert 'id="chart-svg"' in body and 'id="chart-png"' in body
+    assert "/static/chart-builder.js" in body
+
+
+def test_the_theme_is_stamped_before_the_page_paints(router: Router):
+    """A chosen theme is applied in the head, not after the body has loaded.
+
+    Purpose: Applying it from the script at the end of the body shows the
+    reader the other theme first, which is worse than having no switch.
+
+    Given: Any page.
+    When: It renders.
+    Then: The head carries the stamp, and the switch offers all three states.
+    """
+    _, _, body = _get(router, "/")
+
+    head = body[: body.index("<body>")]
+    assert "localStorage.getItem('pomdp-results-theme')" in head
+    assert "documentElement.dataset.theme" in head
+    for choice in ("system", "light", "dark"):
+        assert f'data-theme-choice="{choice}"' in body
 
 
 def test_every_listing_ships_all_three_views(router: Router):

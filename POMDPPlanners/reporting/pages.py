@@ -9,6 +9,8 @@ a metric key — is written by :func:`html` and is therefore escaped: those
 names come from user code and reach the page unchanged.
 """
 
+import json
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
@@ -98,12 +100,39 @@ def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: s
         # An empty data icon, so the browser does not request /favicon.ico and
         # log a 404 against a server that has nothing to serve there.
         '<link rel="icon" href="data:,">'
+        # Stamped before the first paint: applying the reader's theme from a
+        # script at the end of the body shows them the other one first.
+        "<script>(function(){try{var t=localStorage.getItem('pomdp-results-theme');"
+        "if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}catch(e){}})();"
+        "</script>"
         "</head><body>"
         f'<header class="topbar"><a class="brand" href="/">POMDPPlanners results</a>'
-        f'<nav class="crumbs">{crumbs}</nav></header>'
+        f'<nav class="crumbs">{crumbs}</nav>'
+        f"{_theme_toggle()}</header>"
         f'<main class="page">{body}</main>'
         '<script src="/static/layout.js"></script>'
         "</body></html>"
+    )
+
+
+def _theme_toggle() -> str:
+    """The light/dark switch in the top bar.
+
+    Three states rather than two: a reader who has chosen neither should keep
+    following their system, which is what most of them want and what the site
+    did before there was a switch at all.
+
+    Returns:
+        HTML for the switch.
+    """
+    return (
+        '<div class="theme-switch" role="group" aria-label="Theme">'
+        + "".join(
+            f'<button type="button" class="tab" data-theme-choice="{mode}" '
+            f'aria-pressed="false">{label}</button>'
+            for mode, label in (("system", "Auto"), ("light", "Light"), ("dark", "Dark"))
+        )
+        + "</div>"
     )
 
 
@@ -473,6 +502,8 @@ def run_page(run: RunView) -> str:
         sections.append(
             f'<section class="env"><h2><a href="{html(env_url(run, env.name))}">'
             f"{html(env.name)}</a></h2>"
+            f'<p class="note"><a href="{html(chart_url(run, env.name))}">'
+            "Build a chart from these metrics</a></p>"
             + _policy_cards(run, env)
             + _comparison_charts(run, env)
             + f"<details><summary>All metrics</summary>{_metric_table(run, env)}</details>"
@@ -517,11 +548,88 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
         ],
         f'<div class="page-head"><h1>{html(env.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(env.policies)} planner(s) in run '
-        f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>.</p>'
+        f'<a href="{html(run_url(run))}">{html(run.run_name)}</a> · '
+        f'<a href="{html(chart_url(run, env.name))}">build a chart</a>.</p>'
         + _policy_cards(run, env)
         + _comparison_charts(run, env)
         + (f'<h2>Plots</h2><section class="gallery">{env_plots}</section>' if env_plots else "")
         + f"<details><summary>All metrics</summary>{_metric_table(run, env)}</details>",
+    )
+
+
+def chart_url(run: RunView, env: str) -> str:
+    """URL of one environment's chart builder."""
+    return env_url(run, env) + "/chart"
+
+
+def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
+    """A chart of this environment's metrics, built by the reader.
+
+    The comparison charts on the other pages are the site's choice: one metric
+    each, every planner, the site's labels. A figure for a paper is the
+    author's choice, so this page hands over the planners, the metric, the
+    three pieces of text and the download, and draws in the browser from the
+    numbers the run logged.
+
+    Args:
+        run: The run being shown.
+        env: The environment whose metrics to plot.
+
+    Returns:
+        A complete HTML document.
+    """
+    data = {
+        "environment": env.name,
+        "policies": [
+            {"name": policy.name, "metrics": run.metrics_for(env.name, policy.name)}
+            for policy in env.policies
+        ],
+        "ci": {
+            "lower": charts.CI_LOWER_SUFFIX,
+            "upper": charts.CI_UPPER_SUFFIX,
+        },
+    }
+    # In a <script type="application/json"> the only sequence that can end the
+    # element early is "</", so that is what is escaped.
+    payload = json.dumps(data).replace("</", "<\\/")
+
+    return layout(
+        f"Chart · {env.name}",
+        [
+            ("Experiments", "/"),
+            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (run.run_name, run_url(run)),
+            (env.name, env_url(run, env.name)),
+            ("Chart", None),
+        ],
+        f"<h1>Build a chart</h1>"
+        f'<p class="note">{html(env.name)} in run '
+        f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>. '
+        "Everything plotted is a metric this run logged; the error bars are its "
+        "confidence intervals.</p>"
+        '<div class="builder">'
+        '<form class="builder-controls" id="chart-form">'
+        '<fieldset><legend>Planners</legend><div id="chart-policies"></div></fieldset>'
+        '<label>Metric <select id="chart-metric"></select></label>'
+        '<label>Title <input id="chart-title" type="text" autocomplete="off"></label>'
+        '<label>Value axis <input id="chart-y" type="text" autocomplete="off"></label>'
+        '<label>Planner axis <input id="chart-x" type="text" autocomplete="off"></label>'
+        '<label>Orientation <select id="chart-orient">'
+        '<option value="vertical">Vertical bars</option>'
+        '<option value="horizontal">Horizontal bars</option>'
+        "</select></label>"
+        '<label class="check"><input id="chart-errors" type="checkbox" checked> '
+        "Show confidence intervals</label>"
+        '<label class="check"><input id="chart-values" type="checkbox" checked> '
+        "Print the value on each bar</label>"
+        '<div class="builder-actions">'
+        '<button type="button" id="chart-svg" class="tab">Download SVG</button>'
+        '<button type="button" id="chart-png" class="tab">Download PNG</button>'
+        "</div></form>"
+        '<figure class="builder-canvas" id="chart-output"></figure>'
+        "</div>"
+        f'<script type="application/json" id="chart-data">{payload}</script>'
+        '<script src="/static/chart-builder.js"></script>',
     )
 
 

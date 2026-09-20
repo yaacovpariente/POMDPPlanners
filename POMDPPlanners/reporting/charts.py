@@ -45,20 +45,32 @@ def _nice_bounds(values: Sequence[float]) -> Tuple[float, float]:
     return low - pad, high + pad
 
 
+#: One row per planner. A chart is as tall as it has bars, rather than a fixed
+#: height divided among them, so two planners do not get a row each the depth
+#: of a paragraph.
+ROW_HEIGHT = 44
+
+
 def comparison_svg(
     metric: str,
     series: Sequence[Tuple[str, float, float, float]],
-    width: int = 640,
-    height: int = 260,
+    width: int = 430,
+    height: int = 0,
 ) -> str:
     """Draw one metric across policies as a bar chart with error bars.
+
+    The drawing size matters: an SVG with a ``viewBox`` is scaled to its
+    container, and its text with it. Drawn at 640 units in a 340-pixel card,
+    every label came out at half the size it asked for and the charts stopped
+    being readable. The default width is close to the width a card actually
+    gets, so a 13-unit label is about 13 pixels on screen.
 
     Args:
         metric: Metric name, used as the chart's title.
         series: One ``(policy_name, value, ci_lower, ci_upper)`` per bar. A
             policy with no interval passes its value for both bounds.
-        width: Chart width in CSS pixels.
-        height: Chart height in CSS pixels.
+        width: Chart width in user units, which is about CSS pixels.
+        height: Chart height; 0 means one row per planner.
 
     Returns:
         An ``<svg>`` element as a string, or an empty string when there is
@@ -67,7 +79,8 @@ def comparison_svg(
     if not series:
         return ""
 
-    left, right, top, bottom = 132, 16, 34, 28
+    left, right, top, bottom = 124, 62, 34, 16
+    height = height or top + bottom + ROW_HEIGHT * len(series)
     plot_w = width - left - right
     plot_h = height - top - bottom
 
@@ -81,7 +94,7 @@ def comparison_svg(
     zero_x = to_x(0.0) if low <= 0.0 <= high else left
 
     row_h = plot_h / len(series)
-    bar_h = min(26.0, row_h * 0.55)
+    bar_h = min(18.0, row_h * 0.45)
 
     parts: List[str] = [
         f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" '
@@ -114,11 +127,13 @@ def comparison_svg(
             f'<text x="{left - 10}" y="{cy + 4:.1f}" class="chart-label" '
             f'text-anchor="end">{escape(name)}</text>'
         )
-        label_x = x_value + (6 if x_value >= zero_x else -6)
-        anchor = "start" if x_value >= zero_x else "end"
+        # The value sits in the right margin rather than at the end of its bar:
+        # against the bar it lands on top of the interval whisker, which runs
+        # past the bar whenever the estimate is uncertain — which is the case
+        # the chart is drawn for.
         parts.append(
-            f'<text x="{label_x:.1f}" y="{cy + 4:.1f}" class="chart-value" '
-            f'text-anchor="{anchor}">{value:.3g}</text>'
+            f'<text x="{width - 6}" y="{cy + 4:.1f}" class="chart-value" '
+            f'text-anchor="end">{value:.3g}</text>'
         )
 
     parts.append("</svg>")

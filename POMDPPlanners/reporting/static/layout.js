@@ -10,6 +10,8 @@
 (function () {
   "use strict";
 
+  themeSwitch();
+
   var KEY = "pomdp-results-layout";
   var MODES = { cards: 1, list: 1, table: 1 };
   var buttons = Array.prototype.slice.call(document.querySelectorAll("[data-layout]"));
@@ -58,4 +60,51 @@
 
   var stored = read();
   apply(MODES[stored] ? stored : "cards");
+
+  /* Auto / Light / Dark. "Auto" removes the stamp rather than writing a
+     value, so the page goes back to following `prefers-color-scheme` and
+     keeps following it when the system flips. */
+  function themeSwitch() {
+    var THEME_KEY = "pomdp-results-theme";
+    var choices = Array.prototype.slice.call(document.querySelectorAll("[data-theme-choice]"));
+    if (!choices.length) return;
+
+    function current() {
+      try {
+        var value = window.localStorage.getItem(THEME_KEY);
+        return value === "dark" || value === "light" ? value : "system";
+      } catch (e) {
+        return "system";
+      }
+    }
+
+    function applyTheme(theme) {
+      if (theme === "system") {
+        delete document.documentElement.dataset.theme;
+      } else {
+        document.documentElement.dataset.theme = theme;
+      }
+      choices.forEach(function (button) {
+        button.setAttribute(
+          "aria-pressed",
+          button.dataset.themeChoice === theme ? "true" : "false"
+        );
+      });
+    }
+
+    choices.forEach(function (button) {
+      button.addEventListener("click", function () {
+        var theme = button.dataset.themeChoice;
+        try {
+          if (theme === "system") window.localStorage.removeItem(THEME_KEY);
+          else window.localStorage.setItem(THEME_KEY, theme);
+        } catch (e) {
+          /* The switch still works for this page; it just will not be kept. */
+        }
+        applyTheme(theme);
+      });
+    });
+
+    applyTheme(current());
+  }
 })();
