@@ -123,7 +123,13 @@ include = ["POMDPPlanners*"]
 "POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
 # The results site serves these itself; the vendored three.js build is why
 # the viewer works with no network.
-"POMDPPlanners.reporting" = ["static/*.css", "static/vendor/*.js", "static/viewer/*.js", "static/viewer/scenes/*.js"]
+"POMDPPlanners.reporting" = [
+    "static/*.css",
+    "static/*.js",
+    "static/vendor/*.js",
+    "static/viewer/*.js",
+    "static/viewer/scenes/*.js",
+]
 
 # ---------------------------------------------------------------------------
 # Tool configuration
