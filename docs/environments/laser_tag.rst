@@ -1,9 +1,10 @@
 LaserTag
 ========
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/laser_tag_visualization.gif
-   :alt: A robot chasing an evading opponent through a walled grid.
-   :width: 480px
+.. episode-viewer:: traces/laser_tag.json
+
+   ``LaserTagPOMDP``: one real episode planned by PFT-DPW, replayed in 3D. Drag
+   to orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 Chase an opponent through a walled arena and fire the tag action from its cell.
 The only sensor is eight noisy laser ranges, one per compass direction. A ray
@@ -27,9 +28,10 @@ Two variants:
   ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
   gives that world a five-action set.
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/continuous_laser_tag_visualization.gif
-   :alt: The continuous LaserTag variant with box walls.
-   :width: 480px
+.. episode-viewer:: traces/continuous_laser_tag.json
+
+   ``ContinuousLaserTagPOMDP``: the same, in the continuous world. Drag to
+   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 What the agent sees and does
 ----------------------------

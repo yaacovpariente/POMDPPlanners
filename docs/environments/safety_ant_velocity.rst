@@ -1,9 +1,10 @@
 Safety Ant Velocity
 ===================
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/safety_ant_velocity_visualization.gif
-   :alt: A point mass accelerating across the plane while staying under the speed limit.
-   :width: 480px
+.. episode-viewer:: traces/safety_ant_velocity.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 Move as fast as you can while keeping speed below a safety threshold, judging
 your own speed only through a noisy sensor. Reward grows with speed and a heavy

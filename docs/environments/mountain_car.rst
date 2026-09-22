@@ -1,15 +1,10 @@
 Mountain Car
 ============
 
-.. figure:: ../images/mountaincar_recorded_history.gif
-   :alt: Three MountainCar history frames showing the car on the hill, noisy observations, particle and Gaussian beliefs, and the terminal goal state.
-   :width: 800px
+.. episode-viewer:: traces/mountain_car.json
 
-   Package-rendered example of three supplied history rows, with recorded
-   states ``[position, velocity]`` of ``[-0.95, -0.02]``, ``[-0.15, 0.03]``,
-   and ``[0.50, -0.01]``. The first two rows show noisy observations and
-   particle then Gaussian beliefs; the last is a terminal row at the goal.
-   These rows illustrate the renderer, not a continuous simulated rollout.
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 The classic underpowered car: it cannot climb the hill directly and must rock
 back and forth to build momentum, while reading position and velocity through

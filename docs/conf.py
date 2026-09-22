@@ -14,6 +14,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
+# Local extensions: ``episode_viewer`` embeds the 3D episode replays.
+sys.path.insert(0, os.path.abspath("_ext"))
 
 # -- Project information -----------------------------------------------------
 
@@ -38,6 +40,7 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.extlinks",  # For the :gh: pull-request role used in the changelog
     "sphinx_autodoc_typehints",  # Better type hint formatting
+    "episode_viewer",  # ``.. episode-viewer::`` 3D replays on the environment pages
 ]
 
 # Shorthand for pull-request references in docs/misc/changelog.rst:

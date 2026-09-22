@@ -153,11 +153,11 @@ four actions, ``up``, ``down``, ``left`` and ``right``, move one cell; a wall
 blocks the move. ``maze_width``, ``maze_height``, ``maze_seed`` and
 ``loop_fraction`` control the layout.
 
-.. figure:: ../images/discrete_maze_visualization.gif
-   :alt: DiscreteMazePOMDP recorded episode with cell guides, cue and two goals.
-   :width: 100%
+.. episode-viewer:: traces/discrete_maze.json
 
-   DiscreteMazePOMDP: one-cell moves through a generated maze.
+   ``DiscreteMazePOMDP``: one real episode planned by PFT-DPW, replayed in 3D.
+   Drag to orbit, scroll to zoom, and use the bar to play, scrub and switch
+   camera.
 
 ContinuousMazePOMDP
 -------------------
@@ -167,11 +167,10 @@ ContinuousMazePOMDP
 the whole movement path. With the same layout settings as DiscreteMazePOMDP,
 it uses the same maze geometry.
 
-.. figure:: ../images/continuous_maze_visualization.gif
-   :alt: ContinuousMazePOMDP recorded episode with a continuous position trail.
-   :width: 100%
+.. episode-viewer:: traces/continuous_maze.json
 
-   ContinuousMazePOMDP: bounded displacements through a generated maze.
+   ``ContinuousMazePOMDP``: the same, with bounded displacements. Drag to
+   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 Belief
 ------
@@ -198,15 +197,10 @@ the discrete maze. ``stem_length`` sets the distance to the junction and
 ``arm_length`` sets the distance from the junction to each endpoint. The
 agent must remember the cue while walking up the stem, then choose an arm.
 
-.. figure:: ../images/t_maze_visualization.gif
-   :alt: TMazePOMDP recorded episode on a T-shaped corridor with two endpoints.
-   :width: 100%
+.. episode-viewer:: traces/t_maze.json
 
-   TMazePOMDP: remember the cue until the left-or-right choice at the junction.
-
-The images above are package-generated golden visualizations, copied unchanged
-from the environment visualization test fixtures. They illustrate recorded
-histories, not planner performance comparisons.
+   ``TMazePOMDP``: one real episode planned by PFT-DPW, replayed in 3D. Drag to
+   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 Create a visualization
 ----------------------

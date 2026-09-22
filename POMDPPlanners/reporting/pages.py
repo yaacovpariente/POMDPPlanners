@@ -969,10 +969,31 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
         return (
             f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
         )
-    # trace-viewer
+    return trace_viewer_html(src, artifact.payload_kind or "")
+
+
+def trace_viewer_html(
+    trace_src: str, payload_kind: str, static_root: str = "/static"
+) -> str:
+    """The 3D trace viewer: its canvas, HUD, controls and scripts.
+
+    One definition for every page that replays a trace. The results site
+    serves the viewer at ``/static``; the Sphinx docs embed the same markup in
+    a page of their own under ``_static/pomdp-viewer`` and pass a relative
+    root. ``trace-player.js`` finds its elements by these ids, so a second copy
+    of this markup would be a second contract to keep in step.
+
+    Args:
+        trace_src: URL of the trace JSON, relative to the page or absolute.
+        payload_kind: The trace's payload kind, which picks the scene module.
+        static_root: URL prefix under which ``vendor/`` and ``viewer/`` live.
+
+    Returns:
+        HTML for the viewer and the scripts that drive it.
+    """
     return (
-        f'<div class="viewer" id="viewer" data-trace="{html(src)}" '
-        f'data-payload-kind="{html(artifact.payload_kind or "")}">'
+        f'<div class="viewer" id="viewer" data-trace="{html(trace_src)}" '
+        f'data-payload-kind="{html(payload_kind)}">'
         '<canvas id="viewer-canvas"></canvas>'
         '<div class="viewer-hud">'
         '<span id="hud-step">step —</span>'
@@ -995,14 +1016,14 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
         "</span></div>"
         "</div>"
         '<p class="viewer-status" id="viewer-status">Loading trace…</p>'
-        '<script src="/static/vendor/three.min.js"></script>'
-        '<script src="/static/viewer/renderer-core.js"></script>'
-        f'<script src="{scene_script_path(artifact.payload_kind or "")}"></script>'
-        '<script src="/static/viewer/trace-player.js"></script>'
+        f'<script src="{html(static_root)}/vendor/three.min.js"></script>'
+        f'<script src="{html(static_root)}/viewer/renderer-core.js"></script>'
+        f'<script src="{html(scene_script_path(payload_kind, static_root))}"></script>'
+        f'<script src="{html(static_root)}/viewer/trace-player.js"></script>'
     )
 
 
-def scene_script_path(payload_kind: str) -> str:
+def scene_script_path(payload_kind: str, static_root: str = "/static") -> str:
     """Path of the scene module that draws ``payload_kind``.
 
     Derived by convention rather than looked up in a table, so adding an
@@ -1010,9 +1031,12 @@ def scene_script_path(payload_kind: str) -> str:
     ``light_dark.v1`` loads ``scenes/light-dark.js``, which registers itself
     under its own kind. A table here would be a merge conflict every time a new
     environment is migrated, and a second place to forget to update.
+
+    ``static_root`` is where the viewer is served from: ``/static`` on the
+    results site, a relative path in the Sphinx docs.
     """
     name = payload_kind.split(".", 1)[0].replace("_", "-")
-    return f"/static/viewer/scenes/{name}.js"
+    return f"{static_root}/viewer/scenes/{name}.js"
 
 
 def episode_page(

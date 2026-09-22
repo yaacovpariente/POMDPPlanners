@@ -387,18 +387,20 @@ lets the fire reach forty cells and then beats it out is not the same as one
 that never let it past five, and the totals alone would not distinguish them.
 ``suppressant_units_used`` and ``robots_disabled_at_end`` round out the picture.
 
-.. image:: ../images/multiagent_firefighting_visualization.gif
-   :alt: True grid with robots and footprints, the belief over P(alight), and the belief over the eight hidden winds.
-   :width: 100%
+.. episode-viewer:: traces/multiagent_firefighting.json
 
-The left panel is the truth: the five categories, the obstacles, the depot, each
-live robot with its health and tank badge and its sensing footprint, and the
-true wind printed and labelled hidden. The middle panel is the per-cell
-probability that the cell is alight, as the weighted mean over the belief's
-particles -- the exact marginal, not a summary. The right panel is the total
-particle weight on each of the eight wind values, with the true one marked in
-red. A firefighting run is unreadable without that last panel: you cannot tell
-a planner that inferred the wind from one that guessed.
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its left
+panel is the truth: the five categories, the obstacles, the depot, each live
+robot with its health and tank badge and its sensing footprint, and the true
+wind printed and labelled hidden. The middle panel is the per-cell probability
+that the cell is alight, as the weighted mean over the belief's particles --
+the exact marginal, not a summary. The right panel is the total particle weight
+on each of the eight wind values, with the true one marked in red. A
+firefighting run is unreadable without that last panel: you cannot tell a
+planner that inferred the wind from one that guessed.
 
 Filtering and limits
 --------------------
