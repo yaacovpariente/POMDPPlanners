@@ -95,6 +95,11 @@
 
     var player = V.createPlayer({
       steps: scene.steps,
+      /* A scene may know how long one of its steps lasted. The default rate
+         suits a world where a step is a decision and has no duration; a world
+         driven by a fixed-frequency controller knows its own seconds per step
+         and replays at the speed it was actually driven. */
+      stepsPerSecond: scene.stepsPerSecond,
       onFrame: function (t, dt, elapsed) {
         var hud = scene.update(t, dt, elapsed, player.state.playing);
         rig.update(dt, hud.follow);

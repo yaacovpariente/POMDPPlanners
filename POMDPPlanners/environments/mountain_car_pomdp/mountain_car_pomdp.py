@@ -24,7 +24,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import numpy as np
@@ -46,6 +46,9 @@ from POMDPPlanners.environments.mountain_car_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 
 matplotlib.use("Agg")  # Use non-interactive backend
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 class MountainCarStepChannel(Enum):
@@ -386,6 +389,34 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         if not hasattr(self, "_episode_visualizer"):
             self._episode_visualizer = MountainCarVisualizer(self)
         self._episode_visualizer.save(history, output_dir / f"agent_path_{episode_index}.gif")
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``mountain_car.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Mountain Car run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_trace_exporter import (
+            build_mountain_car_trace,
+        )
+
+        return build_mountain_car_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     def is_equal_observation(
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]
