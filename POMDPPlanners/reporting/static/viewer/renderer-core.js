@@ -94,6 +94,64 @@
     return tex;
   }
 
+  /* Multisample count for the scene pass. Four is the point on this curve
+     where the cost stops buying much: it removes the staircase on a lane
+     marking and a car's roofline, and eight costs another whole scene pass
+     worth of bandwidth to remove very little more. */
+  var MSAA_SAMPLES = 4;
+
+  /**
+   * A box with its edges taken off.
+   *
+   * Nothing manufactured has a zero-radius edge, and the eye reads one as
+   * unreal before it reads anything else about the material: a sharp edge
+   * catches no highlight, so a box under a lamp is a flat shape with a hard
+   * seam, while the same box with a two-millimetre round is a solid with a
+   * line of light along it. Every prop in these scenes was a `BoxGeometry`,
+   * which is why they read as blocks.
+   *
+   * Outer dimensions are preserved, so this is a drop-in for `BoxGeometry`
+   * and nothing it replaces moves or changes size.
+   *
+   * @param {number} w  Width, along x.
+   * @param {number} h  Height, along y.
+   * @param {number} d  Depth, along z.
+   * @param {number} [radius]  Edge radius. Defaults to a twelfth of the
+   *   smallest side, which is a machined-looking round at any scale, and is
+   *   clamped so it can never eat the object.
+   * @param {number} [segments]  Bevel segments; 2 is enough to catch a
+   *   highlight and 3 is already invisible.
+   */
+  function roundedBox(w, h, d, radius, segments) {
+    var r = radius === undefined ? Math.min(w, h, d) / 12 : radius;
+    r = Math.max(1e-4, Math.min(r, Math.min(w, h, d) / 2.05));
+    var steps = segments === undefined ? 2 : segments;
+    // The shape is the face inset by the radius; the bevel puts the radius
+    // back on, which is what keeps the outer size equal to the box's.
+    var innerW = Math.max(1e-4, w - r * 2);
+    var innerH = Math.max(1e-4, h - r * 2);
+    var shape = new THREE.Shape();
+    shape.moveTo(-innerW / 2, -innerH / 2);
+    shape.lineTo(innerW / 2, -innerH / 2);
+    shape.lineTo(innerW / 2, innerH / 2);
+    shape.lineTo(-innerW / 2, innerH / 2);
+    shape.closePath();
+    var geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: Math.max(1e-4, d - r * 2),
+      bevelEnabled: true,
+      bevelThickness: r,
+      bevelSize: r,
+      bevelOffset: 0,
+      bevelSegments: steps,
+      curveSegments: 1
+    });
+    // ExtrudeGeometry grows along +z from the shape's plane; recentre so the
+    // result sits where the box it replaces sat.
+    geometry.translate(0, 0, -(d - r * 2) / 2);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
   var VERT = [
     "varying vec2 vUv;",
     "void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }"
@@ -125,11 +183,85 @@
     "}"
   ].join("\n");
 
+  /* Screen-space ambient occlusion.
+   *
+   * The one cue these scenes were missing that no amount of lamp tuning
+   * supplies: where two surfaces meet, less of the sky reaches the crease, so
+   * it is darker. Without it a wheel sits on the road like a sticker and a
+   * post meets the ground with a visible seam of nothing. It is computed from
+   * depth alone — no normal buffer — by reconstructing view position and
+   * taking the plane through it, which is enough at this contact scale and
+   * costs one extra geometry pass instead of two.
+   */
+  var AO_FRAG = [
+    "varying vec2 vUv;",
+    "uniform sampler2D depthTex;",
+    "uniform vec2 texel;",
+    "uniform mat4 projection; uniform mat4 inverseProjection;",
+    "uniform float near; uniform float far;",
+    "uniform float radius; uniform float bias; uniform float intensity;",
+    // three packs depth into RGBA so this works without a depth-texture
+    // extension, and so it keeps working on the multisampled colour target.
+    "const float UnpackDownscale = 255.0 / 256.0;",
+    "const vec3 PackFactors = vec3(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0);",
+    "const vec4 UnpackFactors = UnpackDownscale / vec4(PackFactors, 1.0);",
+    "float unpackDepth(const in vec4 v) { return dot(v, UnpackFactors); }",
+    "float viewZ(float d) { return (near * far) / ((far - near) * d - far); }",
+    // Depth at the far plane is the background: it has no surface and must not
+    // occlude anything, or every silhouette grows a dark halo.
+    "bool isBackground(float d) { return d >= 0.9999; }",
+    "vec3 viewPos(vec2 uv, float d) {",
+    "  vec4 clip = vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);",
+    "  vec4 view = inverseProjection * clip;",
+    "  return view.xyz / view.w;",
+    "}",
+    "float hash(vec2 p) {",
+    "  vec3 p3 = fract(vec3(p.xyx) * 0.1031);",
+    "  p3 += dot(p3, p3.yzx + 33.33);",
+    "  return fract((p3.x + p3.y) * p3.z);",
+    "}",
+    "void main() {",
+    "  float d = unpackDepth(texture2D(depthTex, vUv));",
+    "  if (isBackground(d)) { gl_FragColor = vec4(1.0); return; }",
+    "  vec3 origin = viewPos(vUv, d);",
+    // The surface plane from screen-space derivatives. Cheaper and steadier
+    // than a normal buffer, and at contact scale the difference does not show.
+    "  vec3 normal = normalize(cross(dFdx(origin), dFdy(origin)));",
+    "  float angle = hash(vUv * 1024.0) * 6.2831853;",
+    "  float occlusion = 0.0;",
+    "  const int SAMPLES = 12;",
+    "  for (int i = 0; i < SAMPLES; i++) {",
+    "    float step = (float(i) + 0.5) / float(SAMPLES);",
+    // A spiral, so twelve taps cover the disc evenly instead of clumping.
+    "    float a = angle + step * 6.2831853 * 3.0;",
+    "    float r = radius * sqrt(step);",
+    "    vec3 offset = vec3(cos(a) * r, sin(a) * r, 0.0);",
+    "    if (dot(offset, normal) < 0.0) offset = -offset;",
+    "    vec3 samplePos = origin + offset + normal * bias;",
+    "    vec4 clip = projection * vec4(samplePos, 1.0);",
+    "    vec2 sampleUv = (clip.xy / clip.w) * 0.5 + 0.5;",
+    "    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) continue;",
+    "    float sceneD = unpackDepth(texture2D(depthTex, sampleUv));",
+    "    if (isBackground(sceneD)) continue;",
+    "    float sceneZ = viewZ(sceneD);",
+    "    float delta = sceneZ - samplePos.z;",
+    // A surface far in front of the sample is a different object, not a
+    // crease; without this an foreground edge darkens the wall behind it.
+    "    float rangeFade = smoothstep(0.0, 1.0, radius / max(abs(delta), 1e-4));",
+    "    if (delta > bias) occlusion += rangeFade;",
+    "  }",
+    "  float ao = 1.0 - (occlusion / float(SAMPLES)) * intensity;",
+    "  gl_FragColor = vec4(vec3(clamp(ao, 0.0, 1.0)), 1.0);",
+    "}"
+  ].join("\n");
+
   var COMPOSITE_FRAG = [
     "varying vec2 vUv;",
     "uniform sampler2D tex; uniform sampler2D bloom;",
+    "uniform sampler2D ao; uniform float aoStrength;",
     "uniform float bloomStrength; uniform float exposure; uniform float time;",
-    "uniform float grain; uniform float aberration;",
+    "uniform float grain; uniform float aberration; uniform float sharpen;",
+    "uniform vec2 texel;",
     // Narkowicz's ACES fit: holds highlights without Reinhard's flat white
     // clip, and keeps warm lamps warm.
     "vec3 aces(vec3 x) {",
@@ -150,6 +282,22 @@
     "  col.r = texture2D(tex, vUv + off).r;",
     "  col.g = texture2D(tex, vUv).g;",
     "  col.b = texture2D(tex, vUv - off).b;",
+    /* Unsharp mask, before tone mapping. The composite resamples a half-float
+       target through several passes and the result reads a touch soft; this
+       puts back the edge contrast that costs, without the ringing a large
+       radius would add. */
+    "  if (sharpen > 0.0) {",
+    "    vec3 blurred = (",
+    "      texture2D(tex, vUv + vec2(texel.x, 0.0)).rgb +",
+    "      texture2D(tex, vUv - vec2(texel.x, 0.0)).rgb +",
+    "      texture2D(tex, vUv + vec2(0.0, texel.y)).rgb +",
+    "      texture2D(tex, vUv - vec2(0.0, texel.y)).rgb) * 0.25;",
+    "    col += (col - blurred) * sharpen;",
+    "  }",
+    /* Occlusion darkens the surface, never the light. It is applied before
+       bloom is added so a lamp in a corner still blooms: a crease receives
+       less sky, but a lamp sitting in one is not itself dimmer. */
+    "  col *= mix(1.0, texture2D(ao, vUv).r, aoStrength);",
     "  col += texture2D(bloom, vUv).rgb * bloomStrength;",
     "  col *= exposure;",
     "  col = aces(col);",
@@ -189,7 +337,11 @@
       return null;
     }
 
-    renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 1.75));
+    /* Draw at the display's own density, up to 2. The cap was 1.75, which on
+       a 2x display renders below the panel and then scales up — the one thing
+       guaranteed to look soft no matter what else is fixed. Past 2 the cost
+       grows with the square and nobody can see it. */
+    renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
     // The scene renders linear into a float buffer; tone mapping, bloom and
     // grain all happen in the composite. three must not touch either on the way in.
     renderer.outputEncoding = THREE.LinearEncoding;
@@ -227,6 +379,10 @@
       uniforms: {
         tex: { value: null },
         bloom: { value: null },
+        ao: { value: null },
+        aoStrength: { value: 1.0 },
+        texel: { value: new THREE.Vector2(1, 1) },
+        sharpen: { value: 0.22 },
         bloomStrength: { value: 0.55 },
         exposure: { value: options.exposure === undefined ? 0.155 : options.exposure },
         time: { value: 0 },
@@ -236,7 +392,37 @@
       vertexShader: VERT, fragmentShader: COMPOSITE_FRAG
     });
 
+    var aoMat = new THREE.ShaderMaterial({
+      uniforms: {
+        depthTex: { value: null },
+        texel: { value: new THREE.Vector2(1, 1) },
+        projection: { value: new THREE.Matrix4() },
+        inverseProjection: { value: new THREE.Matrix4() },
+        near: { value: 0.6 },
+        far: { value: 90 },
+        // View-space units. These worlds are built at roughly one unit per
+        // board cell, so a third of a unit is the scale of a contact — a wheel
+        // on a road, a post in the ground — and not a whole-object shadow.
+        radius: { value: 0.34 },
+        bias: { value: 0.022 },
+        intensity: { value: 0.85 }
+      },
+      vertexShader: VERT, fragmentShader: AO_FRAG,
+      // The surface plane comes from screen-space derivatives, which are core
+      // in WebGL 2 and an extension in WebGL 1.
+      extensions: { derivatives: true }
+    });
+
+    /* Depth is rendered as a separate pass with an override material rather
+       than read back from the scene target. The scene target is multisampled
+       now, and a multisampled depth attachment cannot be sampled as a texture;
+       packing depth into an ordinary colour target sidesteps that and works on
+       WebGL 1 too. These worlds are a few hundred objects, so a second pass
+       over them is cheaper than the bandwidth of resolving depth would be. */
+    var depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+
     var sceneRT = null, brightRT = null, blurA = null, blurB = null;
+    var depthRT = null, aoRT = null, aoBlur = null;
 
     function makeTargets(w, h) {
       [sceneRT, brightRT, blurA, blurB].forEach(function (rt) { if (rt) rt.dispose(); });
@@ -250,13 +436,78 @@
         depthBuffer: true,
         stencilBuffer: false
       };
-      sceneRT = new THREE.WebGLRenderTarget(w, h, opts);
+      /* Multisampled, where the context allows it. `antialias: true` on the
+         renderer only ever applied to the default framebuffer, and the scene
+         has never been drawn there — it is drawn into this target and then
+         composited from it as a texture. So the renderer's antialiasing was
+         silently doing nothing, and every edge in every scene was drawn
+         hard-aliased. WebGL 1 has no multisampled target, so it keeps the
+         plain one and keeps the jaggies rather than losing the picture. */
+      sceneRT = renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget
+        ? new THREE.WebGLMultisampleRenderTarget(w, h, opts)
+        : new THREE.WebGLRenderTarget(w, h, opts);
+      if (sceneRT.samples !== undefined) sceneRT.samples = MSAA_SAMPLES;
       var bw = Math.max(2, Math.floor(w / 2)), bh = Math.max(2, Math.floor(h / 2));
       var half = Object.assign({}, opts, { depthBuffer: false });
       brightRT = new THREE.WebGLRenderTarget(bw, bh, half);
       blurA = new THREE.WebGLRenderTarget(bw, bh, half);
       blurB = new THREE.WebGLRenderTarget(bw, bh, half);
       blurMat.uniforms.texel.value.set(1 / bw, 1 / bh);
+
+      [depthRT, aoRT, aoBlur].forEach(function (rt) { if (rt) rt.dispose(); });
+      /* Depth is packed into eight-bit channels, so this target is a plain
+         byte target and must not be filtered: interpolating between two packed
+         depths produces a depth that is neither. */
+      depthRT = new THREE.WebGLRenderTarget(w, h, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
+        depthBuffer: true,
+        stencilBuffer: false
+      });
+      // Occlusion is low-frequency, so it is computed at half resolution and
+      // blurred; at full resolution it costs four times as much to look the same.
+      var ao = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat, type: THREE.UnsignedByteType, depthBuffer: false };
+      aoRT = new THREE.WebGLRenderTarget(bw, bh, ao);
+      aoBlur = new THREE.WebGLRenderTarget(bw, bh, ao);
+      aoMat.uniforms.texel.value.set(1 / w, 1 / h);
+      compositeMat.uniforms.texel.value.set(1 / w, 1 / h);
+    }
+
+    /* Objects the depth pass must not draw.
+     *
+     * An override material replaces every material, so a belief cloud, a light
+     * beam or a range ring — all additive, none of them solid — would be
+     * written into depth as if it were a wall, and the occlusion would then
+     * darken whatever was behind it. These are the things a viewer draws to
+     * show information rather than matter, and none of them occludes anything.
+     */
+    function occludesLight(object) {
+      if (object.isPoints || object.isLine || object.isSprite) return false;
+      var material = object.material;
+      if (!material) return true;
+      if (Array.isArray(material)) material = material[0];
+      return !(material.transparent || material.blending === THREE.AdditiveBlending);
+    }
+
+    var hidden = [];
+    function renderDepth() {
+      hidden.length = 0;
+      scene.traverse(function (object) {
+        if ((object.isMesh || object.isPoints || object.isLine || object.isSprite)
+          && object.visible && !occludesLight(object)) {
+          object.visible = false;
+          hidden.push(object);
+        }
+      });
+      scene.overrideMaterial = depthMat;
+      renderer.setRenderTarget(depthRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+      scene.overrideMaterial = null;
+      for (var i = 0; i < hidden.length; i++) hidden[i].visible = true;
     }
 
     function blit(material, target) {
@@ -270,6 +521,25 @@
       renderer.setRenderTarget(sceneRT);
       renderer.clear();
       renderer.render(scene, camera);
+
+      if (compositeMat.uniforms.aoStrength.value > 0) {
+        renderDepth();
+        aoMat.uniforms.depthTex.value = depthRT.texture;
+        aoMat.uniforms.near.value = camera.near;
+        aoMat.uniforms.far.value = camera.far;
+        aoMat.uniforms.projection.value.copy(camera.projectionMatrix);
+        aoMat.uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse);
+        blit(aoMat, aoRT);
+        // Twelve taps are noisy on their own; the blur is what turns them into
+        // a shadow rather than a stipple.
+        blurMat.uniforms.tex.value = aoRT.texture;
+        blurMat.uniforms.dir.value.set(1, 0);
+        blit(blurMat, aoBlur);
+        blurMat.uniforms.tex.value = aoBlur.texture;
+        blurMat.uniforms.dir.value.set(0, 1);
+        blit(blurMat, aoRT);
+        compositeMat.uniforms.ao.value = aoRT.texture;
+      }
 
       brightMat.uniforms.tex.value = sceneRT.texture;
       blit(brightMat, brightRT);
@@ -301,9 +571,46 @@
       camera.updateProjectionMatrix();
     }
 
-    /* Every PBR surface is written with an sRGB hex, which is how a person
-       reads a colour, but the shader needs linear. Emitters are skipped on
-       purpose: their colours are already above 1.0 and are radiance. */
+    /* Whether this mesh's box can be swapped for a rounded one.
+     *
+     * The rounded box is an extrusion, and an extrusion's UVs are not a box's,
+     * so anything carrying a texture keeps its sharp edges rather than having
+     * its map rearranged. Everything else — the painted props these scenes are
+     * mostly built from — is safe, because a solid colour does not care how
+     * the surface is parameterised.
+     */
+    function canRound(mesh) {
+      var geometry = mesh.geometry;
+      if (!geometry || geometry.type !== "BoxGeometry" || !geometry.parameters) return false;
+      var p = geometry.parameters;
+      if (!p.width || !p.height || !p.depth) return false;
+      var mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      // A multi-material box assigns one material per face by index, which the
+      // extrusion's groups do not reproduce.
+      if (mats.length !== 1) return false;
+      var m = mats[0];
+      if (!m) return false;
+      return !(m.map || m.normalMap || m.aoMap || m.roughnessMap || m.metalnessMap ||
+        m.emissiveMap || m.alphaMap || m.bumpMap || m.displacementMap);
+    }
+
+    /* Colour space, and the edges.
+     *
+     * Every scene calls this once after it has finished building, which makes
+     * it the one place that can improve all of them without eighteen separate
+     * edits.
+     *
+     * Colour: every PBR surface is written with an sRGB hex, which is how a
+     * person reads a colour, but the shader needs linear. Emitters are skipped
+     * on purpose — their colours are already above 1.0 and are radiance, not
+     * paint.
+     *
+     * Edges: every untextured box gets its edges rounded. Nothing real has a
+     * zero-radius edge, and the eye reads one as unreal before it reads
+     * anything else: a sharp edge catches no highlight, so a box under a lamp
+     * is a flat shape with a hard seam. The outer dimensions are unchanged, so
+     * nothing moves or resizes; only the corner catches light now.
+     */
     function linearize() {
       scene.traverse(function (obj) {
         var mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
@@ -313,6 +620,14 @@
           if (m.color) m.color.convertSRGBToLinear();
           if (m.emissive) m.emissive.convertSRGBToLinear();
         });
+
+        if (obj.isMesh && !obj.geometry.__rounded && canRound(obj)) {
+          var p = obj.geometry.parameters;
+          var rounded = roundedBox(p.width, p.height, p.depth);
+          rounded.__rounded = true;
+          obj.geometry.dispose();
+          obj.geometry = rounded;
+        }
       });
     }
 
@@ -348,6 +663,10 @@
       scene: scene,
       camera: camera,
       composite: compositeMat,
+      // Exposed for the same reason `composite` is: a scene may need to tune
+      // the contact scale to its own world, or switch occlusion off for a
+      // world that is all flat board and has no contacts to darken.
+      ao: aoMat,
       renderComposite: renderComposite,
       resize: resize,
       linearize: linearize,
@@ -542,6 +861,7 @@
     clamp: clamp,
     lerp: lerp,
     mulberry: mulberry,
+    roundedBox: roundedBox,
     radialTexture: radialTexture,
     normalMapFrom: normalMapFrom,
     createCore: createCore,

@@ -61,6 +61,10 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     build_racetrack_config,
     racetrack_reward,
 )
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_trace_exporter import (
+    RACETRACK_PAYLOAD_KIND,
+    build_racetrack_trace,
+)
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
     TrackGeometry,
     build_track_geometry,
@@ -76,6 +80,7 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_world_sensors import (
 
 __all__ = [
     "AGENT_SLOT_WIDTH",
+    "RACETRACK_PAYLOAD_KIND",
     "DEFAULT_ACTION_PRESETS",
     "DEFAULT_MAX_TRACKED_AGENTS",
     "EGO_STATE_WIDTH",
@@ -94,6 +99,7 @@ __all__ = [
     "TrackedAgentsBelief",
     "WorldSensors",
     "build_racetrack_config",
+    "build_racetrack_trace",
     "build_track_geometry",
     "geometry_from_world",
     "racetrack_reward",
