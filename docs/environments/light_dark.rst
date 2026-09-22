@@ -1,9 +1,11 @@
 Light-Dark
 ==========
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/light_dark_visualization.gif
-   :alt: An agent detouring through a light beacon before heading to the goal.
-   :width: 480px
+.. episode-viewer:: traces/light_dark.json
+
+   ``ContinuousLightDarkPOMDP``: one real episode planned by PFT-DPW, replayed
+   in 3D. Drag to orbit, scroll to zoom, and use the bar to play, scrub and
+   switch camera.
 
 Navigate to a goal in a world where your position sensor is sharp near beacons
 and vague everywhere else. The shortest path is rarely the best one: going the

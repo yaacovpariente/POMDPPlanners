@@ -1,9 +1,10 @@
 PacMan
 ======
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/pacman_visualization.gif
-   :alt: PacMan collecting pellets in a small maze while a ghost pursues.
-   :width: 480px
+.. episode-viewer:: traces/pacman.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 Clear every pellet in a walled maze while ghosts hunt you. PacMan's own position
 is known; the ghosts' positions are only observed through noise that grows with

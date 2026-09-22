@@ -304,15 +304,17 @@ episode length, the environment reports tags suffered and inflicted, steps
 spent holding the enemy flag, and exposure in the enemy half as both a count
 and a per-episode maximum.
 
-Recorded visualization
-----------------------
+Episode replay
+--------------
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/capture_the_flag_visualization.gif
-   :alt: Isometric capture-the-flag field with two teams of soldiers, a river crossing, a scoreboard and a belief overlay over the hidden red players and flag.
-   :width: 100%
+.. episode-viewer:: traces/capture_the_flag.json
 
-The camera is isometric and the terrain is one continuous procedural field, so
-the map reads as a section of a larger world rather than a board. Soldiers
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its
+camera is isometric and the terrain is one continuous procedural field, so the
+map reads as a section of a larger world rather than a board. Soldiers
 interpolate between cells rather than teleporting, a scan plays its own ping,
 and a tagged player is drawn translucent while frozen.
 

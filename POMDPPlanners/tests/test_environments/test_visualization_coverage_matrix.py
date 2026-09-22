@@ -2,6 +2,13 @@
 
 """Every environment family must stay visualizable, documented and illustrated.
 
+An environment page is illustrated in one of two ways. A family whose traces
+have a 3D scene module (``POMDPPlanners/reporting/static/viewer/scenes``)
+embeds a live replay with ``.. episode-viewer:: traces/<world>.json``, and may
+no longer show a recorded GIF in its place. A family with no scene module
+(CARLA, Isaac Lab) keeps a still image. The golden GIFs stay in the test tree
+either way; they pin the package renderer, not the docs.
+
 Three things have to line up before a reader can see what an environment does:
 the package has to expose a visualization hook, the docs have to describe the
 family, and the image the docs point a reader at has to exist. Each of the three
@@ -40,6 +47,7 @@ are checked on a machine that has none of them, and nothing here needs a built
 """
 
 import ast
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +55,8 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import pytest
 from PIL import Image
+
+from POMDPPlanners.reporting.pages import scene_script_path
 
 # tests/test_environments/<this file> -> tests/ -> POMDPPlanners/ -> repository root.
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -68,6 +78,14 @@ MIN_ANIMATION_FRAMES = 2
 # is optional here because reST also allows it on the following line.
 _IMAGE_DIRECTIVE = re.compile(r"^(\s*)\.\.\s+(?:\|[^|]+\|\s+)?(?:image|figure)::\s*(\S*)\s*$")
 
+# ``.. episode-viewer:: traces/<world>.json`` -- the docs extension in
+# docs/_ext/episode_viewer.py that embeds a live 3D replay of that trace.
+_VIEWER_DIRECTIVE = re.compile(r"^\s*\.\.\s+episode-viewer::\s*(\S+)\s*$")
+
+# Module-level ``SOMETHING_PAYLOAD_KIND = "kind.v1"`` in a family's trace
+# exporter: the payload kinds the family writes.
+_PAYLOAD_KIND_NAME = re.compile(r"^[A-Z0-9_]*PAYLOAD_KIND$")
+
 
 @dataclass(frozen=True)
 class EnvironmentFamily:
@@ -86,11 +104,14 @@ class EnvironmentFamily:
         docs_page: File name under ``docs/environments``.
         docs_section: Section heading inside that page, or ``None`` when the
             whole page belongs to this family.
-        images: Repository-relative paths to every image that illustrates the
-            family. A family with several concrete worlds lists one per world,
-            because a single declared image left the others -- the continuous
-            Push, LaserTag and Maze GIFs among them -- embedded by the docs and
-            checked by nothing.
+        images: Repository-relative paths to every still image that illustrates
+            the family. Only a family with no 3D scene module may declare one.
+        viewers: Repository-relative paths to the trace JSON each
+            ``.. episode-viewer::`` on the page replays. A family with several
+            concrete worlds lists one per world, because a single declared
+            illustration left the others -- the continuous Push, LaserTag and
+            Maze worlds among them -- embedded by the docs and checked by
+            nothing.
     """
 
     package: str
@@ -98,7 +119,8 @@ class EnvironmentFamily:
     hooks: Tuple[Tuple[str, str], ...]
     docs_page: str
     docs_section: Optional[str]
-    images: Tuple[str, ...]
+    images: Tuple[str, ...] = ()
+    viewers: Tuple[str, ...] = ()
 
 
 # Families with no visualization at all, and why that is a decision rather than
@@ -112,6 +134,20 @@ EXEMPT_FAMILIES: Dict[str, str] = {
     "nuplan_pomdp": (
         "NuPlanPOMDP has no rendering path in this package -- playback belongs "
         "to nuboard in nuplan-devkit, which is not a dependency here."
+    ),
+}
+
+# Families that have a 3D scene module but cannot have a docs trace yet, and
+# why. Each keeps its still image until the block lifts. The test below refuses
+# an entry once its trace is committed, so the exception cannot outlive its
+# reason.
+VIEWER_BLOCKED: Dict[str, str] = {
+    "racetrack_pomdp": (
+        "No real episode can be run for a trace yet: Policy.config_id recurses "
+        "forever on every Racetrack planner model (model._observation_model._road "
+        "points back at the model), so LocalSimulationsAPI fails while building "
+        "the cache key. Regenerate with scripts/generate_docs_traces.py --only "
+        "racetrack once that is fixed."
     ),
 }
 
@@ -130,10 +166,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("battleship_pomdp/battleship_pomdp.py", "BattleshipPOMDP"),),
         docs_page="battleship.rst",
         docs_section=None,
-        # The page embeds the approved review artifact, not the golden fixture.
-        # That is deliberate: docs/artifacts/battleship_redesign/README.md pins
-        # this file's SHA-256 and records the golden as a separate asset.
-        images=("docs/artifacts/battleship_redesign/review.gif",),
+        viewers=("docs/environments/traces/battleship.json",),
     ),
     EnvironmentFamily(
         package="capture_the_flag_pomdp",
@@ -141,10 +174,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("capture_the_flag_pomdp/capture_the_flag_pomdp.py", "CaptureTheFlagPOMDP"),),
         docs_page="capture_the_flag.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "capture_the_flag_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/capture_the_flag.json",),
     ),
     EnvironmentFamily(
         package="carla_pomdp",
@@ -160,10 +190,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("cartpole_pomdp/cartpole_pomdp.py", "CartPolePOMDP"),),
         docs_page="cartpole.rst",
         docs_section=None,
-        # The docs copy, byte-identical to the golden GIF the renderer test
-        # pins. The matrix checks the file the page actually embeds, so this
-        # row follows the page rather than the test fixture.
-        images=("docs/images/cartpole_visualization.gif",),
+        viewers=("docs/environments/traces/cartpole.json",),
     ),
     EnvironmentFamily(
         package="chicheck_invaders_pomdp",
@@ -171,7 +198,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("chicheck_invaders_pomdp/chicheck_invaders_pomdp.py", "ChicheckInvadersPOMDP"),),
         docs_page="chicheck_invaders.rst",
         docs_section=None,
-        images=("docs/images/chicheck_invaders_visualization.gif",),
+        viewers=("docs/environments/traces/chicheck_invaders.json",),
     ),
     EnvironmentFamily(
         package="isaac_lab_pomdp",
@@ -190,11 +217,9 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="laser_tag.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "laser_tag_visualization.gif",
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "continuous_laser_tag_visualization.gif",
+        viewers=(
+            "docs/environments/traces/laser_tag.json",
+            "docs/environments/traces/continuous_laser_tag.json",
         ),
     ),
     EnvironmentFamily(
@@ -209,10 +234,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="light_dark.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "light_dark_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/light_dark.json",),
     ),
     EnvironmentFamily(
         package="maze_pomdp",
@@ -223,10 +245,10 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="maze.rst",
         docs_section=None,
-        images=(
-            "docs/images/discrete_maze_visualization.gif",
-            "docs/images/continuous_maze_visualization.gif",
-            "docs/images/t_maze_visualization.gif",
+        viewers=(
+            "docs/environments/traces/discrete_maze.json",
+            "docs/environments/traces/continuous_maze.json",
+            "docs/environments/traces/t_maze.json",
         ),
     ),
     EnvironmentFamily(
@@ -235,7 +257,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("mountain_car_pomdp/mountain_car_pomdp.py", "MountainCarPOMDP"),),
         docs_page="mountain_car.rst",
         docs_section=None,
-        images=("docs/images/mountaincar_recorded_history.gif",),
+        viewers=("docs/environments/traces/mountain_car.json",),
     ),
     EnvironmentFamily(
         package="multiagent_firefighting_pomdp",
@@ -248,7 +270,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="multiagent_firefighting.rst",
         docs_section=None,
-        images=("docs/images/multiagent_firefighting_visualization.gif",),
+        viewers=("docs/environments/traces/multiagent_firefighting.json",),
     ),
     EnvironmentFamily(
         package="occupancy_grid_mapping_pomdp",
@@ -261,7 +283,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="occupancy_grid_mapping.rst",
         docs_section=None,
-        images=("docs/images/occupancy_grid_mapping_visualization.gif",),
+        viewers=("docs/environments/traces/occupancy_grid_mapping.json",),
     ),
     EnvironmentFamily(
         package="pacman_pomdp",
@@ -269,10 +291,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),
         docs_page="pacman.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "pacman_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/pacman.json",),
     ),
     EnvironmentFamily(
         package="push_pomdp",
@@ -283,10 +302,9 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="push.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/push_visualization.gif",
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "continuous_push_visualization.gif",
+        viewers=(
+            "docs/environments/traces/push.json",
+            "docs/environments/traces/continuous_push.json",
         ),
     ),
     EnvironmentFamily(
@@ -303,10 +321,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("rock_sample_pomdp/rock_sample_pomdp.py", "RockSamplePOMDP"),),
         docs_page="rock_sample.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "rock_sample_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/rock_sample.json",),
     ),
     EnvironmentFamily(
         package="safety_ant_velocity_pomdp",
@@ -319,10 +334,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         ),
         docs_page="safety_ant_velocity.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/"
-            "safety_ant_velocity_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/safety_ant_velocity.json",),
     ),
     EnvironmentFamily(
         package="snake_pomdp",
@@ -330,7 +342,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("snake_pomdp/snake_pomdp.py", "SnakePOMDP"),),
         docs_page="snake.rst",
         docs_section=None,
-        images=("docs/images/snake_visualization.gif",),
+        viewers=("docs/environments/traces/snake.json",),
     ),
     EnvironmentFamily(
         package="tiger_pomdp",
@@ -338,9 +350,7 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         hooks=(("tiger_pomdp/tiger_pomdp.py", "TigerPOMDP"),),
         docs_page="tiger.rst",
         docs_section=None,
-        images=(
-            "POMDPPlanners/tests/test_environments/golden_visualizations/tiger_visualization.gif",
-        ),
+        viewers=("docs/environments/traces/tiger.json",),
     ),
 )
 
@@ -572,6 +582,169 @@ def find_undeclared_images(page_name: str) -> List[str]:
     ]
 
 
+def _resolve_page_target(page_path: Path, target: str) -> Optional[str]:
+    """Repository-relative path of a directive target, or ``None`` outside the repo."""
+    if target.startswith("/"):
+        resolved = (REPO_ROOT / "docs" / target.lstrip("/")).resolve()
+    else:
+        resolved = (page_path.parent / target).resolve()
+    try:
+        return resolved.relative_to(REPO_ROOT.resolve()).as_posix()
+    except ValueError:
+        return None
+
+
+def referenced_viewers(page_path: Path) -> Set[str]:
+    """Repository-relative paths of every trace a page replays in an episode viewer."""
+    if not page_path.is_file():
+        return set()
+    traces: Set[str] = set()
+    for line in page_path.read_text(encoding="utf-8").splitlines():
+        match = _VIEWER_DIRECTIVE.match(line)
+        if match:
+            resolved = _resolve_page_target(page_path, match.group(1))
+            if resolved is not None:
+                traces.add(resolved)
+    return traces
+
+
+def scene_module(payload_kind: str) -> Path:
+    """The scene module that draws ``payload_kind``, by the results site's own rule."""
+    relative = scene_script_path(payload_kind, static_root="").lstrip("/")
+    return REPO_ROOT / "POMDPPlanners" / "reporting" / "static" / relative
+
+
+def family_payload_kinds(family: EnvironmentFamily) -> Set[str]:
+    """Payload kinds the family's trace exporters declare, read from source.
+
+    A kind is a module-level string assigned to a name ending in
+    ``PAYLOAD_KIND``, which is how every exporter names its own.
+    """
+    root = ENVIRONMENTS_DIR / family.package
+    sources = sorted(root.rglob("*.py")) if root.is_dir() else []
+    kinds: Set[str] = set()
+    for source in sources:
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        for node in tree.body:
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Constant):
+                continue
+            if not isinstance(node.value.value, str):
+                continue
+            if any(
+                isinstance(t, ast.Name) and _PAYLOAD_KIND_NAME.match(t.id) for t in node.targets
+            ):
+                kinds.add(node.value.value)
+    return kinds
+
+
+def family_scene_kinds(family: EnvironmentFamily) -> Set[str]:
+    """The family's payload kinds that a 3D scene module can draw."""
+    return {kind for kind in family_payload_kinds(family) if scene_module(kind).is_file()}
+
+
+def _trace_payload_kind(trace: str) -> Tuple[Optional[str], Optional[str]]:
+    """``(payload kind, problem)`` for a declared trace file."""
+    path = REPO_ROOT / trace
+    if not path.is_file():
+        return None, f"{trace} does not exist"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as error:
+        return None, f"{trace} is not JSON ({error})"
+    kind = data.get("payload_kind") if isinstance(data, dict) else None
+    if not isinstance(kind, str) or not kind:
+        return None, f"{trace} has no payload_kind, so it is not an episode trace"
+    steps = data.get("steps")
+    if not isinstance(steps, list) or len(steps) < MIN_ANIMATION_FRAMES:
+        return kind, (
+            f"{trace} records {len(steps) if isinstance(steps, list) else 0} step(s), "
+            f"fewer than the {MIN_ANIMATION_FRAMES} a replay needs"
+        )
+    return kind, None
+
+
+def find_broken_viewers(family: EnvironmentFamily) -> List[str]:
+    """List declared viewer traces that would not replay on the page.
+
+    The docs build also refuses these, but a docs build is not part of the test
+    suite; this catches the same faults from the source tree alone.
+    """
+    problems: List[str] = []
+    for trace in family.viewers:
+        kind, problem = _trace_payload_kind(trace)
+        if problem:
+            problems.append(f"{family.label}: episode viewer trace broken -- {problem}.")
+            continue
+        assert kind is not None
+        if not scene_module(kind).is_file():
+            problems.append(
+                f"{family.label}: episode viewer trace broken -- {trace} has payload kind "
+                f"{kind}, which no scene module draws ({scene_module(kind).name} is missing)."
+            )
+    return problems
+
+
+def find_missing_viewers(family: EnvironmentFamily) -> List[str]:
+    """List the family's 3D scenes that its docs page does not replay.
+
+    A scene module exists so an episode of that world can be watched; a page
+    that still shows a GIF, or nothing, when the scene exists is the gap this
+    check closes.
+    """
+    if family.package in VIEWER_BLOCKED:
+        return []
+    declared = {_trace_payload_kind(trace)[0] for trace in family.viewers}
+    return [
+        f"{family.label}: has a 3D scene for {kind} ({scene_module(kind).name}) but "
+        f"docs/environments/{family.docs_page} declares no episode viewer that replays it."
+        for kind in sorted(family_scene_kinds(family) - declared)
+    ]
+
+
+def find_legacy_images(family: EnvironmentFamily) -> List[str]:
+    """List still images declared by a family that has a 3D scene.
+
+    Where a scene exists the page shows the live replay instead. A GIF left
+    beside it would show a second, older picture of the same world.
+    """
+    if family.package in VIEWER_BLOCKED:
+        return []
+    if not family.images or not family_scene_kinds(family):
+        return []
+    return [
+        f"{family.label}: has a 3D scene, so docs/environments/{family.docs_page} should "
+        f"replay an episode instead of showing the legacy image {image}."
+        for image in family.images
+    ]
+
+
+def find_unembedded_viewers(family: EnvironmentFamily) -> List[str]:
+    """List declared viewer traces the family's page does not embed."""
+    page_path = DOCS_ENVIRONMENTS_DIR / family.docs_page
+    if not page_path.is_file():
+        return []
+    referenced = referenced_viewers(page_path)
+    return [
+        f"{family.label}: documentation does not show its episode viewer -- "
+        f"docs/environments/{family.docs_page} embeds no episode-viewer for {trace}."
+        for trace in family.viewers
+        if trace not in referenced
+    ]
+
+
+def find_undeclared_viewers(page_name: str) -> List[str]:
+    """List viewer traces a docs page embeds that no family on that page declares."""
+    page_path = DOCS_ENVIRONMENTS_DIR / page_name
+    declared = {
+        trace for family in FAMILIES if family.docs_page == page_name for trace in family.viewers
+    }
+    return [
+        f"docs/environments/{page_name} replays {trace}, which no matrix row declares. "
+        f"Add it to the viewers of the family that page documents."
+        for trace in sorted(referenced_viewers(page_path) - declared)
+    ]
+
+
 NON_EXEMPT_FAMILIES = [family for family in FAMILIES if family.package not in EXEMPT_FAMILIES]
 
 
@@ -662,6 +835,31 @@ def test_family_has_existing_image(family):
 @pytest.mark.parametrize(
     "family", NON_EXEMPT_FAMILIES, ids=[family.label for family in NON_EXEMPT_FAMILIES]
 )
+def test_family_is_illustrated(family):
+    """Every non-exempt family shows something: a live replay, or a still image."""
+    assert family.images or family.viewers, (
+        f"{family.label} declares neither an episode viewer nor an image, so its "
+        f"docs page shows no picture of the world."
+    )
+
+
+@pytest.mark.parametrize(
+    "family", NON_EXEMPT_FAMILIES, ids=[family.label for family in NON_EXEMPT_FAMILIES]
+)
+def test_family_with_a_scene_replays_it_on_its_page(family):
+    """A family whose traces have a 3D scene replays one, and shows no legacy image."""
+    problems = (
+        find_missing_viewers(family)
+        + find_legacy_images(family)
+        + find_broken_viewers(family)
+        + find_unembedded_viewers(family)
+    )
+    assert not problems, "\n".join(problems)
+
+
+@pytest.mark.parametrize(
+    "family", NON_EXEMPT_FAMILIES, ids=[family.label for family in NON_EXEMPT_FAMILIES]
+)
 def test_family_documentation_embeds_its_images(family):
     """The page a family claims has to actually show the images the row declares."""
     problems = find_unreferenced_images(family)
@@ -673,9 +871,43 @@ DOCUMENTED_PAGES = sorted({family.docs_page for family in FAMILIES})
 
 @pytest.mark.parametrize("page_name", DOCUMENTED_PAGES)
 def test_documentation_declares_every_image_it_embeds(page_name):
-    """A page cannot embed an image that no matrix row is responsible for."""
-    problems = find_undeclared_images(page_name)
+    """A page cannot embed an image or a replay that no matrix row is responsible for."""
+    problems = find_undeclared_images(page_name) + find_undeclared_viewers(page_name)
     assert not problems, "\n".join(problems)
+
+
+def test_only_the_simulator_worlds_keep_a_still_image():
+    """CARLA and Isaac Lab have no scene module; everything else replays in 3D.
+
+    Racetrack is the one blocked family (see ``VIEWER_BLOCKED``). Written out
+    so that dropping a scene module, or adding a GIF back, shows up as a
+    change to this list rather than passing quietly.
+    """
+    assert sorted(f.package for f in NON_EXEMPT_FAMILIES if f.images) == [
+        "carla_pomdp",
+        "isaac_lab_pomdp",
+        "racetrack_pomdp",
+    ]
+
+
+@pytest.mark.parametrize("package", sorted(VIEWER_BLOCKED))
+def test_blocked_viewer_is_still_blocked(package):
+    """A blocked family must really have a scene, and lose the entry once it has a trace."""
+    family = FAMILIES_BY_PACKAGE[package]
+    assert VIEWER_BLOCKED[package].strip(), f"{package} is blocked with no reason given."
+    assert family_scene_kinds(family), (
+        f"{package} is listed in VIEWER_BLOCKED but has no scene module; " "it needs no exception."
+    )
+    committed = sorted(
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in (DOCS_ENVIRONMENTS_DIR / "traces").glob("*.json")
+        if _trace_payload_kind(path.relative_to(REPO_ROOT).as_posix())[0]
+        in family_scene_kinds(family)
+    )
+    assert not family.viewers and not committed, (
+        f"{package} now has a docs trace ({', '.join(committed) or 'declared viewer'}); "
+        "remove it from VIEWER_BLOCKED, declare the viewer and drop its legacy image."
+    )
 
 
 def short_table_rows(page: Path) -> List[str]:
@@ -764,6 +996,7 @@ def _family_with(**overrides) -> EnvironmentFamily:
         "docs_page": base.docs_page,
         "docs_section": base.docs_section,
         "images": base.images,
+        "viewers": base.viewers,
     }
     fields.update(overrides)
     return EnvironmentFamily(**fields)
@@ -1057,3 +1290,106 @@ def test_empty_image_counts_as_missing(tmp_path, monkeypatch):
     assert find_missing_image(family) == [
         "Widget: visualization image missing -- docs/images/widget.gif is empty."
     ]
+
+
+def _write_trace(root: Path, relative: str, kind: str, steps: int = 3) -> None:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"payload_kind": kind, "steps": [{} for _ in range(steps)]}),
+        encoding="utf-8",
+    )
+
+
+def _fake_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A repository root holding a tiger package, a tiger scene and a docs page."""
+    package = tmp_path / "POMDPPlanners" / "environments" / "tiger_pomdp"
+    package.mkdir(parents=True)
+    (package / "trace_exporter.py").write_text(
+        'TIGER_PAYLOAD_KIND = "tiger.v1"\n', encoding="utf-8"
+    )
+    scenes = tmp_path / "POMDPPlanners" / "reporting" / "static" / "viewer" / "scenes"
+    scenes.mkdir(parents=True)
+    (scenes / "tiger.js").write_text("// scene\n", encoding="utf-8")
+    docs = tmp_path / "docs" / "environments"
+    docs.mkdir(parents=True)
+    module = "POMDPPlanners.tests.test_environments.test_visualization_coverage_matrix"
+    monkeypatch.setattr(f"{module}.REPO_ROOT", tmp_path)
+    monkeypatch.setattr(f"{module}.ENVIRONMENTS_DIR", tmp_path / "POMDPPlanners" / "environments")
+    monkeypatch.setattr(f"{module}.DOCS_ENVIRONMENTS_DIR", docs)
+    return tmp_path
+
+
+def test_a_family_with_a_scene_and_no_viewer_is_reported(tmp_path, monkeypatch):
+    """The scene exists, the page shows only the old GIF: that is the gap to report."""
+    _fake_repo(tmp_path, monkeypatch)
+    family = _family_with(viewers=(), images=("docs/images/tiger.gif",))
+    assert find_missing_viewers(family) == [
+        "Tiger: has a 3D scene for tiger.v1 (tiger.js) but docs/environments/tiger.rst "
+        "declares no episode viewer that replays it."
+    ]
+    assert find_legacy_images(family) == [
+        "Tiger: has a 3D scene, so docs/environments/tiger.rst should replay an episode "
+        "instead of showing the legacy image docs/images/tiger.gif."
+    ]
+
+
+def test_a_family_without_a_scene_may_keep_its_image(tmp_path, monkeypatch):
+    """CARLA's case: no scene module, so a still image is the right illustration."""
+    _fake_repo(tmp_path, monkeypatch)
+    (
+        tmp_path / "POMDPPlanners" / "reporting" / "static" / "viewer" / "scenes" / "tiger.js"
+    ).unlink()
+    family = _family_with(viewers=(), images=("docs/images/tiger.png",))
+    assert find_missing_viewers(family) == []
+    assert find_legacy_images(family) == []
+
+
+def test_a_declared_viewer_must_be_embedded_and_replayable(tmp_path, monkeypatch):
+    """A trace on disk is not coverage until the page embeds it and a scene draws it."""
+    root = _fake_repo(tmp_path, monkeypatch)
+    _write_trace(root, "docs/environments/traces/tiger.json", "tiger.v1")
+    _write_trace(root, "docs/environments/traces/ghost.json", "ghost.v1")
+    (root / "docs" / "environments" / "tiger.rst").write_text(
+        "Tiger\n=====\n\n.. episode-viewer:: traces/ghost.json\n", encoding="utf-8"
+    )
+    family = _family_with(
+        viewers=("docs/environments/traces/tiger.json", "docs/environments/traces/ghost.json"),
+        images=(),
+    )
+    assert find_unembedded_viewers(family) == [
+        "Tiger: documentation does not show its episode viewer -- docs/environments/tiger.rst "
+        "embeds no episode-viewer for docs/environments/traces/tiger.json."
+    ]
+    assert find_broken_viewers(family) == [
+        "Tiger: episode viewer trace broken -- docs/environments/traces/ghost.json has payload "
+        "kind ghost.v1, which no scene module draws (ghost.js is missing)."
+    ]
+
+
+def test_a_trace_too_short_to_replay_is_broken(tmp_path, monkeypatch):
+    """One recorded step is a still frame, the viewer's version of a one-frame GIF."""
+    root = _fake_repo(tmp_path, monkeypatch)
+    _write_trace(root, "docs/environments/traces/tiger.json", "tiger.v1", steps=1)
+    family = _family_with(viewers=("docs/environments/traces/tiger.json",), images=())
+    assert find_broken_viewers(family) == [
+        "Tiger: episode viewer trace broken -- docs/environments/traces/tiger.json records "
+        f"1 step(s), fewer than the {MIN_ANIMATION_FRAMES} a replay needs."
+    ]
+
+
+def test_referenced_viewers_resolve_like_images(tmp_path, monkeypatch):
+    """Page-relative and source-root targets both count, as they do for images."""
+    root = _fake_repo(tmp_path, monkeypatch)
+    page = root / "docs" / "environments" / "widget.rst"
+    page.write_text(
+        "Widget\n======\n\n"
+        ".. episode-viewer:: traces/a.json\n\n"
+        "   A caption.\n\n"
+        ".. episode-viewer:: /environments/traces/b.json\n",
+        encoding="utf-8",
+    )
+    assert referenced_viewers(page) == {
+        "docs/environments/traces/a.json",
+        "docs/environments/traces/b.json",
+    }

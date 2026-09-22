@@ -1,9 +1,10 @@
 Tiger
 =====
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/tiger_visualization.gif
-   :alt: An agent listening at two doors, then opening one.
-   :width: 480px
+.. episode-viewer:: traces/tiger.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 The classic two-door POMDP: one door hides a tiger, the other hides a prize.
 Listening is cheap but only 85 % accurate, so the whole problem is deciding how

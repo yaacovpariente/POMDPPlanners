@@ -409,22 +409,25 @@ over a single channel, and a mean of per-step ratios is not the episode's ratio
 counts are built from. Episodes that never fired are left out of the average
 rather than scored as zero.
 
-.. image:: ../images/chicheck_invaders_visualization.gif
-   :alt: The true sky with ship, chickens and shots, beside the belief's weighted chance of a chicken per cell.
-   :width: 100%
+.. episode-viewer:: traces/chicheck_invaders.json
 
-The left panel is the true world: the ship, the chickens with their mode shown
-by the sprite, the beam of a shot fired on that step, the edges of the camera
-cone and the radar's ring. The beam appears only on steps that discharged the
-gun and stops at the chicken it killed, which is ringed; a shot into an empty
-column runs the full height and rings nothing. There is no bolt to follow,
-because a shot never survives the step it was fired in. The right panel is the belief's weighted per-cell chance that a
-chicken is there. Drawing the particles themselves is this repository's usual
-choice for a low-dimensional state, and the belief here is a particle cloud --
-but one particle is a whole flock, and a few hundred overlaid flocks are a smear
-rather than a picture. The per-cell marginal is the projection the task turns on
-and is still the belief rather than a fit to it. Each frame shows the state a
-step was taken from; the caption names the action about to be taken.
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its left
+panel is the true world: the ship, the chickens with their mode shown by the
+sprite, the beam of a shot fired on that step, the edges of the camera cone and
+the radar's ring. The beam appears only on steps that discharged the gun and
+stops at the chicken it killed, which is ringed; a shot into an empty column
+runs the full height and rings nothing. There is no bolt to follow, because a
+shot never survives the step it was fired in. The right panel is the belief's
+weighted per-cell chance that a chicken is there. Drawing the particles
+themselves is this repository's usual choice for a low-dimensional state, and
+the belief here is a particle cloud -- but one particle is a whole flock, and a
+few hundred overlaid flocks are a smear rather than a picture. The per-cell
+marginal is the projection the task turns on and is still the belief rather
+than a fit to it. Each frame shows the state a step was taken from; the caption
+names the action about to be taken.
 
 Limits
 ------

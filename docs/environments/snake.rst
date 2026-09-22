@@ -253,16 +253,18 @@ call for opposite fixes — a planner that walks into walls is searching badly,
 one that starves is not searching at all. ``max_steps_since_food`` reports how
 close an episode came to starving even when it did not.
 
-Recorded visualization
-----------------------
+Episode replay
+--------------
 
-.. image:: ../images/snake_visualization.gif
-   :alt: Snake board with a green snake, a cyan vision window, fogged cells, an amber belief heatmap over the hidden food, and a side panel of score, length, step, scent and detection readouts.
-   :width: 100%
+.. episode-viewer:: traces/snake.json
 
-The board carries four layers. The snake is drawn head first with a colour
-gradient down its body and eyes pointing along the heading; the agent observes
-it exactly, so it is drawn at full strength everywhere. The cyan outline is the
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its
+board carries four layers. The snake is drawn head first with a colour gradient
+down its body and eyes pointing along the heading; the agent observes it
+exactly, so it is drawn at full strength everywhere. The cyan outline is the
 vision window, and the cells outside it are fogged — the fog is about the
 *food*, not the body. The amber glow is the belief: the posterior probability
 that the food is in that cell, scaled to the brightest cell of that frame,
@@ -275,10 +277,6 @@ Each frame shows the state the step was taken *from*, and the panel reports the
 reading the agent chose on — the previous step's observation — rather than the
 one its action is about to produce. A death is marked with a red cross over the
 head and a starvation with an amber hourglass.
-
-This is a renderer fixture replayed from a fixed action sequence with real
-transitions and real belief updates. It demonstrates the renderer, not planner
-performance.
 
 No vectorized model
 -------------------
