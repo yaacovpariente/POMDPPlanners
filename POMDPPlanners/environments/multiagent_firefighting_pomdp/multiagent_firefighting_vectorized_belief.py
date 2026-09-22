@@ -39,7 +39,7 @@ Functions:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Tuple
+from typing import TYPE_CHECKING, Any, Tuple
 
 import numpy as np
 
@@ -553,18 +553,8 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
             # when all of its particles score zero, so a stratum whose every
             # particle had gone cold would otherwise keep its full weight and
             # the conditioning would be undone one stratum at a time.
-            ruled_out = updater.ruled_out_by_a_running_episode(next_particles)
-            # Per wind value, not over the population: _stratified_update
-            # carries a wind value forward at its prior weight when all of its
-            # particles score zero, so flooring a whole stratum preserves it
-            # intact and the conditioning is undone one stratum at a time.
-            # A stratum with nothing left to condition on is rebuilt instead.
-            for rows in self._wind_strata(next_particles):
-                if ruled_out[rows].all():
-                    self._reignite_out_of_sight(next_particles, values, rows)
-                    ruled_out[rows] = False
             log_likelihoods, _ = condition_log_weights_on_a_running_episode(
-                log_likelihoods, ruled_out
+                log_likelihoods, updater.ruled_out_by_a_running_episode(next_particles)
             )
 
         particles, log_weights = self._stratified_update(next_particles, log_likelihoods)
@@ -575,71 +565,6 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
             resampling=self.resampling,
             ess_factor=self.ess_factor,
         )
-
-    def _wind_strata(self, particles: np.ndarray) -> List[np.ndarray]:
-        """Row indices of each wind value present, the unit this belief resamples in.
-
-        Args:
-            particles: ``(N, state_size)`` particles.
-
-        Returns:
-            One index array per distinct wind value.
-        """
-        updater: FirefightingVectorizedUpdater = self.updater
-        wind = np.rint(particles[:, updater.wind_direction_index]).astype(np.int64) * 2 + np.rint(
-            particles[:, updater.wind_strength_index]
-        ).astype(np.int64)
-        return [np.flatnonzero(wind == value) for value in np.unique(wind)]
-
-    def _reignite_out_of_sight(
-        self, particles: np.ndarray, observation: np.ndarray, rows: np.ndarray
-    ) -> None:
-        """Put the fire back somewhere nobody is looking, in place.
-
-        Called for a wind value whose every particle has gone cold. Flooring
-        those particles would not help: :meth:`_stratified_update` carries a
-        wind value forward at its prior weight precisely when all of its
-        particles score zero, so the stratum would survive intact and stay
-        certain the fire is out. Dropping the stratum instead is worse -- the
-        wind never changes, so a wind value deleted once can never be restored,
-        which is the reason this belief stratifies at all.
-
-        The repair is the move the reading itself licenses: the robots report a
-        category only for the cells they can see, so a cell they cannot see and
-        that is not absorbing may be alight, and exactly that is what the step
-        being taken says of at least one cell. Each particle gets one such cell
-        set smoldering, drawn uniformly from its own admissible cells. Cells
-        the reading names are left alone -- they are the only hard evidence the
-        step produced -- and so are burnt and wet cells, which no rule maps
-        back into being alight.
-
-        A particle with no admissible cell is left as it is. Every cell it
-        could hold fire in is either visible and cold or absorbing, so there is
-        nothing consistent to re-ignite.
-
-        Args:
-            particles: ``(N, state_size)`` particles, modified in place.
-            observation: This step's reading.
-            rows: The rows to repair.
-        """
-        updater: FirefightingVectorizedUpdater = self.updater
-        fire = particles[:, updater.fire_offset :]
-        visible = updater.visible_masks(particles)
-        reported = (
-            observation[updater.robot_block :]
-            if observation.size == updater.observation_size
-            else np.full(updater.num_cells, UNKNOWN_CATEGORY)
-        )
-        unreported = (reported == UNKNOWN_CATEGORY)[None, :]
-        absorbing = (np.rint(fire) == int(FireCategory.BURNT)) | (
-            np.rint(fire) == int(FireCategory.WET)
-        )
-        admissible = (~visible | unreported) & ~absorbing
-
-        for row in rows:
-            choices = np.flatnonzero(admissible[row])
-            if choices.size:
-                fire[row, np.random.choice(choices)] = float(FireCategory.SMOLDERING)
 
     def _stratified_update(
         self, particles: np.ndarray, log_likelihoods: np.ndarray

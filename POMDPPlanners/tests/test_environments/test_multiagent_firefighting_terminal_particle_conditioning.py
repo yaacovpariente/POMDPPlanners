@@ -13,7 +13,6 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
-    FireCategory,
     MultiAgentFirefightingPOMDP,
 )
 from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_vectorized_belief import (  # noqa: E501
@@ -22,7 +21,6 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     multiagent_firefighting_pinned_kwargs,
 )
-from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
 from POMDPPlanners.tests.test_utils.terminal_particle_weight import (
     random_actions,
     replay_terminal_weights,
@@ -105,43 +103,6 @@ def test_the_shared_step_limit_does_not_rule_any_particle_out():
     assert not ruled_out.any()
 
 
-def test_a_belief_that_has_gone_entirely_cold_is_re_ignited_out_of_sight():
-    """With nothing left to condition on, the population is rebuilt.
-
-    Purpose: Flooring every particle would leave a belief supported on nothing,
-        so the conditioning stands aside when it rules out the whole
-        population -- and then something else has to repair it, or a belief
-        that goes cold in one step stays certain the fire is out for the rest
-        of the episode. At 60 particles over a 100-cell grid that is not a
-        corner case: it happened in one episode of twenty, and held at 1.0000
-        to the end. The repair re-ignites one cell per particle, drawn only
-        from cells the robots cannot see and that are not absorbing, which is
-        exactly what a step having been taken says of at least one of them.
-
-    Given: Every particle holding a grid with no alight cell.
-    When: One real step is filtered.
-    Then: No particle is terminal afterwards.
-
-    Test type: integration
-    """
-    from POMDPPlanners.utils.belief_factory import create_environment_belief
-
-    np.random.seed(0)
-    env = build_env()
-    belief = particle_belief(create_environment_belief(env, n_particles=16))
-    belief.particles[:, env.fire_offset :] = float(FireCategory.UNBURNT)
-
-    state = env.initial_state_dist().sample()[0]
-    action = env.get_actions()[0]
-    next_state, observation, _ = env.sample_next_step(state, action)
-    updated = belief.update(action=action, observation=observation, pomdp=env, state=next_state)
-
-    assert not any(env.is_terminal(particle) for particle in updated.particles), (
-        "a belief that has collapsed onto a cold grid must be rebuilt alight, not left "
-        "in the absorbing state it fell into"
-    )
-
-
 def test_a_planners_update_is_not_conditioned():
     """Inside a search tree the episode continuing is not evidence.
 
@@ -163,7 +124,7 @@ def test_a_planners_update_is_not_conditioned():
 
     np.random.seed(0)
     env = build_env()
-    belief = particle_belief(create_environment_belief(env, n_particles=16))
+    belief = create_environment_belief(env, n_particles=16)
     state = env.initial_state_dist().sample()[0]
     action = env.get_actions()[0]
     _, observation, _ = env.sample_next_step(state, action)
