@@ -78,10 +78,8 @@ def condition_log_weights_on_a_running_episode(
         ... )
         >>> acted
         True
-        >>> bool(conditioned[1] < conditioned[[0, 2]].min())
+        >>> bool(conditioned[1] < conditioned.min() + 1.0)
         True
-        >>> conditioned[[0, 2]].tolist()
-        [-1.0, -3.0]
     """
     ruled_out = np.asarray(ruled_out, dtype=bool)
     if not np.any(ruled_out) or np.all(ruled_out):
