@@ -139,15 +139,6 @@
     return geo;
   }
 
-  // Chain rows along local +X: [x, centre y, half width (z), half up, half down].
-  function chainX(rows, z, exp) {
-    return rows.map(function (r) {
-      return {
-        p: new THREE.Vector3(r[0], r[1], z || 0),
-        hw: r[2], hhTop: r[3], hhBot: r[4], exp: exp || 2.0
-      };
-    });
-  }
   // Chain rows along local +Y: [y, centre x, half width (x), half front, half back].
   function chainY(rows, z, exp) {
     return rows.map(function (r) {
@@ -920,38 +911,65 @@
       });
 
     /* ---------------------------------------------------------- the flock
-       These are the invaders, and a chicken silhouette is unmistakable, so the
-       build spends its budget on getting that silhouette right: a deep rounded
-       body, a real neck carrying a distinct head, a beak, a comb and a wattle,
-       a fanned tail, wings. Body and neck are ONE swept surface, so a bird
-       shades as one creature instead of a stack of primitives.
+       These are the invaders, drawn after the arcade game the environment is
+       named for: a plump white hen in a coloured bib-sweater, facing the
+       player. The read comes from a few oversized features — a big orange
+       beak, big white eyes, a red three-spike comb, two fans of long white
+       flight feathers and big orange feet — so every one of them is drawn
+       larger than a real bird's would be.
 
-       They are in space, so they wear the genre's own answer: a bubble helmet
-       and a thruster pack. That is not only a joke — the pack is how a chicken
-       dives, and both pieces put a lit element on every bird, which is what
-       makes them readable against a black sky under one hard key.
+       Each bird still wears a thruster pack on its back. It is how a chicken
+       dives in vacuum, and its antenna beacon is the mode marker.
 
-       Local +X is the nose. The body yaws to put +X on the direction of travel
-       and pitches nose-down for a dive. */
-    var featherMat = new THREE.MeshStandardMaterial({
-      color: 0x8E8474, roughness: 0.92, metalness: 0.0, envMapIntensity: 0.10
-    });
-    var featherDark = new THREE.MeshStandardMaterial({
-      color: 0x5E564A, roughness: 0.94, metalness: 0.0, envMapIntensity: 0.09
+       Local +Z is the face, toward the player. The body turns a little
+       toward its direction of travel and leans in over a dive. */
+    var plumeMat = new THREE.MeshStandardMaterial({
+      color: 0xE9E9EE, roughness: 0.46, metalness: 0.0, envMapIntensity: 0.35
     });
     var combMat = new THREE.MeshStandardMaterial({
-      color: 0xC0342A, roughness: 0.62, metalness: 0.0, envMapIntensity: 0.22
+      color: 0xD8211B, roughness: 0.50, metalness: 0.0, envMapIntensity: 0.25
     });
     var beakMat = new THREE.MeshStandardMaterial({
-      color: 0xD9A03C, roughness: 0.55, metalness: 0.05, envMapIntensity: 0.25
+      color: 0xF08A1A, roughness: 0.45, metalness: 0.0, envMapIntensity: 0.30
     });
     var suitMat = new THREE.MeshStandardMaterial({
       color: 0x55606E, roughness: 0.48, metalness: 0.62, envMapIntensity: 0.9
     });
-    var glassMat = new THREE.MeshStandardMaterial({
-      color: 0x9FBACC, roughness: 0.08, metalness: 0.12,
-      transparent: true, opacity: 0.20, envMapIntensity: 1.2, side: THREE.DoubleSide
-    });
+    // The game's two first-wave sweaters. Neither is amber or red, so the
+    // sweater never competes with the mode marker.
+    var SWEATERS = [0x8A2BD0, 0x0F7AD8];
+    // Built at half a cell tall, then scaled to fill most of one, as the
+    // game's birds fill their formation.
+    var BIRD_SCALE = 1.35;
+
+    /* The dive streak's fade: full at the bird, nothing a cell above it. One
+       texture for the flock; each bird's streak only varies its own opacity. */
+    var streakTex = (function () {
+      var cv = document.createElement("canvas");
+      cv.width = 16; cv.height = 128;
+      var g = cv.getContext("2d");
+      var grad = g.createLinearGradient(0, 128, 0, 0);
+      grad.addColorStop(0, "rgba(255,255,255,1)");
+      grad.addColorStop(0.35, "rgba(255,255,255,0.45)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 16, 128);
+      // Soft sides, so the streak reads as a smear of light, not a bar.
+      var side = g.createLinearGradient(0, 0, 16, 0);
+      side.addColorStop(0, "rgba(0,0,0,1)");
+      side.addColorStop(0.5, "rgba(0,0,0,0)");
+      side.addColorStop(1, "rgba(0,0,0,1)");
+      g.globalCompositeOperation = "destination-out";
+      g.fillStyle = side;
+      g.fillRect(0, 0, 16, 128);
+      return new THREE.CanvasTexture(cv);
+    })();
+
+    function ellipsoid(r, sx, sy, sz, mat) {
+      var m = new THREE.Mesh(new THREE.SphereGeometry(r, 18, 14), mat);
+      m.scale.set(sx, sy, sz);
+      return m;
+    }
 
     function buildChicken(seed) {
       var rnd = mulberry(seed);
@@ -959,207 +977,183 @@
       scene.add(root);
       /* Every bird owns its materials. Shared, the fade applied to the one the
          shot took reached all of them at once. */
-      var feather = featherMat.clone(), featherD = featherDark.clone();
-      var comb = combMat.clone(), beakM = beakMat.clone(), suit = suitMat.clone();
-      var glass = glassMat.clone();
-      // A slightly different plumage each: no flock is a set of identical birds.
-      var tint = 0.86 + rnd() * 0.28;
-      feather.color.multiplyScalar(tint);
-      featherD.color.multiplyScalar(tint);
-      var fadeMats = [feather, featherD, comb, beakM, suit, glass];
+      var plume = plumeMat.clone(), comb = combMat.clone();
+      var beakM = beakMat.clone(), suit = suitMat.clone();
+      var sweater = new THREE.MeshStandardMaterial({
+        color: SWEATERS[rnd() < 0.5 ? 0 : 1], roughness: 0.55, metalness: 0.0,
+        envMapIntensity: 0.30
+      });
+      // A slightly different shade each: no flock is a set of identical birds.
+      sweater.color.multiplyScalar(0.88 + rnd() * 0.24);
+      var fadeMats = [plume, comb, beakM, suit, sweater];
 
-      /* `body` carries the yaw and the dive pitch. Everything visible hangs off
-         `rollG` inside it, so a bank into the attack line rotates about the
-         bird's own nose axis and leaves the world forward vector alone. */
+      /* `body` carries the turn and the dive lean. Everything visible hangs off
+         `rollG` inside it, so a bank tilts the bird in the board's plane and
+         leaves the lean alone. */
       var body = new THREE.Group();
       root.add(body);
       var rollG = new THREE.Group();
+      rollG.scale.setScalar(BIRD_SCALE);
       body.add(rollG);
-
-      /* The bird: tail at -X through the breast, then up the neck to the base
-         of the skull, as ONE chain. The kink at the shoulder is what makes a
-         chicken a chicken — a deep body with the neck rising steeply out of the
-         front of it, not a head stuck on a sphere. */
-      var torso = new THREE.Mesh(sweepGeometry(chainX([
-        [-0.150, -0.012, 0.052, 0.055, 0.048],   // tail root
-        [-0.105, -0.020, 0.088, 0.088, 0.082],
-        [-0.050, -0.022, 0.108, 0.104, 0.098],   // deepest point, the belly
-        [0.005, -0.012, 0.106, 0.104, 0.092],
-        [0.052, 0.008, 0.092, 0.096, 0.074],     // breast
-        [0.082, 0.046, 0.066, 0.070, 0.052],     // shoulder, neck begins
-        [0.094, 0.090, 0.044, 0.046, 0.040],
-        [0.100, 0.130, 0.038, 0.040, 0.036],     // neck
-        [0.108, 0.166, 0.044, 0.046, 0.042],
-        [0.122, 0.196, 0.055, 0.056, 0.052],     // skull
-        [0.150, 0.208, 0.052, 0.052, 0.050],
-        [0.178, 0.204, 0.038, 0.038, 0.038]      // face
-      ], 0, 2.15), 22, new THREE.Vector3(0, 1, 0), true, true), feather);
       // No castShadow anywhere on a bird: in open space there is nothing for a
       // chicken's shadow to land on, so a caster here is pure cost.
-      rollG.add(torso);
 
-      // Beak: two wedges meeting on a line, upper a little longer than lower.
-      var beakUpper = new THREE.Mesh(sweepGeometry(chainX([
-        [0.168, 0.206, 0.030, 0.020, 0.002],
-        [0.205, 0.201, 0.020, 0.013, 0.001],
-        [0.232, 0.194, 0.007, 0.005, 0.001]
-      ], 0, 2.0), 10, new THREE.Vector3(0, 1, 0), true, true), beakM);
-      rollG.add(beakUpper);
-      var beakLower = new THREE.Mesh(sweepGeometry(chainX([
-        [0.168, 0.194, 0.024, 0.002, 0.014],
-        [0.199, 0.191, 0.015, 0.001, 0.009],
-        [0.220, 0.188, 0.006, 0.001, 0.003]
-      ], 0, 2.0), 10, new THREE.Vector3(0, 1, 0), true, true), beakM);
-      rollG.add(beakLower);
+      // Body: a round white egg, a little wider than deep. Its white bottom
+      // shows below the sweater.
+      rollG.add(ellipsoid(0.13, 1.02, 1.0, 0.9, plume).translateY(-0.02));
 
-      // Comb: overlapping plates with descending height, which reads as a
-      // serrated comb from any angle.
-      var combG = new THREE.Group();
-      rollG.add(combG);
-      [[0.108, 0.030], [0.128, 0.040], [0.148, 0.036], [0.166, 0.024]].forEach(function (cb) {
-        var blade = new THREE.Mesh(new THREE.SphereGeometry(cb[1], 10, 8), comb);
-        blade.scale.set(0.55, 1.0, 0.30);
-        blade.position.set(cb[0], 0.234 + cb[1] * 0.45, 0);
-        combG.add(blade);
-      });
-      // Wattles: small, but their absence is felt.
-      [0.038, -0.038].forEach(function (wz) {
-        var wattle = new THREE.Mesh(new THREE.SphereGeometry(0.024, 10, 8), comb);
-        wattle.scale.set(0.60, 1.25, 0.45);
-        wattle.position.set(0.158, 0.164, wz * 0.5);
-        rollG.add(wattle);
+      /* The sweater covers the chest and shoulders and stops well above the
+         bottom. That band of white below a coloured top is most of the game
+         bird's silhouette. */
+      var jumper = ellipsoid(0.137, 1.03, 0.86, 0.96, sweater);
+      jumper.position.set(0, 0.022, 0.004);
+      rollG.add(jumper);
+
+      // Head: white, sitting straight on the shoulders.
+      rollG.add(ellipsoid(0.074, 1.0, 1.04, 0.98, plume).translateY(0.192).translateZ(0.018));
+
+      /* Beak: one big orange cone pointing out of the face and a little down.
+         Rotating the cone's +Y about X by pi/2 + 0.32 aims it at (0, -0.31, 0.95). */
+      var beak = new THREE.Mesh(new THREE.ConeGeometry(0.040, 0.105, 14), beakM);
+      beak.position.set(0, 0.168, 0.108);
+      beak.rotation.x = Math.PI / 2 + 0.32;
+      rollG.add(beak);
+
+      // Comb: three red spikes in a row front to back, splayed like fingers.
+      [[-0.024, -0.35], [0.004, 0.0], [0.032, 0.35]].forEach(function (cb) {
+        var spike = ellipsoid(0.024, 0.55, 1.45, 0.80, comb);
+        spike.position.set(0, 0.284, cb[0] + 0.018);
+        spike.rotation.x = cb[1];
+        rollG.add(spike);
       });
 
-      // Eyes, on the sides of the skull the way a bird's are.
+      /* Eyes: big white ovals just above the beak, each with a black pupil set
+         toward the middle and a catch-light. */
       var eyes = [];
       [1, -1].forEach(function (sgn) {
-        var eye = new THREE.Mesh(new THREE.SphereGeometry(0.0165, 10, 8),
+        var white = ellipsoid(0.031, 0.78, 1.12, 0.55, plume);
+        white.position.set(sgn * 0.027, 0.212, 0.082);
+        rollG.add(white);
+        var pupil = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 10, 8),
           new THREE.MeshBasicMaterial({
-            color: new THREE.Color(0.06, 0.05, 0.05), transparent: true
+            color: new THREE.Color(0.03, 0.03, 0.03), transparent: true
           }));
-        eye.position.set(0.152, 0.212, sgn * 0.046);
-        rollG.add(eye);
-        var spark = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 6, 5),
+        pupil.position.set(sgn * 0.021, 0.209, 0.097);
+        rollG.add(pupil);
+        var spark = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 6, 5),
           new THREE.MeshBasicMaterial({
             color: new THREE.Color(2.4, 2.4, 2.6), transparent: true
           }));
-        spark.position.set(0.163, 0.218, sgn * 0.043);
+        spark.position.set(sgn * 0.018, 0.214, 0.106);
         rollG.add(spark);
-        eyes.push(eye, spark);
+        eyes.push(pupil, spark);
       });
 
-      // Tail: a fan of flight feathers. Fanned, not a single blade — the fan is
-      // half of a chicken's read.
+      // Tail: a short white tuft behind. Barely seen from the front, but it
+      // gives the bird a back from the orbit camera.
       var tailG = new THREE.Group();
-      tailG.position.set(-0.150, -0.005, 0);
+      tailG.position.set(0, 0.010, -0.105);
       rollG.add(tailG);
-      [-2, -1, 0, 1, 2].forEach(function (k) {
-        var plate = new THREE.Mesh(sweepGeometry(chainX([
-          [0.00, 0.000, 0.026, 0.010, 0.008],
-          [-0.055, 0.045, 0.030, 0.008, 0.006],
-          [-0.105, 0.098, 0.022, 0.005, 0.004],
-          [-0.135, 0.142, 0.010, 0.003, 0.002]
-        ], 0, 2.0), 10, new THREE.Vector3(0, 1, 0), true, true), k === 0 ? featherD : feather);
-        plate.rotation.x = k * 0.30;
-        plate.rotation.y = k * 0.10;
-        tailG.add(plate);
+      [-0.45, 0, 0.45].forEach(function (a) {
+        var tuft = ellipsoid(0.060, 0.30, 0.95, 0.40, plume);
+        tuft.position.set(0, 0.045, -0.018);
+        var pivot = new THREE.Group();
+        pivot.rotation.set(-0.55, 0, a);
+        pivot.add(tuft);
+        tailG.add(pivot);
       });
 
-      // Wings: one swept surface each, hinged at the shoulder so they can beat
-      // while patrolling and sweep back into a dive.
+      /* Wings: a sweater sleeve at the shoulder and a fan of five long white
+         flight feathers, spread mostly up and out the way the game's birds
+         hold them. Each wing is hinged at the shoulder so it can beat in the
+         board's plane and sweep up and back into a dive. */
+      var FAN = [[0.92, 0.160], [0.58, 0.190], [0.26, 0.205], [-0.04, 0.195], [-0.32, 0.165]];
       var wings = [];
       [1, -1].forEach(function (sgn) {
         var hinge = new THREE.Group();
-        hinge.position.set(-0.010, 0.030, sgn * 0.070);
+        hinge.position.set(sgn * 0.112, 0.070, -0.012);
         rollG.add(hinge);
-        var plate = new THREE.Mesh(sweepGeometry(chainFree([
-          [0.030, 0.000, sgn * 0.010, 0.056, 0.026, 0.020],
-          [-0.010, -0.012, sgn * 0.070, 0.068, 0.020, 0.016],
-          [-0.060, -0.026, sgn * 0.120, 0.058, 0.013, 0.011],
-          [-0.105, -0.042, sgn * 0.150, 0.034, 0.008, 0.007],
-          [-0.130, -0.054, sgn * 0.163, 0.014, 0.004, 0.003]
-        ], 2.2), 14, new THREE.Vector3(0, 1, 0), true, true), featherD);
-        hinge.add(plate);
+        hinge.add(ellipsoid(0.045, 1.15, 0.95, 0.95, sweater));
+        FAN.forEach(function (f, fi) {
+          var pivot = new THREE.Group();
+          pivot.rotation.z = sgn * f[0];
+          // Fanned a little in depth too, so the feathers read as separate.
+          pivot.rotation.y = -sgn * (0.10 + fi * 0.05);
+          var len = f[1];
+          var feather = ellipsoid(1, len / 2, 0.021, 0.013, plume);
+          feather.position.x = sgn * (0.030 + len / 2);
+          pivot.add(feather);
+          hinge.add(pivot);
+        });
         wings.push({ hinge: hinge, side: sgn });
       });
 
-      // Legs, tucked. A flying chicken still has them, and their absence is one
-      // of the things that makes a bird read as a toy.
+      /* Legs and feet: short orange legs, splayed, ending in big three-toed
+         feet that hang just below the body. */
       [1, -1].forEach(function (sgn) {
-        var leg = new THREE.Mesh(sweepGeometry(chainFree([
-          [-0.020, -0.090, sgn * 0.042, 0.016],
-          [0.010, -0.120, sgn * 0.048, 0.012],
-          [0.052, -0.126, sgn * 0.050, 0.009]
-        ], 2.0), 8, new THREE.Vector3(0, 1, 0), true, true), beakM);
+        var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.045, 8), beakM);
+        leg.position.set(sgn * 0.078, -0.150, 0.030);
+        leg.rotation.z = sgn * 0.50;
         rollG.add(leg);
-        [-0.012, 0.012].forEach(function (tz) {
-          var toe = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.003, 0.030, 5), beakM);
-          toe.position.set(0.068, -0.126, sgn * 0.050 + tz);
-          toe.rotation.z = Math.PI / 2;
-          rollG.add(toe);
+        [-0.60, 0, 0.60].forEach(function (a) {
+          var pivot = new THREE.Group();
+          pivot.position.set(sgn * 0.090, -0.170, 0.030);
+          pivot.rotation.set(0.40, sgn * 0.55 + a, 0);
+          var toe = ellipsoid(0.038, 0.32, 0.24, 1.0, beakM);
+          toe.position.z = 0.032;
+          pivot.add(toe);
+          rollG.add(pivot);
         });
       });
 
-      // The suit: a collar ring at the base of the neck and a bubble helmet.
-      var collar = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.014, 8, 18), suit);
-      collar.position.set(0.096, 0.112, 0);
-      collar.rotation.x = Math.PI / 2;
-      collar.rotation.z = -0.22;
-      rollG.add(collar);
-      var helmet = new THREE.Mesh(new THREE.SphereGeometry(0.108, 20, 16), glass);
-      helmet.position.set(0.142, 0.203, 0);
-      rollG.add(helmet);
-      // A specular band across the visor, so the glass reads as glass.
-      var visorGlint = new THREE.Mesh(new THREE.TorusGeometry(0.104, 0.005, 6, 24, 1.5), suit);
-      visorGlint.position.copy(helmet.position);
-      visorGlint.rotation.set(0.5, 0.6, 0.9);
-      rollG.add(visorGlint);
-
-      // Thruster pack: how a chicken dives, and the bird's own practical light.
-      var pack = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.100, 0.115), suit);
-      pack.position.set(-0.075, 0.048, 0);
+      // Thruster pack on the back: how a chicken dives.
+      var pack = new THREE.Mesh(new THREE.BoxGeometry(0.130, 0.120, 0.060), suit);
+      pack.position.set(0, 0.040, -0.128);
       rollG.add(pack);
-      var packTank = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.095, 10), suit);
-      packTank.position.set(-0.098, 0.052, 0.045);
-      packTank.rotation.x = Math.PI / 2; packTank.rotation.z = 0.2;
-      rollG.add(packTank);
-      var packTank2 = packTank.clone();
-      packTank2.position.z = -0.045;
-      rollG.add(packTank2);
-
       var thrusts = [];
-      [0.040, -0.040].forEach(function (tz) {
+      [0.036, -0.036].forEach(function (tx) {
         var nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.020, 0.030, 8), suit);
-        nozzle.position.set(-0.075, 0.104, tz);
+        nozzle.position.set(tx, 0.060, -0.165);
+        nozzle.rotation.x = -Math.PI / 2;
         rollG.add(nozzle);
         var flame = new THREE.Mesh(new THREE.ConeGeometry(0.020, 0.13, 10),
           new THREE.MeshBasicMaterial({
             color: new THREE.Color(3.0, 0.9, 0.45), transparent: true,
             opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false
           }));
-        flame.position.set(-0.075, 0.180, tz);
+        /* Exhaust leaves straight back, away from the head. Pointing up, the
+           two flames stood behind the head like horns once the bird leaned
+           into a dive. */
+        flame.position.set(tx, 0.060, -0.225);
+        flame.rotation.x = -Math.PI / 2;
         rollG.add(flame);
         thrusts.push(flame);
       });
 
-      /* The mode marker: a beacon on the pack, amber patrolling and red diving.
-         Full-saturation colour lives here and at the eyes and nowhere else —
-         the plumage stays desaturated so the marker carries the state. */
-      var marker = new THREE.Mesh(new THREE.SphereGeometry(0.026, 10, 8),
+      /* The mode marker: a beacon on an antenna from the pack, standing just
+         clear of the head so the front view shows it — amber patrolling, red
+         diving. Only the marker and the eyes glow; the plumage and sweater are
+         lit, so the marker carries the state. */
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.150, 6), suit);
+      mast.position.set(0.078, 0.170, -0.120);
+      mast.rotation.z = -0.28;
+      rollG.add(mast);
+      var marker = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8),
         new THREE.MeshBasicMaterial({
           color: new THREE.Color(3.0, 2.3, 0.7), transparent: true
         }));
-      marker.position.set(-0.075, 0.104, 0);
+      marker.position.set(0.100, 0.245, -0.120);
       rollG.add(marker);
       var markerLight = new THREE.PointLight(COLORS.patrol, 1, 2.1, 2);
       markerLight.power = 11;
-      markerLight.position.set(-0.05, 0.08, 0);
+      markerLight.position.set(0.10, 0.30, -0.10);
       rollG.add(markerLight);
-      // A helmet lamp, so the bird's own face is lit even on the shadow side.
-      var helmetLamp = new THREE.PointLight(0xBFE0FF, 1, 1.3, 2);
-      helmetLamp.power = 3.2;
-      helmetLamp.position.set(0.17, 0.21, 0);
-      rollG.add(helmetLamp);
+      // A fill light in front of the face, so the bird's features read even
+      // on the side away from the key.
+      var faceLamp = new THREE.PointLight(0xFFF4E6, 1, 1.3, 2);
+      faceLamp.power = 3.2;
+      faceLamp.position.set(0, 0.20, 0.32);
+      rollG.add(faceLamp);
 
       var halo = new THREE.Sprite(new THREE.SpriteMaterial({
         map: glowTex, color: COLORS.patrol, transparent: true, opacity: 0.22,
@@ -1167,6 +1161,20 @@
       }));
       halo.scale.set(1.15, 1.15, 1);
       root.add(halo);
+
+      /* Dive streak: a red smear up the column behind a diving bird. A dive
+         is always straight down the bird's own column, so the streak always
+         points up; its length grows as the bird commits. It is what makes a
+         dive readable at board distance, where the lean alone is a few
+         pixels. */
+      var trail = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 1),
+        new THREE.MeshBasicMaterial({
+          map: streakTex, color: new THREE.Color(3.2, 0.70, 0.42), transparent: true,
+          opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false,
+          side: THREE.DoubleSide
+        }));
+      trail.position.z = -0.12;
+      root.add(trail);
 
       /* Two reach pips, one per sensor, lit when that sensor's own predicate
          says this bird's cell is inside its reach. They are what ties the drawn
@@ -1182,7 +1190,8 @@
           blending: THREE.AdditiveBlending, depthWrite: false
         }));
         pip.scale.set(0.13, 0.13, 1);
-        pip.position.set(sgn * 0.11, 0.40, 0);
+        // Above the comb, which now stands about 0.39 over the cell centre.
+        pip.position.set(sgn * 0.11, 0.48, 0);
         root.add(pip);
         return pip;
       });
@@ -1208,10 +1217,10 @@
       fadeMats.forEach(function (m) { m.transparent = true; });
       return {
         root: root, body: body, roll: rollG, wings: wings, tail: tailG, fadeMats: fadeMats,
-        eyes: eyes, marker: marker, markerLight: markerLight, helmetLamp: helmetLamp,
-        thrusts: thrusts, halo: halo, pips: pips,
+        eyes: eyes, marker: marker, markerLight: markerLight, faceLamp: faceLamp,
+        thrusts: thrusts, halo: halo, trail: trail, pips: pips,
         puff: puff, puffGeo: puffGeo, puffDir: puffDir, puffCount: puffCount,
-        bob: rnd(), beatRate: 1.40 + rnd() * 0.95, glassMat: glass
+        bob: rnd(), beatRate: 1.40 + rnd() * 0.95
       };
     }
     var CHICKS = [];
@@ -1622,11 +1631,16 @@
         camPos.lerp(flatCamera(), clamp(dt * 3, 0, 1));
         camLook.lerp(new THREE.Vector3(0, cy((ROWS - 1) / 2), -0.9), clamp(dt * 3, 0, 1));
       } else if (camState.mode === "chase") {
-        /* Sighted up the barrel, from far enough back that the whole column
-           fits. Sitting on the muzzle put the frame entirely in empty sky. */
-        camPos.lerp(
-          new THREE.Vector3(sx, DECK_Y + 0.15, 7.6 * SPAN), clamp(dt * 3.4, 0, 1));
-        camLook.lerp(new THREE.Vector3(sx, cy(ROWS * 0.47), -0.5), clamp(dt * 4.2, 0, 1));
+        /* Behind and above the ship, looking up the board over its back, so
+           the ship sits in the foreground with the flock ahead of it. Sighted
+           from the ship's own height instead, the camera looked up past it
+           and the ship fell below the frame. The aim point is pulled halfway
+           to the board's centre so the far columns stay in view when the
+           ship is at an edge. */
+        camPos.lerp(new THREE.Vector3(
+          sx, DECK_Y - 4.5 * SPAN, 3.8 * SPAN), clamp(dt * 3.4, 0, 1));
+        camLook.lerp(
+          new THREE.Vector3(sx * 0.5, cy(ROWS * 0.40), -0.4), clamp(dt * 4.2, 0, 1));
       } else {
         var o = camState.orbit;
         camPos.lerp(new THREE.Vector3(
@@ -1752,13 +1766,14 @@
           ch.pips[0].material.opacity = cameraSees(dx, dy) ? 0.85 * pose.alpha : 0;
           ch.pips[1].material.opacity = radarSees(dx, dy) ? 0.85 * pose.alpha : 0;
 
-          /* Facing. A patrolling bird walks along its `direction` field: +1 is
-             toward the higher column, which is scene +X. A diving bird has no
-             sideways heading, so it keeps its last yaw and pitches nose-down. */
+          /* Facing. Every bird faces the player, as in the game. A patrolling
+             bird turns a little toward its `direction` field: +1 is toward the
+             higher column, which is scene +X. A diving bird has no sideways
+             heading, so it squares up to the ship. */
           var faceRight = pose.dir >= 0;
-          ch.body.rotation.y = faceRight ? 0 : Math.PI;
           var mode = pose.diving;
           var atk = pose.atk || 0;
+          ch.body.rotation.y = mode ? 0 : (faceRight ? 0.32 : -0.32);
 
           /* The wing-beat. Downstroke and upstroke are NOT the same length: the
              downstroke is the power stroke and takes about a third of the
@@ -1772,13 +1787,14 @@
           if (cyc < DOWN) beat = -Math.cos(Math.PI * (cyc / DOWN));
           else beat = Math.cos(Math.PI * ((cyc - DOWN) / (1 - DOWN)));
 
-          /* Pitch. A patrolling bird sits level and bobs against its own beat;
-             a diving one drops the nose onto its attack line and holds it. The
-             dive pitch deepens as it commits, which is the difference between a
-             bird that is descending and a bird that is going at something. */
-          ch.body.rotation.z = mode ? lerp(-1.12, -1.45, atk) : beat * 0.07;
-          // Bank into the line about the bird's own nose axis.
-          ch.roll.rotation.x = mode ? (faceRight ? 1 : -1) * 0.42 * atk : 0;
+          /* Lean. A patrolling bird sits upright and rocks with its own beat;
+             a diving one leans its head in toward the player and down onto the
+             ship. The lean deepens as it commits, which is the difference
+             between a bird that is descending and a bird that is going at
+             something. */
+          ch.body.rotation.x = mode ? lerp(0.45, 0.95, atk) : beat * 0.05;
+          // Bank in the board's plane, away from where it was heading.
+          ch.roll.rotation.z = mode ? (faceRight ? 1 : -1) * 0.22 * atk : beat * 0.04;
           // On `body`, never on `root`: root is the cell anchor and has to land
           // exactly on cy(row).
           ch.body.position.y = mode ? 0 : (reduceMotion ? 0 : beat * 0.028);
@@ -1786,9 +1802,15 @@
           ch.marker.material.color.setRGB(3.0, mode ? 0.75 : 2.3, mode ? 0.62 : 0.7);
           ch.markerLight.color.setHex(mode ? COLORS.dive : COLORS.patrol);
           ch.halo.material.color.setHex(mode ? COLORS.dive : COLORS.patrol);
-          ch.halo.material.opacity = (mode ? 0.22 : 0.11) * pose.alpha;
-          ch.halo.scale.setScalar(mode ? 1.25 : 0.95);
-          ch.helmetLamp.power = 3.2 * pose.alpha;
+          ch.halo.material.opacity = (mode ? 0.22 + 0.16 * atk : 0.11) * pose.alpha;
+          ch.halo.scale.setScalar(mode ? 1.25 + 0.35 * atk : 0.95);
+          // The streak starts at the bird's back and runs up to 1.4 cells.
+          var trailLen = mode ? 0.25 + 1.15 * atk : 0;
+          ch.trail.visible = trailLen > 0;
+          ch.trail.scale.set(1, Math.max(trailLen, 0.001), 1);
+          ch.trail.position.y = 0.10 + trailLen / 2;
+          ch.trail.material.opacity = (mode ? 0.35 + 0.55 * atk : 0) * pose.alpha;
+          ch.faceLamp.power = 3.2 * pose.alpha;
 
           /* The pack is what makes a dive an attack rather than a drop: a
              chicken in vacuum has nothing to fall towards, so every metre it
@@ -1803,30 +1825,28 @@
           }
           ch.markerLight.power = (mode ? 11 + 22 * atk : 11) * pose.alpha;
 
-          /* Wings. Patrolling, they beat: the stroke sweeps a little forward as
-             it comes down and the span folds in on the recovery, which is what
-             stops the flap reading as a hinge. Diving, they tuck hard against
-             the body — a bird folds to stoop and spreads to manoeuvre, and a
-             stooping bird with its wings out looks like it is being dropped. */
+          /* Wings. Patrolling, they beat in the board's plane: the fans swing
+             down on the stroke and the span folds in a little on the recovery,
+             which is what stops the flap reading as a hinge. Diving, they
+             sweep up and back behind the body — a bird folds to stoop and
+             spreads to manoeuvre, and a stooping bird with its wings out
+             looks like it is being dropped. */
           for (var wi = 0; wi < ch.wings.length; wi++) {
             var wg = ch.wings[wi];
-            wg.hinge.rotation.x = wg.side * lerp(beat * 0.62, -1.45, mode ? atk : 0);
-            wg.hinge.rotation.y =
-              wg.side * lerp(0.26 * Math.max(0, beat), -0.30, mode ? atk : 0);
-            wg.hinge.rotation.z = mode ? 0.62 * atk : 0.0;
-            var fold = mode ? lerp(1, 0.52, atk) : (1 - 0.20 * Math.max(0, -beat));
-            wg.hinge.scale.set(1, 1, fold);
+            wg.hinge.rotation.z = wg.side * lerp(beat * 0.42, 0.55, mode ? atk : 0);
+            wg.hinge.rotation.y = wg.side * (mode ? 1.05 * atk : 0);
+            var fold = mode ? lerp(1, 0.70, atk) : (1 - 0.15 * Math.max(0, -beat));
+            wg.hinge.scale.set(fold, 1, 1);
           }
-          // The tail fans wide to manoeuvre and clamps shut into the stoop.
+          // The tail fans to manoeuvre and clamps down into the stoop.
           var tf = mode ? atk : 0;
-          ch.tail.scale.set(1, lerp(1.0, 0.58, tf), lerp(1.0, 0.45, tf));
-          ch.tail.rotation.z = lerp(0, -0.42, tf);
+          ch.tail.scale.set(lerp(1.0, 0.55, tf), 1, 1);
+          ch.tail.rotation.x = lerp(0, 0.45, tf);
 
           /* Fade out the bird this step's shot took. Only the structural
              materials are faded; the emitters carry their own opacity. */
           for (var fm = 0; fm < ch.fadeMats.length; fm++) {
-            ch.fadeMats[fm].opacity =
-              (ch.fadeMats[fm] === ch.glassMat ? 0.20 : 1) * pose.alpha;
+            ch.fadeMats[fm].opacity = pose.alpha;
           }
           ch.marker.material.opacity = pose.alpha;
           for (var ei = 0; ei < ch.eyes.length; ei++) ch.eyes[ei].material.opacity = pose.alpha;
