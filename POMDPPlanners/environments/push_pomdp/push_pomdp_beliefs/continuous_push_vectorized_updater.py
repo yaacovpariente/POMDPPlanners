@@ -230,41 +230,6 @@ class ContinuousPushVectorizedUpdater(VectorizedParticleBeliefUpdater):
         )
         return obs_model.batch_log_likelihood(next_particles, obs)
 
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
-        """Which particles the robot being asked to act again has ruled out.
-
-        Only a hazard-terminal configuration opts in, and the reason is the
-        native likelihood: ``ContinuousPushObservationCpp::batch_log_likelihood``
-        scores the *object* position (columns 2 and 3) and nothing else -- not
-        the robot, not the terminal slot. A particle whose robot was absorbed
-        by a hazard freezes, but its object was already at rest, so it keeps
-        scoring exactly as well as a live particle and never leaves the
-        population. Measured on the pinned environment, walking the robot into
-        the hazard at (4, 4) from a fixed start at (1, 1), the terminal count
-        rose monotonically (0 to 97 of 400 particles over twelve steps) and up
-        to 1.00 of the weight sat on terminal particles mid-episode.
-
-        With both hazard flags off the state carries no slot, the only
-        terminal condition is the object reaching the goal, and that is what
-        the reading measures. Nothing accumulates, so nothing is conditioned.
-
-        Args:
-            next_particles: The transitioned particles, shape (N, 6) or (N, 7).
-
-        Returns:
-            The mask, matching :meth:`ContinuousPushPOMDP.is_terminal` per
-            particle, or ``None`` when neither hazard flag is on.
-        """
-        if not self._hazard_terminal_enabled:
-            return None
-        values = np.asarray(next_particles, dtype=float)
-        dx = values[:, 2] - values[:, 4]
-        dy = values[:, 3] - values[:, 5]
-        at_goal = (dx * dx + dy * dy) < 0.25
-        if values.shape[1] <= 6:
-            return at_goal
-        return at_goal | (values[:, 6] > 0.5)
-
     @property
     def config_id(self) -> str:
         config_dict = {
