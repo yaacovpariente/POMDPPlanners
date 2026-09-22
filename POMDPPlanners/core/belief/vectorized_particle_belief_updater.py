@@ -13,7 +13,6 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 import numpy as np
 
@@ -55,34 +54,6 @@ class VectorizedParticleBeliefUpdater(ABC):
         Returns:
             Log-likelihoods of shape (N,).
         """
-
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
-        """Which particles the episode's continuation has ruled out.
-
-        This is the opt-in half of the conditioning described in
-        :mod:`POMDPPlanners.core.belief.running_episode_conditioning`. The
-        default returns ``None``, meaning "do not condition": an environment
-        whose terminal states are observable, or are not absorbing, loses
-        nothing by leaving them in the population, and a blanket change here
-        would alter every environment's filter at once.
-
-        An environment overrides this only when its terminal state is both
-        absorbing and invisible to its own observation model, because that is
-        the combination the likelihood cannot undo on its own.
-
-        Args:
-            next_particles: The transitioned particles, shape (N, d).
-
-        Returns:
-            A boolean mask over ``next_particles``, ``True`` where the
-            particle is terminal for a reason that varies between particles;
-            or ``None`` to leave the weights alone. Terminality every particle
-            shares -- a step limit read off a counter they all carry -- must
-            be left out: it cancels in the posterior and flooring on it would
-            empty the belief on the final step.
-        """
-        del next_particles
-        return None
 
     @property
     @abstractmethod

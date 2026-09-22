@@ -22,10 +22,6 @@ from POMDPPlanners.core.belief.gaussian_mixture_belief import (
     GaussianMixtureBelief,
     GaussianMixtureBeliefUpdater,
 )
-from POMDPPlanners.core.belief.running_episode_conditioning import (
-    RULED_OUT_LOG_MARGIN,
-    condition_log_weights_on_a_running_episode,
-)
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
@@ -54,8 +50,6 @@ __all__ = [
     "UnscentedKalmanFilterUpdater",
     "GaussianMixtureBelief",
     "GaussianMixtureBeliefUpdater",
-    "RULED_OUT_LOG_MARGIN",
-    "condition_log_weights_on_a_running_episode",
     "VectorizedParticleBeliefUpdater",
     "VectorizedWeightedParticleBelief",
     "get_unique_support",
