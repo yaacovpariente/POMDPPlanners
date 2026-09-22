@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 

@@ -27,11 +27,11 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization import (
     light_dark_assets,
     light_dark_visualizer as visualizer_module,
 )
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
     CANVAS_SIZE,
     PLOT_BOTTOM,
     PLOT_LEFT,

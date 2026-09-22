@@ -174,7 +174,9 @@ class TestExactness:
             particles = np.asarray(belief.particles)
             probed = env.probed(state)
             truth = env.occupancy(state)
-            assert np.array_equal(particles[:, env.num_cells :] > 0.5, np.tile(probed, (len(particles), 1)))
+            assert np.array_equal(
+                particles[:, env.num_cells :] > 0.5, np.tile(probed, (len(particles), 1))
+            )
             assert np.all((particles[:, : env.num_cells] > 0.5)[:, probed] == truth[probed])
 
     def test_every_particle_stays_a_legal_fleet(self, env: BattleshipPOMDP) -> None:
@@ -334,7 +336,9 @@ class TestRobustness:
         generic = WeightedParticleBelief(
             particles=list(particles), log_weights=belief.log_weights.copy()
         )
-        rebuilt = BattleshipBelief(particles=particles.copy(), log_weights=belief.log_weights.copy())
+        rebuilt = BattleshipBelief(
+            particles=particles.copy(), log_weights=belief.log_weights.copy()
+        )
 
         assert belief.config_id != generic.config_id
         assert belief.config_id == rebuilt.config_id

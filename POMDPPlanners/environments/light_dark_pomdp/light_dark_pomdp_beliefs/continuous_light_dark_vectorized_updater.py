@@ -419,7 +419,9 @@ class ContinuousLightDarkNoObsInDarkVectorizedUpdater(
         dx = px - obs[0]
         dy = py - obs[1]
         maha_near = (
-            self._obs_near_P00 * dx**2 + self._obs_near_2P01 * dx * dy + self._obs_near_P11 * dy**2
+            self._obs_near_P00 * dx**2
+            + self._obs_near_2P01 * dx * dy
+            + self._obs_near_P11 * dy**2
         )
         maha_far = (
             self._obs_far_P00 * dx**2 + self._obs_far_2P01 * dx * dy + self._obs_far_P11 * dy**2
@@ -482,7 +484,9 @@ class ContinuousLightDarkDistanceBasedVectorizedUpdater(
         dx = px - obs[0]
         dy = py - obs[1]
         maha_near = (
-            self._obs_near_P00 * dx**2 + self._obs_near_2P01 * dx * dy + self._obs_near_P11 * dy**2
+            self._obs_near_P00 * dx**2
+            + self._obs_near_2P01 * dx * dy
+            + self._obs_near_P11 * dy**2
         )
         return np.where(
             near_mask,

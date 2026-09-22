@@ -61,7 +61,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
@@ -69,8 +69,14 @@ from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMulti
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
-# Default walls matching the discrete LaserTag grid, converted to AABBs
-# Original wall cells (row, col) on an 11×7 grid with half-size 0.5
+# Default walls matching the discrete LaserTag grid, converted to AABBs.
+# Original wall cells (row, col) on an 11×7 grid with half-size 0.5.
+# The row stays the first coordinate, so continuous ``(x, y) == (row, col)``:
+# +x is grid south and +y is grid east.  The renderer draws +x rightward and
+# +y upward, so the continuous picture is the grid map turned a quarter turn.
+# That is why the laser beam order in ``continuous_laser_tag_geometry`` is
+# rotated two places from the discrete one -- see the note on
+# ``LASER_DIRECTIONS`` there before comparing beams across the two variants.
 _DEFAULT_WALL_HALF_SIZE = 0.5
 _DEFAULT_WALLS_CELLS = [
     (1, 2),
@@ -865,7 +871,9 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         centers = self._dangerous_areas_arr.reshape(-1, 2)
         positions = next_arr[hazard_hit, :2]
         deltas = positions[:, None, :] - centers[None, :, :]
-        counts = np.sum(np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1)
+        counts = np.sum(
+            np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1
+        )
         rewards[hazard_hit] -= counts.astype(np.float64) * float(self.dangerous_area_penalty)
         return rewards
 
@@ -1102,6 +1110,34 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         )
         visualizer.create_visualization(history, cache_path)
         self.logger.info("Saved ContinuousLaserTag visualization to %s", cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> Any:
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``laser_tag.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every run including
+        # ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
+            build_continuous_laser_tag_trace,
+        )
+
+        return build_continuous_laser_tag_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     # ------------------------------------------------------------------
     # Accessors used by the vectorized updater

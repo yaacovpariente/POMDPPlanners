@@ -314,9 +314,7 @@ class MLflowModelLearningTracker:
             path = str(save(Path(staging) / f"round_{round_index}{suffix}"))
             # save() may append its own suffix (np.savez does), so log what exists.
             written = Path(path) if Path(path).exists() else Path(f"{path}.npz")
-            self._client.log_artifact(
-                self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH
-            )
+            self._client.log_artifact(self._run.info.run_id, str(written), MODELS_ARTIFACT_PATH)
             return f"{MODELS_ARTIFACT_PATH}/{written.name}"
 
     def _log_chosen_model(self, round_index: int) -> None:
@@ -346,9 +344,7 @@ class MLflowModelLearningTracker:
             return
         run_id = self._run.info.run_id
         with tempfile.TemporaryDirectory() as staging:
-            downloaded = Path(
-                self._client.download_artifacts(run_id, source, staging)
-            )
+            downloaded = Path(self._client.download_artifacts(run_id, source, staging))
             chosen = Path(staging) / f"chosen{downloaded.suffix}"
             shutil.copyfile(downloaded, chosen)
             self._client.log_artifact(run_id, str(chosen), MODELS_ARTIFACT_PATH)
@@ -398,9 +394,7 @@ class MLflowModelLearningTracker:
         with tempfile.TemporaryDirectory() as staging:
             path = Path(staging) / filename
             path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-            self._client.log_artifact(
-                self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH
-            )
+            self._client.log_artifact(self._run.info.run_id, str(path), EVALUATION_ARTIFACT_PATH)
 
 
 def log_study_comparison(

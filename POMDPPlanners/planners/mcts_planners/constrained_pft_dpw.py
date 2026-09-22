@@ -187,10 +187,12 @@ class CPFT_DPW(ConstrainedMCTSMixin, PFT_DPW):
         action_visits = tree.get_visit_count(action_id)
         children_count = len(tree.get_children_ids(action_id))
         if children_count <= self.k_o * action_visits**self.alpha_o:
-            next_belief_id, immediate_reward, immediate_cost = (
-                self._sample_new_belief_node_with_cost(
-                    tree=tree, belief_id=belief_id, action_id=action_id
-                )
+            (
+                next_belief_id,
+                immediate_reward,
+                immediate_cost,
+            ) = self._sample_new_belief_node_with_cost(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
             state = tree.get_belief(next_belief_id).sample()
             v_child, c_child = cost_aware_random_rollout(
@@ -205,10 +207,12 @@ class CPFT_DPW(ConstrainedMCTSMixin, PFT_DPW):
             total_v = immediate_reward + self.discount_factor * v_child
             total_c = immediate_cost + self.discount_factor * c_child
         else:
-            next_belief_id, immediate_reward, immediate_cost = (
-                self._sample_existing_belief_node_with_cost(
-                    tree=tree, belief_id=belief_id, action_id=action_id
-                )
+            (
+                next_belief_id,
+                immediate_reward,
+                immediate_cost,
+            ) = self._sample_existing_belief_node_with_cost(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
             v_child, c_child = self._simulate_path_with_cost(
                 tree=tree, belief_id=next_belief_id, depth=depth + 1

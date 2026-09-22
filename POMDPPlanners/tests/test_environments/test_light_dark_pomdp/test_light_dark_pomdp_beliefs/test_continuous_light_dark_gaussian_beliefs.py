@@ -412,3 +412,47 @@ class TestErrorHandling:
                 updater_type=GaussianBeliefUpdaterType("invalid_type"),
                 initial_covariance=initial_cov,
             )
+
+
+# ---------------------------------------------------------------------------
+# Pickling tests
+# ---------------------------------------------------------------------------
+
+
+class TestPickling:
+    """A Gaussian belief must survive joblib's hashing and pickling.
+
+    ``LocalSimulationsAPI`` pickles every episode task to derive its cache
+    key, so an unpicklable updater makes the belief unusable in any
+    simulation run, at every ``n_jobs``.
+    """
+
+    @pytest.mark.parametrize(
+        "updater_type",
+        [
+            GaussianBeliefUpdaterType.LINEAR_KALMAN,
+            GaussianBeliefUpdaterType.EKF,
+            GaussianBeliefUpdaterType.UKF,
+        ],
+    )
+    def test_belief_is_picklable(self, env, initial_cov, updater_type):
+        """Test that a Light-Dark Gaussian belief can be pickled.
+
+        Purpose: Guards the simulation path, which pickles the belief.
+
+        Given: A Light-Dark Gaussian belief with each updater variant.
+        When: The belief is pickled and joblib-hashed.
+        Then: Neither raises, and joblib.hash is stable across calls.
+
+        Test type: unit
+        """
+        import pickle
+
+        import joblib
+
+        belief = create_continuous_light_dark_gaussian_belief(
+            env=env, updater_type=updater_type, initial_covariance=initial_cov
+        )
+        restored = pickle.loads(pickle.dumps(belief))
+        assert isinstance(restored, GaussianBelief)
+        assert joblib.hash(belief) == joblib.hash(belief)

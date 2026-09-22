@@ -22,7 +22,9 @@ from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (
     SnakePOMDP,
     create_snake_state,
 )
-from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
+    SnakeVisualizer,
+)
 
 
 def build_env(**overrides):

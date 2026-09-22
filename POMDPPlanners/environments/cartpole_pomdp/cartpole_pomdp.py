@@ -21,7 +21,7 @@ import math
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 _INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
 
@@ -42,6 +42,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
 )
 from POMDPPlanners.environments.cartpole_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 class CartPoleStepChannel(Enum):
@@ -377,9 +380,39 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
         """Save recorded states and outcomes without stepping the environment."""
-        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualizer import CartPoleVisualizer
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.cartpole_visualizer import (
+            CartPoleVisualizer,
+        )
 
         CartPoleVisualizer(self).save(history, output_dir / f"agent_path_{episode_index}.gif")
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``cartpole.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every CartPole run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.trace_exporter import (
+            build_cartpole_trace,
+        )
+
+        return build_cartpole_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     def is_terminal(self, state: np.ndarray) -> bool:
         x, theta = state[0], state[2]

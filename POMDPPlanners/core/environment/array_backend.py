@@ -144,9 +144,7 @@ def as_rows(value: Any, width: int) -> Tuple[Any, bool]:
     if array.ndim > 2:
         raise ValueError(f"expected a vector or a batch of vectors, got shape {tuple(array.shape)}")
     if int(array.shape[-1]) != width:
-        raise ValueError(
-            f"expected trailing dimension {width}, got shape {tuple(array.shape)}"
-        )
+        raise ValueError(f"expected trailing dimension {width}, got shape {tuple(array.shape)}")
     if array.ndim == 1:
         return array.reshape(1, width), False
     return array, True

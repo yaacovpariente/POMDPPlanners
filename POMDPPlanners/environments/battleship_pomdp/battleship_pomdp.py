@@ -46,7 +46,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -66,6 +66,9 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_layouts import (
     FleetLayoutTable,
     get_layout_table,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 #: Observation emitted after probing an occupied cell.
@@ -105,7 +108,9 @@ class BattleshipPOMDPMetrics(Enum):
 BattleshipState = np.ndarray
 
 
-def create_battleship_state(occupancy: Sequence[int], probed: Optional[Sequence[int]] = None) -> BattleshipState:
+def create_battleship_state(
+    occupancy: Sequence[int], probed: Optional[Sequence[int]] = None
+) -> BattleshipState:
     """Build a Battleship state array.
 
     Args:
@@ -303,9 +308,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
     # ── dynamics ────────────────────────────────────────────────────
 
-    def sample_next_state(
-        self, state: BattleshipState, action: int, n_samples: int = 1
-    ) -> Any:
+    def sample_next_state(self, state: BattleshipState, action: int, n_samples: int = 1) -> Any:
         """Apply the probe. Deterministic, so every sample is the same state.
 
         Args:
@@ -651,9 +654,37 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """
         # Imported lazily: matplotlib is heavy and every parallel worker imports
         # this module, while almost none of them render anything.
-        from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (  # pylint: disable=import-outside-toplevel
             BattleshipVisualizer,
         )
 
         cache_path = output_dir / f"battleship_board_{episode_index}.gif"
         BattleshipVisualizer(self).create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``battleship.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Battleship run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_exporter import (
+            build_battleship_trace,
+        )
+
+        return build_battleship_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )

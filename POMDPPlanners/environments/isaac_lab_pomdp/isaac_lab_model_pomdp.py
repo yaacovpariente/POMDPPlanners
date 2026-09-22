@@ -318,9 +318,7 @@ class LinearGaussianTransition(TransitionModel):
         actions, _ = as_rows(as_backend(action, states), self.action_dim)
         params = self._params.matching(states)
         mean = (
-            states @ params["weight_state"].T
-            + actions @ params["weight_action"].T
-            + params["bias"]
+            states @ params["weight_state"].T + actions @ params["weight_action"].T + params["bias"]
         )
         return mean, batched
 

@@ -202,7 +202,8 @@ class ArenaPathSimulationPolicy(Policy):
         return [metric.value for metric in TreeMetrics]
 
     @abstractmethod
-    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> Optional[float]: ...
+    def _simulate_path(self, tree: Tree, belief_id: int, depth: int) -> Optional[float]:
+        ...
 
 
 class ArenaDoubleProgressiveWideningMCTSPolicy(ArenaPathSimulationPolicy):

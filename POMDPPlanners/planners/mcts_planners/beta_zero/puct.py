@@ -200,4 +200,6 @@ def puct_action_progressive_widening_arena(  # pylint: disable=too-many-argument
 def _should_widen_arena(tree: Tree, belief_id: int, k_a: float, alpha_a: float) -> bool:
     children = tree.children_ids[belief_id]
     belief_visits = tree.visit_count[belief_id]
-    return len(children) == 0 or belief_visits == 0 or len(children) <= k_a * belief_visits**alpha_a
+    return (
+        len(children) == 0 or belief_visits == 0 or len(children) <= k_a * belief_visits**alpha_a
+    )

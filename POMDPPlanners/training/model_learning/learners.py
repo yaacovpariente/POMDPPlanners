@@ -179,13 +179,11 @@ class ProbabilisticEnsembleLearner(TransitionModelLearner):
             raise ValueError(f"num_members must be positive, got {num_members}")
         if early_stopping_patience <= 0:
             raise ValueError(
-                "early_stopping_patience must be positive, "
-                f"got {early_stopping_patience}"
+                "early_stopping_patience must be positive, " f"got {early_stopping_patience}"
             )
         if early_stopping_min_delta < 0:
             raise ValueError(
-                "early_stopping_min_delta must be non-negative, "
-                f"got {early_stopping_min_delta}"
+                "early_stopping_min_delta must be non-negative, " f"got {early_stopping_min_delta}"
             )
         self._num_members = num_members
         self._hidden_sizes = tuple(hidden_sizes)
@@ -365,9 +363,7 @@ def _train_member(
         ``(train_losses, holdout_losses)``, one entry per epoch. The second is
         empty when no holdout rows were given.
     """
-    optimizer = torch.optim.Adam(
-        member.parameters(), lr=learning_rate, weight_decay=weight_decay
-    )
+    optimizer = torch.optim.Adam(member.parameters(), lr=learning_rate, weight_decay=weight_decay)
     input_tensor = torch.as_tensor(inputs, dtype=torch.float32)
     target_tensor = torch.as_tensor(targets, dtype=torch.float32)
     if device is not None:

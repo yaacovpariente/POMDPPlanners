@@ -16,7 +16,7 @@ across worker processes is the standard library logger.
 
 import gc
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -141,6 +141,7 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
                 environment=environment,
                 policy_histories=policy_histories,
                 policy_dir=policy_dir,
+                policy_name=policy.name,
             )
 
     def _cache_episodes(
@@ -148,6 +149,7 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
         environment: Environment,
         policy_histories: List[History],
         policy_dir: Path,
+        policy_name: Optional[str] = None,
     ) -> None:
         viz_dir = policy_dir / "visualizations"
         viz_dir.mkdir(exist_ok=True)
@@ -161,3 +163,17 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
                 )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning("Visualization failed for episode %s: %s", episode_idx, str(exc))
+
+            # The trace is written from the same histories, in the same place
+            # and under the same failure rule as the GIF: an environment that
+            # writes no trace returns None here and nothing is written, and an
+            # environment whose exporter throws loses its trace, not the run.
+            try:
+                environment.cache_trace(
+                    history=history.history,
+                    output_dir=viz_dir,
+                    episode_index=episode_idx,
+                    policy_name=policy_name,
+                )
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                logger.warning("Trace export failed for episode %s: %s", episode_idx, str(exc))

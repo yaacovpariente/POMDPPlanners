@@ -40,9 +40,7 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
 @pytest.fixture(name="template")
 def _template():
     """One four-beam, full-surround template set at range 4."""
-    return build_ray_templates(
-        num_beams=4, field_of_view_degrees=360.0, max_range_cells=4.0
-    )
+    return build_ray_templates(num_beams=4, field_of_view_degrees=360.0, max_range_cells=4.0)
 
 
 def test_a_single_beam_points_along_the_heading(template):
@@ -60,9 +58,7 @@ def test_a_single_beam_points_along_the_heading(template):
     Test type: unit
     """
     del template
-    single = build_ray_templates(
-        num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0
-    )
+    single = build_ray_templates(num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0)
     nearest = [tuple(int(v) for v in single[h][0][0, 0]) for h in range(NUM_HEADINGS)]
     assert nearest == [(-1, 0), (0, 1), (1, 0), (0, -1)]
 
@@ -175,9 +171,7 @@ def test_beam_stops_at_the_first_occupied_cell(template):
     Test type: unit
     """
     del template
-    north_beam = build_ray_templates(
-        num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0
-    )[0]
+    north_beam = build_ray_templates(num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0)[0]
     occupancy = np.zeros((9, 9))
     occupancy[2, 4] = 1.0
     occupancy[1, 4] = 1.0
@@ -234,9 +228,7 @@ def test_range_is_the_centre_to_centre_distance():
 
     Test type: unit
     """
-    template = build_ray_templates(
-        num_beams=4, field_of_view_degrees=360.0, max_range_cells=5.0
-    )
+    template = build_ray_templates(num_beams=4, field_of_view_degrees=360.0, max_range_cells=5.0)
     occupancy = np.zeros((11, 11))
     occupancy[3, 7] = 1.0  # two north and two east of (5, 5)
     ranges, hit, _ = cast_scan(occupancy, 5, 5, template[0], max_range_cells=5.0)
@@ -257,9 +249,7 @@ def test_inverse_sensor_model_marks_free_then_occupied_then_nothing():
 
     Test type: unit
     """
-    template = build_ray_templates(
-        num_beams=1, field_of_view_degrees=1.0, max_range_cells=6.0
-    )[0]
+    template = build_ray_templates(num_beams=1, field_of_view_degrees=1.0, max_range_cells=6.0)[0]
     occupancy = np.zeros((11, 11))
     occupancy[2, 5] = 1.0
     _, hit, stop_slot = cast_scan(occupancy, 5, 5, template, max_range_cells=6.0)
@@ -295,9 +285,7 @@ def test_max_range_miss_marks_the_whole_ray_free_and_nothing_occupied():
 
     Test type: unit
     """
-    template = build_ray_templates(
-        num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0
-    )[0]
+    template = build_ray_templates(num_beams=1, field_of_view_degrees=1.0, max_range_cells=4.0)[0]
     _, hit, stop_slot = cast_scan(np.zeros((21, 21)), 10, 10, template, max_range_cells=4.0)
     delta = scan_log_odds_delta(
         hit=hit,
@@ -462,9 +450,7 @@ def test_truncated_log_density_matches_scipy_across_the_supported_noise_range(st
     nominal = np.array([0.0, 0.2, 1.0, 3.5])
     values = np.linspace(0.0, 6.0, 25)[:, None]
     ours = truncated_normal_log_density(values, nominal[None, :], std)
-    reference = np.stack(
-        [_reference(rho, std).logpdf(values[:, 0]) for rho in nominal], axis=1
-    )
+    reference = np.stack([_reference(rho, std).logpdf(values[:, 0]) for rho in nominal], axis=1)
     np.testing.assert_allclose(ours, reference, rtol=1e-10, atol=1e-10)
 
 
@@ -482,9 +468,7 @@ def test_the_normaliser_depends_on_the_nominal_range():
     near, far, remote = 0.3, 2.0, 12.0
     z = 1.0
     correction = {
-        rho: float(
-            truncated_normal_log_density(z, rho, std) - gaussian_log_density(z, rho, std)
-        )
+        rho: float(truncated_normal_log_density(z, rho, std) - gaussian_log_density(z, rho, std))
         for rho in (near, far, remote)
     }
     assert correction[near] == pytest.approx(-float(log_ndtr(near / std)))

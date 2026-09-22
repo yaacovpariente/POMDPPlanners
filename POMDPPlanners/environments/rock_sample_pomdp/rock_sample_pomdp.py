@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines  # one environment, its reward variants and its artifacts
+
 """Module for RockSample POMDP environment.
 
 This module provides the RockSample POMDP environment implementation based on the
@@ -19,7 +21,7 @@ import warnings
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -42,6 +44,9 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_s
     RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 # Actions are plain ints: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i.
@@ -945,13 +950,40 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             output_dir: Directory into which the ``.gif`` visualization is written
             episode_index: Zero-based episode index, used to name the file
         """
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
             RockSampleVisualizer,
         )
 
         cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = RockSampleVisualizer(self)
         visualizer.create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``rock_sample.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every RockSample run
+        # including ones that never write anything.
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.trace_exporter import (  # pylint: disable=import-outside-toplevel
+            build_rock_sample_trace,
+        )
+
+        return build_rock_sample_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     def visualize_path(
         self, path: List["RockSampleState"], actions: List[int], cache_path: Path
@@ -963,7 +995,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             actions: List of actions taken at each state
             cache_path: Path where to save the animation (must end with .gif)
         """
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
             RockSampleVisualizer,
         )
 

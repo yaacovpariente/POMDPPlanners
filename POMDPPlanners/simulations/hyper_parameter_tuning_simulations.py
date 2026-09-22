@@ -829,13 +829,14 @@ class HyperParameterOptimizer:
         ]
 
         # Use the simulator's _run_simulations_and_compute_metrics method
-        _, metrics = (
-            simulator._run_simulations_and_compute_metrics(  # pylint: disable=protected-access
-                environment_run_params=env_run_params,
-                alpha=self.alpha,
-                confidence_interval_level=self.confidence_interval_level,
-                n_jobs=self.n_jobs,
-            )
+        (
+            _,
+            metrics,
+        ) = simulator._run_simulations_and_compute_metrics(  # pylint: disable=protected-access
+            environment_run_params=env_run_params,
+            alpha=self.alpha,
+            confidence_interval_level=self.confidence_interval_level,
+            n_jobs=self.n_jobs,
         )
 
         # Extract final statistics from metrics

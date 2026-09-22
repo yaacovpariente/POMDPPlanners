@@ -10,7 +10,9 @@ from types import SimpleNamespace
 import numpy as np
 from PIL import Image
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import ContinuousLaserTagVisualizer
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
+    ContinuousLaserTagVisualizer,
+)
 
 ROOT = Path(__file__).resolve().parent
 

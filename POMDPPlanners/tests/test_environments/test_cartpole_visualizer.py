@@ -11,7 +11,9 @@ from PIL import GifImagePlugin, Image, ImageDraw
 
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.cartpole_pomdp import cartpole_visualizer as viz
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization import (
+    cartpole_visualizer as viz,
+)
 
 
 @pytest.fixture

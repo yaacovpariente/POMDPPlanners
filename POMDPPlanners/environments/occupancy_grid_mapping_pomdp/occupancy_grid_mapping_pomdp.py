@@ -37,7 +37,7 @@ MCTS also supports continuous states; it does not require this discretization.
 from enum import Enum, IntEnum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -76,6 +76,9 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_sens
     sample_ranges,
     scan_log_density,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 #: Index of the step counter inside a state vector.
@@ -1024,12 +1027,40 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
         # almost none of them render anything, so the renderer's textures,
         # sprites and palette tables stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
+        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.occupancy_grid_mapping_visualizer import (  # noqa: E501
             OccupancyGridMappingVisualizer,
         )
 
         cache_path = output_dir / f"occupancy_grid_mapping_{episode_index}.gif"
         OccupancyGridMappingVisualizer(self).create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: Episode history.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``occupancy_grid_mapping.v1``.
+        """
+        # Imported here rather than at module scope, for the reason
+        # ``cache_visualization`` gives: the exporter reaches the renderer's
+        # package, and a planning run that writes nothing should not pay for it.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.trace_exporter import (  # noqa: E501
+            build_occupancy_grid_mapping_trace,
+        )
+
+        return build_occupancy_grid_mapping_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
 
 def create_occupancy_grid_state(

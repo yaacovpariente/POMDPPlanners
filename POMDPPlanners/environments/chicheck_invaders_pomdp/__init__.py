@@ -65,6 +65,8 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensor
 )
 
 __all__ = [
+    "CHICHECK_INVADERS_PAYLOAD_KIND",
+    "build_chicheck_invaders_trace",
     "CHICKEN_ALIVE",
     "CHICKEN_COLUMN",
     "CHICKEN_DIRECTION",
@@ -117,4 +119,8 @@ from .chicheck_invaders_vectorized_belief import (
     ChicheckInvadersVectorizedUpdater,
     create_chicheck_invaders_vectorized_belief,
 )
-from .chicheck_invaders_visualizer import ChicheckInvadersVisualizer
+from .chicheck_invaders_visualization import (
+    CHICHECK_INVADERS_PAYLOAD_KIND,
+    ChicheckInvadersVisualizer,
+    build_chicheck_invaders_trace,
+)

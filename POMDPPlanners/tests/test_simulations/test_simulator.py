@@ -1940,9 +1940,14 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
         assert gif_path.is_file(), f"GIF path should be a file: {gif_path}"
         assert gif_path.stat().st_size > 0, f"GIF file should not be empty: {gif_path}"
 
-    # 3. Verify only expected files exist (no extra files)
+    # 3. Verify only expected files exist (no extra files). Light-Dark also
+    # writes a machine-readable trace per episode beside its GIF, so both are
+    # expected here; an environment with no trace exporter writes only GIFs.
+    expected_traces = ["trace_0.json", "trace_1.json"]
     actual_files = sorted([f.name for f in viz_dir.iterdir() if f.is_file()])
-    assert actual_files == expected_files, f"Expected files {expected_files}, got {actual_files}"
+    assert actual_files == sorted(
+        expected_files + expected_traces
+    ), f"Expected files {sorted(expected_files + expected_traces)}, got {actual_files}"
 
     # 4. Verify file contents are valid GIF format (basic check)
     for expected_file in expected_files:

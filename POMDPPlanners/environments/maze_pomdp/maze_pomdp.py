@@ -125,7 +125,7 @@ from collections.abc import Hashable
 from enum import Enum
 from itertools import groupby
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -139,6 +139,9 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.maze_pomdp.maze_geometry import Cell, MazeGeometry
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 # State slot indices. Deliberately the same layout the T-Maze uses, so a reader who
 # knows one knows the other and the two can share a mental model.
@@ -416,11 +419,7 @@ class BaseMazePOMDP(Environment):
 
     def goal_cell(self, goal_side: float) -> Cell:
         """The goal cell that pays the goal reward for ``goal_side``."""
-        return (
-            self._left_goal_cell
-            if float(goal_side) == GOAL_LEFT
-            else self._right_goal_cell
-        )
+        return self._left_goal_cell if float(goal_side) == GOAL_LEFT else self._right_goal_cell
 
     # The event rule
     def _cells_containing(self, x: float, y: float) -> Tuple[Cell, ...]:
@@ -480,9 +479,7 @@ class BaseMazePOMDP(Environment):
                     earliest.setdefault(cell, time)
         return sorted(((time, cell) for cell, time in earliest.items()), key=lambda pair: pair[0])
 
-    def _walk_segment(
-        self, start: Tuple[float, float], end: Tuple[float, float]
-    ) -> StepOutcome:
+    def _walk_segment(self, start: Tuple[float, float], end: Tuple[float, float]) -> StepOutcome:
         """Apply the event rule to one straight move.
 
         Args:
@@ -555,9 +552,9 @@ class BaseMazePOMDP(Environment):
     def is_terminal(self, state: Any) -> bool:
         """Whether ``state``'s position lies in either goal cell."""
         state_array = np.asarray(state, dtype=np.float64)
-        return self._goal_cell_at(
-            float(state_array[STATE_X]), float(state_array[STATE_Y])
-        ) is not None
+        return (
+            self._goal_cell_at(float(state_array[STATE_X]), float(state_array[STATE_Y])) is not None
+        )
 
     def _goal_cell_at(self, x: float, y: float) -> Optional[Cell]:
         """The goal cell holding ``(x, y)``, or ``None``."""
@@ -585,9 +582,7 @@ class BaseMazePOMDP(Environment):
             states_array = states_array.reshape(1, -1)
         return np.stack([self._successor(row, action) for row in states_array], axis=0)
 
-    def transition_log_probability(
-        self, state: Any, action: Any, next_states: Any
-    ) -> np.ndarray:
+    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log ``T(s' | s, a)``: 0 for the one successor, ``-inf`` everywhere else."""
         successor = self._successor(state, action)
         candidates = np.asarray(next_states, dtype=np.float64)
@@ -686,9 +681,7 @@ class BaseMazePOMDP(Environment):
         return observation
 
     # Reward
-    def _reward_from_successor(
-        self, state_array: np.ndarray, successor: np.ndarray
-    ) -> float:
+    def _reward_from_successor(self, state_array: np.ndarray, successor: np.ndarray) -> float:
         if self.is_terminal(state_array):
             return 0.0
         reached = self._goal_cell_at(float(successor[STATE_X]), float(successor[STATE_Y]))
@@ -786,9 +779,7 @@ class BaseMazePOMDP(Environment):
         outcome_state = (
             state_array if next_state is None else np.asarray(next_state, dtype=np.float64)
         )
-        reached = self._goal_cell_at(
-            float(outcome_state[STATE_X]), float(outcome_state[STATE_Y])
-        )
+        reached = self._goal_cell_at(float(outcome_state[STATE_X]), float(outcome_state[STATE_Y]))
         goal_cell = self.goal_cell(float(state_array[STATE_GOAL]))
 
         at_correct = float(reached is not None and reached == goal_cell)
@@ -893,6 +884,39 @@ class BaseMazePOMDP(Environment):
 
         MazeVisualizer(self).create_visualization(
             history, output_dir / f"agent_path_{episode_index}.gif"
+        )
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Written once here rather than on each variant: the two share a map, a
+        cue and a reward, so they share a payload, and a viewer that could draw
+        one but not the other would be drawing the movement model instead of
+        the task.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``maze.v1``.
+        """
+        # Imported here rather than at module scope, matching the GIF renderer
+        # above: the exporter pulls in the trace schema, and this module is
+        # imported by every Maze run including ones that write nothing.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
+            build_maze_trace,
+        )
+
+        return build_maze_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
         )
 
 

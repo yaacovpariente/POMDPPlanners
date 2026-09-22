@@ -233,7 +233,9 @@ def plot_round_returns(
     """
     transitions, means, lows, highs = [], [], [], []
     for entry in rounds:
-        control = entry.get("control") if isinstance(entry, dict) else getattr(entry, "control", None)
+        control = (
+            entry.get("control") if isinstance(entry, dict) else getattr(entry, "control", None)
+        )
         if control is None:
             continue
         if not isinstance(control, dict):
@@ -276,8 +278,9 @@ def plot_round_returns(
         label="chosen round",
     )
     if baseline_return is not None:
-        axis.axhline(baseline_return, color="black", linestyle="--", linewidth=1.5,
-                     label="initial model")
+        axis.axhline(
+            baseline_return, color="black", linestyle="--", linewidth=1.5, label="initial model"
+        )
     axis.set_xlabel("Transitions collected")
     axis.set_ylabel("Return in the true world")
     axis.set_title(title)
@@ -327,7 +330,9 @@ def plot_training_curves(
         The written path, or ``None`` if no round recorded a training curve.
     """
     metrics = _training_metrics(rounds)
-    drawable = [(index, entry) for index, entry in enumerate(metrics, start=1) if entry.get("train_nll")]
+    drawable = [
+        (index, entry) for index, entry in enumerate(metrics, start=1) if entry.get("train_nll")
+    ]
     if not drawable:
         logger.warning("plot_training_curves: no round recorded a training curve")
         return None
@@ -338,9 +343,7 @@ def plot_training_curves(
     for axis, (round_index, entry) in zip(axes[0], drawable):
         epochs = np.arange(1, len(entry["train_nll"]) + 1)
         axis.plot(epochs, entry["train_nll"], color="tab:blue", linewidth=2, label="train")
-        members = [
-            entry[key] for key in sorted(entry) if key.startswith("train_nll_member_")
-        ]
+        members = [entry[key] for key in sorted(entry) if key.startswith("train_nll_member_")]
         if len(members) > 1:
             # Across members, at the same confidence as every other interval
             # here: a mean line hides the ensemble disagreeing with itself,
@@ -500,9 +503,7 @@ def plot_model_learning_report(
         "round_returns": lambda: plot_round_returns(
             rounds, output_dir / "round_returns.png", baseline_return=baseline_return
         ),
-        "training_curves": lambda: plot_training_curves(
-            rounds, output_dir / "training_curves.png"
-        ),
+        "training_curves": lambda: plot_training_curves(rounds, output_dir / "training_curves.png"),
         "member_training_curves": lambda: plot_member_training_curves(
             rounds, output_dir / "member_training_curves.png"
         ),

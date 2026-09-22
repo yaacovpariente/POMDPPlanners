@@ -240,13 +240,9 @@ class MazeGeometry:
         for column in range(self._columns):
             for row in range(self._rows):
                 if column + 1 < self._columns:
-                    walls.add(
-                        self._wall_between((column, row), (column + 1, row))
-                    )
+                    walls.add(self._wall_between((column, row), (column + 1, row)))
                 if row + 1 < self._rows:
-                    walls.add(
-                        self._wall_between((column, row), (column, row + 1))
-                    )
+                    walls.add(self._wall_between((column, row), (column, row + 1)))
         return walls
 
     # Guarantees
@@ -287,9 +283,7 @@ class MazeGeometry:
             The largest acceptable difference between the two goal distances.
         """
         distances = _distances_from(self.start_cell, walkable)
-        mean = 0.5 * (
-            distances[self.left_goal_cell] + distances[self.right_goal_cell]
-        )
+        mean = 0.5 * (distances[self.left_goal_cell] + distances[self.right_goal_cell])
         return max(2.0, 0.2 * mean)
 
     # Read-only views

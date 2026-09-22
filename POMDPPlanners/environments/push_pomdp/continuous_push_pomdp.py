@@ -26,7 +26,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -59,9 +59,12 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models i
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
+from POMDPPlanners.environments.push_pomdp.push_visualization.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
     ContinuousPushPOMDPVisualizer,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 class ContinuousPushStepChannel(Enum):
@@ -876,6 +879,38 @@ class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-metho
         cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = ContinuousPushPOMDPVisualizer(self)
         visualizer.create_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        The discrete-action wrapper below inherits this: it is the same world
+        with the same geometry, and the envelope records whichever action form
+        the run actually used.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``push.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Push run including
+        # ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.push_pomdp.push_visualization.trace_exporter import (
+            build_push_trace,
+        )
+
+        return build_push_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     # ------------------------------------------------------------------
     # Collision helpers

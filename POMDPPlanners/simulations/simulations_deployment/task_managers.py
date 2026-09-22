@@ -690,9 +690,9 @@ class PBSTaskManager(DaskTaskManager):
             # Prepare scheduler options for dashboard configuration
             scheduler_options = {}
             if self.enable_dashboard:
-                scheduler_options["dashboard_address"] = (
-                    f"{self.dashboard_address}:{self.dashboard_port}"
-                )
+                scheduler_options[
+                    "dashboard_address"
+                ] = f"{self.dashboard_address}:{self.dashboard_port}"
                 if self.dashboard_prefix:
                     scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 

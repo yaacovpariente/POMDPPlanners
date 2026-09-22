@@ -171,8 +171,7 @@ def save_trial_records(records: Sequence[TrialRecord], path: Path) -> Path:
 def load_trial_records(path: Path) -> List[TrialRecord]:
     """Read records written by :func:`save_trial_records`."""
     return [
-        TrialRecord.from_dict(item)
-        for item in json.loads(Path(path).read_text(encoding="utf-8"))
+        TrialRecord.from_dict(item) for item in json.loads(Path(path).read_text(encoding="utf-8"))
     ]
 
 
@@ -263,9 +262,7 @@ def plot_objective_history(
     fig, axes = plt.subplots(len(names), 1, figsize=(9, 3.2 * len(names)), squeeze=False)
     for axis, (name, direction) in zip(axes[:, 0], parameters_to_optimize):
         points = [
-            (r.number, r.objective_values[name])
-            for r in completed
-            if name in r.objective_values
+            (r.number, r.objective_values[name]) for r in completed if name in r.objective_values
         ]
         if not points:
             axis.set_visible(False)
@@ -500,9 +497,7 @@ def plot_parameter_slices(
         for column, param_name in enumerate(param_names):
             axis = axes[row][column]
             usable = [
-                r
-                for r in completed
-                if param_name in r.params and metric_name in r.objective_values
+                r for r in completed if param_name in r.params and metric_name in r.objective_values
             ]
             if not usable:
                 axis.set_visible(False)
@@ -510,8 +505,7 @@ def plot_parameter_slices(
 
             values = [r.params[param_name] for r in usable]
             if all(
-                isinstance(value, (int, float)) and not isinstance(value, bool)
-                for value in values
+                isinstance(value, (int, float)) and not isinstance(value, bool) for value in values
             ):
                 x_values: Sequence[Any] = values
                 tick_labels = None
@@ -716,9 +710,7 @@ def plot_tuning_diagnostics(
         ),
         plot_pareto_front(records, parameters_to_optimize, output_dir / "pareto_front.png"),
         plot_parameter_history(records, output_dir / "parameter_history.png"),
-        plot_parameter_slices(
-            records, parameters_to_optimize, output_dir / "parameter_slices.png"
-        ),
+        plot_parameter_slices(records, parameters_to_optimize, output_dir / "parameter_slices.png"),
         plot_secondary_metrics(
             records, parameters_to_optimize, output_dir / "secondary_metrics.png"
         ),

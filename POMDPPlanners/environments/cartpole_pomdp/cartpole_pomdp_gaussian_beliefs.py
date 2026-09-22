@@ -14,6 +14,11 @@ Because the dynamics are nonlinear, a standard linear Kalman filter is not
 applicable; only EKF (which requires analytical Jacobians) and UKF
 (Jacobian-free sigma-point propagation) are supported.
 
+The transition function and its Jacobian are module-level callable classes
+rather than closures, because ``LocalSimulationsAPI`` pickles every
+simulation task (to hash it into a cache key) and a closure cannot be
+pickled.
+
 Classes:
     GaussianBeliefUpdaterType: Enum selecting the Gaussian updater variant.
 
@@ -24,6 +29,7 @@ Functions:
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
@@ -137,61 +143,110 @@ def _build_updater(
     raise ValueError(f"Unknown updater type: {updater_type}")
 
 
-def _make_transition_fn(env: "CartPolePOMDP"):
-    force_mag = env.force_mag
-    gravity = env.gravity
-    masspole = env.masspole
-    total_mass = env.total_mass
-    length = env.length
-    polemass_length = env.polemass_length
-    tau = env.tau
-    integrator = env.kinematics_integrator
+@dataclass(frozen=True)
+class _CartPoleDynamicsParams:
+    """Cart-pole physics constants copied out of the environment.
 
-    def _transition_fn(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    The Gaussian updaters are handed these callables and are then pickled by
+    joblib (``LocalSimulationsAPI`` hashes every task to build its cache key).
+    A closure over ``env`` cannot be pickled, so the parameters live in a
+    module-level dataclass instead.
+
+    Attributes:
+        force_mag: Magnitude of the force applied by either action.
+        gravity: Gravitational acceleration.
+        masspole: Mass of the pole.
+        total_mass: Mass of cart plus pole.
+        length: Half the pole's length.
+        polemass_length: ``masspole * length``.
+        tau: Integration time step.
+        integrator: ``"euler"`` or ``"semi-implicit euler"``.
+    """
+
+    force_mag: float
+    gravity: float
+    masspole: float
+    total_mass: float
+    length: float
+    polemass_length: float
+    tau: float
+    integrator: str
+
+    @classmethod
+    def from_environment(cls, env: "CartPolePOMDP") -> "_CartPoleDynamicsParams":
+        """Copy the physics constants out of a CartPolePOMDP instance."""
+        return cls(
+            force_mag=env.force_mag,
+            gravity=env.gravity,
+            masspole=env.masspole,
+            total_mass=env.total_mass,
+            length=env.length,
+            polemass_length=env.polemass_length,
+            tau=env.tau,
+            integrator=env.kinematics_integrator,
+        )
+
+
+@dataclass(frozen=True)
+class _CartPoleTransitionFn:
+    """Picklable deterministic cart-pole transition ``f(x, u) -> x'``."""
+
+    params: _CartPoleDynamicsParams
+
+    def __call__(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = self.params
         action = float(np.asarray(u).ravel()[0])
-        force = force_mag if action >= 0.5 else -force_mag
+        force = p.force_mag if action >= 0.5 else -p.force_mag
 
         cart_pos, cart_vel, theta, theta_dot = x
         cos_theta = math.cos(theta)
         sin_theta = math.sin(theta)
 
-        temp = (force + polemass_length * theta_dot**2 * sin_theta) / total_mass
-        theta_acc = (gravity * sin_theta - cos_theta * temp) / (
-            length * (4.0 / 3.0 - masspole * cos_theta**2 / total_mass)
+        temp = (force + p.polemass_length * theta_dot**2 * sin_theta) / p.total_mass
+        theta_acc = (p.gravity * sin_theta - cos_theta * temp) / (
+            p.length * (4.0 / 3.0 - p.masspole * cos_theta**2 / p.total_mass)
         )
-        x_acc = temp - polemass_length * theta_acc * cos_theta / total_mass
+        x_acc = temp - p.polemass_length * theta_acc * cos_theta / p.total_mass
 
-        if integrator == "euler":
-            new_cart_pos = cart_pos + tau * cart_vel
-            new_cart_vel = cart_vel + tau * x_acc
-            new_theta = theta + tau * theta_dot
-            new_theta_dot = theta_dot + tau * theta_acc
+        if p.integrator == "euler":
+            new_cart_pos = cart_pos + p.tau * cart_vel
+            new_cart_vel = cart_vel + p.tau * x_acc
+            new_theta = theta + p.tau * theta_dot
+            new_theta_dot = theta_dot + p.tau * theta_acc
         else:
-            new_cart_vel = cart_vel + tau * x_acc
-            new_cart_pos = cart_pos + tau * new_cart_vel
-            new_theta_dot = theta_dot + tau * theta_acc
-            new_theta = theta + tau * new_theta_dot
+            new_cart_vel = cart_vel + p.tau * x_acc
+            new_cart_pos = cart_pos + p.tau * new_cart_vel
+            new_theta_dot = theta_dot + p.tau * theta_acc
+            new_theta = theta + p.tau * new_theta_dot
 
         return np.array([new_cart_pos, new_cart_vel, new_theta, new_theta_dot])
 
-    return _transition_fn
+
+def _make_transition_fn(env: "CartPolePOMDP") -> _CartPoleTransitionFn:
+    return _CartPoleTransitionFn(_CartPoleDynamicsParams.from_environment(env))
 
 
 def _cartpole_observation_fn(x: np.ndarray) -> np.ndarray:
     return x.copy()
 
 
-def _make_transition_jacobian(env: "CartPolePOMDP"):
-    force_mag = env.force_mag
-    gravity = env.gravity
-    masspole = env.masspole
-    total_mass = env.total_mass
-    length = env.length
-    polemass_length = env.polemass_length
-    tau = env.tau
-    integrator = env.kinematics_integrator
+@dataclass(frozen=True)
+class _CartPoleTransitionJacobian:
+    """Picklable Jacobian of the cart-pole transition w.r.t. the state."""
 
-    def _transition_jacobian(x: np.ndarray, u: np.ndarray) -> np.ndarray:
+    params: _CartPoleDynamicsParams
+
+    def __call__(self, x: np.ndarray, u: np.ndarray) -> np.ndarray:
+        p = self.params
+        force_mag = p.force_mag
+        gravity = p.gravity
+        masspole = p.masspole
+        total_mass = p.total_mass
+        length = p.length
+        polemass_length = p.polemass_length
+        tau = p.tau
+        integrator = p.integrator
+
         action = float(np.asarray(u).ravel()[0])
         force = force_mag if action >= 0.5 else -force_mag
 
@@ -250,7 +305,9 @@ def _make_transition_jacobian(env: "CartPolePOMDP"):
 
         return J
 
-    return _transition_jacobian
+
+def _make_transition_jacobian(env: "CartPolePOMDP") -> _CartPoleTransitionJacobian:
+    return _CartPoleTransitionJacobian(_CartPoleDynamicsParams.from_environment(env))
 
 
 def _cartpole_observation_jacobian(x: np.ndarray) -> np.ndarray:

@@ -216,9 +216,9 @@ class NavigationVectorizedModel:
         velocity_start, velocity_stop = self._velocity_slice
         tracked = torch.zeros_like(states[:, velocity_start:velocity_stop])
         tracked[:, :2] = commands[:, :2] * self._linear_scale
-        next_states[:, velocity_start:velocity_stop] = (
-            tracked + self._velocity_std * torch.randn_like(tracked)
-        )
+        next_states[
+            :, velocity_start:velocity_stop
+        ] = tracked + self._velocity_std * torch.randn_like(tracked)
         return next_states
 
     def sample_observations(self, next_states: Tensor, actions: Tensor) -> Tensor:

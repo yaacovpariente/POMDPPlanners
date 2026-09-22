@@ -379,9 +379,7 @@ class ProbabilisticEnsembleTransition(TransitionModel):
         """
         states = rows.detach().cpu().numpy() if is_tensor(rows) else np.asarray(rows, dtype=float)
         actions, _ = as_rows(
-            np.asarray(
-                action.detach().cpu().numpy() if is_tensor(action) else action, dtype=float
-            ),
+            np.asarray(action.detach().cpu().numpy() if is_tensor(action) else action, dtype=float),
             self._action_mean.size,
         )
         actions = np.broadcast_to(actions, (states.shape[0], actions.shape[1]))

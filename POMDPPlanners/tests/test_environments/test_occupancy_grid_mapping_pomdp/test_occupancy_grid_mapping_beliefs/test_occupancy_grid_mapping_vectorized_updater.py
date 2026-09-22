@@ -446,9 +446,7 @@ class TestTruncatedNormalMode:
         np.testing.assert_allclose(batched, scalar, rtol=1e-12, atol=1e-12)
         assert np.isfinite(batched[7])
         gaussian = OccupancyGridMappingVectorizedUpdater.from_environment(
-            make_env(
-                range_noise_std_cells=1.0, move_failure_probability=move_failure_probability
-            )
+            make_env(range_noise_std_cells=1.0, move_failure_probability=move_failure_probability)
         ).batch_predictive_log_likelihood(particles, action, observation)
         finite = np.isfinite(batched)
         assert np.array_equal(finite, np.isfinite(gaussian))
@@ -461,14 +459,14 @@ class TestTruncatedNormalMode:
         particles = diverse_particles(env)
         observation = observation_from(env, particles[0], 0)
         observation[5] = -0.01
-        assert np.all(np.isneginf(updater.batch_predictive_log_likelihood(particles, 0, observation)))
+        assert np.all(
+            np.isneginf(updater.batch_predictive_log_likelihood(particles, 0, observation))
+        )
         observation[5] = 0.0
         assert np.isfinite(updater.batch_predictive_log_likelihood(particles, 0, observation)[0])
 
     @pytest.mark.parametrize("action", ACTIONS)
-    def test_batch_transition_matches_scalar_under_shared_seed_and_stays_nonnegative(
-        self, action
-    ):
+    def test_batch_transition_matches_scalar_under_shared_seed_and_stays_nonnegative(self, action):
         """Purpose: the truncated sampler consumes one uniform per beam in the
         same order on both paths, so the successors must be bit-identical, and
         no stored range may be negative.

@@ -102,6 +102,7 @@ What is in the package
    :hidden:
 
    core/simulations
+   core/results_site
    examples/planners_comparison
    examples/hyperparameter_tuning
 

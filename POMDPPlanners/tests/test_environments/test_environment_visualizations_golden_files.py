@@ -40,28 +40,32 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.snake_pomdp.snake_belief import SnakeBelief
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakePOMDP
-from POMDPPlanners.environments.snake_pomdp.snake_visualizer import SnakeVisualizer
+from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
+    SnakeVisualizer,
+)
 from POMDPPlanners.environments.battleship_pomdp.battleship_belief import BattleshipBelief
 from POMDPPlanners.environments.battleship_pomdp.battleship_pomdp import BattleshipPOMDP
-from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
     BattleshipVisualizer,
 )
 from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
-from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualizer import (
+from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization.capture_the_flag_visualizer import (  # noqa: E501
     CaptureTheFlagVisualizer,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (
     RockSampleVisualizer,
 )
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+    PacManVisualizer,
+)
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
 from POMDPPlanners.environments.maze_pomdp import (
@@ -88,15 +92,15 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingBelief,
     OccupancyGridMappingPOMDP,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualizer import (  # noqa: E501
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.occupancy_grid_mapping_visualizer import (  # noqa: E501
     OccupancyGridMappingVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
-from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.push_visualization.push_pomdp_visualizer import (
     PushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
     LaserTagVisualizer,
 )
 from POMDPPlanners.environments.laser_tag_pomdp import (
@@ -105,20 +109,20 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
     ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.environments.push_pomdp import _native as _push_native
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
 )
-from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (
+from POMDPPlanners.environments.push_pomdp.push_visualization.continuous_push_pomdp_visualizer import (
     ContinuousPushPOMDPVisualizer,
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
 )
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (

@@ -141,13 +141,7 @@ def test_the_hidden_map_is_never_altered_by_the_robot(open_room_env):
         np.testing.assert_array_equal(open_room_env.true_map(state), original)
 
 
-
-
 # -- observation model ---------------------------------------------------
-
-
-
-
 
 
 def test_a_reading_from_the_wrong_pose_has_zero_likelihood(open_room_env):
@@ -174,13 +168,7 @@ def test_a_reading_from_the_wrong_pose_has_zero_likelihood(open_room_env):
     assert scores[1] == -np.inf
 
 
-
-
 # -- reward --------------------------------------------------------------
-
-
-
-
 
 
 def test_the_first_scan_of_an_unknown_room_pays(open_room_env):
@@ -316,9 +304,9 @@ def test_step_info_reports_progress_from_the_realised_successor(open_room_env):
     assert info[OccupancyGridStepChannel.RESIDUAL_ENTROPY_BITS.value] == pytest.approx(
         open_room_env.entropy_bits(next_state)
     )
-    assert info[
-        OccupancyGridStepChannel.RESIDUAL_ENTROPY_BITS.value
-    ] < open_room_env.entropy_bits(state)
+    assert info[OccupancyGridStepChannel.RESIDUAL_ENTROPY_BITS.value] < open_room_env.entropy_bits(
+        state
+    )
 
 
 def test_declared_metric_names_match_the_metric_enum(env):
@@ -333,9 +321,7 @@ def test_declared_metric_names_match_the_metric_enum(env):
 
     Test type: unit
     """
-    assert set(env.get_metric_names()) == {
-        metric.value for metric in OccupancyGridMappingMetrics
-    }
+    assert set(env.get_metric_names()) == {metric.value for metric in OccupancyGridMappingMetrics}
 
 
 # -- configuration -------------------------------------------------------
@@ -380,8 +366,7 @@ def test_the_map_prior_actually_varies(env):
     """
     np.random.seed(0)
     maps = {
-        np.asarray(env.true_map(state)).tobytes()
-        for state in env.initial_state_dist().sample(20)
+        np.asarray(env.true_map(state)).tobytes() for state in env.initial_state_dist().sample(20)
     }
     assert len(maps) > 1
 

@@ -76,4 +76,4 @@ from .multiagent_firefighting_vectorized_belief import (
     FirefightingVectorizedUpdater,
     create_firefighting_belief,
 )
-from .multiagent_firefighting_visualizer import MultiAgentFirefightingVisualizer
+from .multiagent_firefighting_visualization import MultiAgentFirefightingVisualizer
