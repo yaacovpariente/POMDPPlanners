@@ -218,39 +218,6 @@ class DiscreteLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
         return log_probs
 
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
-        """Which particles the robot being asked to act again has ruled out.
-
-        Only the hazard-terminal configuration opts in. With the flag on the
-        hit is a hidden draw made in :meth:`_draw_terminal_slot`; once it
-        latches, :meth:`_augment_batch_terminal` copies the position forward
-        unchanged, and the reading -- a noisy position, never the flag --
-        cannot tell that particle from a live one standing still. Measured on
-        the pinned environment with the robot walked at the obstacle at
-        (5, 5), up to 0.97 of the belief's weight sat on terminal particles
-        mid-episode, recurring every few steps as fresh hits latched.
-
-        With the flag off, terminality is a geometric test on the position
-        alone, nothing latches, and a particle that enters a terminal cell
-        leaves again. That configuration is left as it is.
-
-        Args:
-            next_particles: The transitioned particles, shape (N, 2) or (N, 3).
-
-        Returns:
-            The mask, matching :meth:`DiscreteLightDarkPOMDP.is_terminal` per
-            particle, or ``None`` when the flag is off.
-        """
-        if not self._is_obstacle_hit_terminal:
-            return None
-        values = np.asarray(next_particles, dtype=float)
-        at_goal = (values[:, 0].astype(int) == int(self._goal_state[0])) & (
-            values[:, 1].astype(int) == int(self._goal_state[1])
-        )
-        if values.shape[1] <= 2:
-            return at_goal
-        return at_goal | (values[:, 2] > 0.5)
-
     @property
     def config_id(self) -> str:
         return config_to_id(self._build_config_dict("DiscreteLightDarkVectorizedUpdater"))

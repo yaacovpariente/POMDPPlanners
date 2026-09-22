@@ -266,42 +266,6 @@ class ContinuousLightDarkVectorizedUpdater(VectorizedParticleBeliefUpdater):
         )
         return obs_model.batch_log_likelihood(next_pos, observation_arr)
 
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> Optional[np.ndarray]:
-        """Which particles the robot being asked to act again has ruled out.
-
-        Only the hazard-terminal configuration opts in, and it needs to. With
-        the flag on, a hit is a hidden Bernoulli draw: nothing in the reading
-        names it, the state freezes at the position it was hit in, and
-        :meth:`batch_observation_log_likelihood` drops the hazard slot before
-        scoring -- so a frozen particle keeps whatever its stale position
-        earns and keeps it forever. Measured on the pinned environment,
-        walking the robot at the obstacle at (5, 5), the whole belief was on
-        terminal particles within ten steps at 60, 400 and 2000 particles
-        while the real episode ran on.
-
-        With the flag off there is no hidden absorbing state to accumulate:
-        the only terminal condition is standing at the goal, particles there
-        move on like any other, and the reading separates them. That
-        configuration is left alone rather than changed on an argument, since
-        it is not what was measured.
-
-        Args:
-            next_particles: The transitioned particles, shape (N, 2) or (N, 3).
-
-        Returns:
-            The mask, matching :meth:`ContinuousLightDarkPOMDP.is_terminal`
-            per particle, or ``None`` when the flag is off.
-        """
-        if not self._is_obstacle_hit_terminal:
-            return None
-        values = np.asarray(next_particles, dtype=float)
-        dx = values[:, 0] - self._goal_state[0]
-        dy = values[:, 1] - self._goal_state[1]
-        at_goal = np.sqrt(dx * dx + dy * dy) <= self._goal_state_radius
-        if values.shape[1] <= 2:
-            return at_goal
-        return at_goal | (values[:, 2] > 0.5)
-
     @property
     def config_id(self) -> str:
         return config_to_id(self._build_config_dict("ContinuousLightDarkVectorizedUpdater"))
