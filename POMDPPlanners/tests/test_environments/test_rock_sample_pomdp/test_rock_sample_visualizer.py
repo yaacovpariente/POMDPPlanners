@@ -15,7 +15,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSamplePOMDP,
     create_rock_sample_state,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (
     CANVAS_SIZE,
     COLOR_ARROW,
     COLOR_BAD_ROCK,

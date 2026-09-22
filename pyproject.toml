@@ -87,6 +87,12 @@ docs = [
     "myst-parser>=0.18.0",
 ]
 
+[project.scripts]
+# The results site. A server command rather than a static export: a browser
+# refuses to let a file:// page fetch its sibling trace.json, and a run
+# directory of episode video is streamed from where it is rather than copied.
+pomdp-report = "POMDPPlanners.reporting.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
 "Bug Reports" = "https://github.com/yaacovpariente/POMDPPlanners/issues"
@@ -101,18 +107,29 @@ include = ["POMDPPlanners*"]
 "POMDPPlanners.environments.tiger_pomdp" = ["tiger_visualization_assets/*.png"]
 "POMDPPlanners.environments.cartpole_pomdp" = ["visualization_assets/*.png"]
 "POMDPPlanners.environments.mountain_car_pomdp" = ["assets/*.png", "assets/*.jpg"]
-"POMDPPlanners.environments.laser_tag_pomdp" = ["laser_tag_sprite_sheet.png"]
-"POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils" = ["art/*.png"]
+"POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization" = ["laser_tag_sprite_sheet.png"]
+"POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization" = ["art/*.png"]
 "POMDPPlanners.environments.rock_sample_pomdp" = ["visualization_assets/*.png"]
-"POMDPPlanners.environments.push_pomdp" = ["push_sprite_sheet.png"]
+"POMDPPlanners.environments.push_pomdp.push_visualization" = ["push_sprite_sheet.png"]
 # PacMan visualizer loads these sprites at runtime via
-# pacman_visualizer.py: `sprite_dir / "<file>"`. Bundle them so PyPI
-# installs include the assets, not just the .py files.
-"POMDPPlanners.environments.pacman_pomdp" = ["img/*"]
+# visualizer/pacman_visualizer.py: `Path(__file__).with_name("img")`. The
+# directory moved into the visualizer package with the renderer that reads it,
+# so the path still resolves. Bundle them so PyPI installs include the assets,
+# not just the .py files.
+"POMDPPlanners.environments.pacman_pomdp.pacman_visualization" = ["img/*"]
 # Golden visualization GIFs used by the bundled test suite to validate
 # environment renderings. ~1.2MB total; ships so installed-package smoke
 # tests can run without re-downloading fixtures.
 "POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
+# The results site serves these itself; the vendored three.js build is why
+# the viewer works with no network.
+"POMDPPlanners.reporting" = [
+    "static/*.css",
+    "static/*.js",
+    "static/vendor/*.js",
+    "static/viewer/*.js",
+    "static/viewer/scenes/*.js",
+]
 
 # ---------------------------------------------------------------------------
 # Tool configuration
@@ -121,7 +138,7 @@ include = ["POMDPPlanners*"]
 [tool.black]
 line-length = 100
 target-version = ["py310", "py311", "py312"]
-include = '\\.(py|pyi)$'
+include = '\.(py|pyi)$'
 exclude = '''
 (
   /(

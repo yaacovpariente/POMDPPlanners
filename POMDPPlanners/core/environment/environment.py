@@ -44,6 +44,7 @@ from POMDPPlanners.utils.logger import get_logger
 if TYPE_CHECKING:
     from POMDPPlanners.core.simulation import History, MetricValue, StepData
     from POMDPPlanners.core.simulation.step_info_metrics import StepInfoMetric
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 # Cap on how deep __eq__ descends into sub-objects that define no equality of
@@ -357,9 +358,7 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
                 and hasattr(v1, "__dict__")
                 and type(v1).__eq__ is object.__eq__
             ):
-                return _compare_values(
-                    _config_attributes(v1), _config_attributes(v2), depth + 1
-                )
+                return _compare_values(_config_attributes(v1), _config_attributes(v2), depth + 1)
             return v1 == v2
 
         # Compare all public attributes (excluding callables and private)
@@ -871,6 +870,71 @@ class Environment(ABC):  # pylint: disable=too-many-public-methods
             output_dir: Directory into which the visualization file(s) are written
             episode_index: Zero-based index of the episode, used to name the file
         """
+
+    def build_episode_trace(
+        self, history: "List[StepData]", episode_index: int, policy_name: Optional[str] = None
+    ) -> "Optional[EpisodeTrace]":
+        """Build a machine-readable trace of one episode.
+
+        This is the readable sibling of :meth:`cache_visualization`. That
+        method renders a picture, which is the end of the line — nothing can
+        read a position, a reward or a belief back out of a GIF. A trace is the
+        same episode written as data, so a browser viewer, a plot or a
+        regression check can replay it.
+
+        Override it to fill in the environment-specific half of the trace: the
+        states, the observations and the belief, in whatever form suits this
+        environment. The shared half — actions, rewards, per-step info, the
+        outcome — comes from
+        :func:`~POMDPPlanners.core.simulation.traces.envelope_steps` and is the
+        same everywhere.
+
+        Returning ``None`` means "this environment has no trace format", and
+        :meth:`cache_trace` then writes nothing. That is the default, so an
+        environment that does not implement this is unaffected.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based index of the episode within its run.
+            policy_name: Name of the policy that produced the episode, when the
+                caller knows it.
+
+        Returns:
+            The episode's trace, or ``None`` when this environment does not
+            write traces.
+        """
+        del history, episode_index, policy_name
+        return None
+
+    def cache_trace(
+        self,
+        history: "List[StepData]",
+        output_dir: Path,
+        episode_index: int,
+        policy_name: Optional[str] = None,
+    ) -> Optional[Path]:
+        """Write this episode's trace next to its visualization, if it has one.
+
+        Callers provide only the destination directory and the episode index,
+        exactly as they do for :meth:`cache_visualization`. The file name is
+        fixed here rather than left to each environment, because the reporting
+        site has to find traces across environments it does not know.
+
+        Args:
+            history: List of step data from an episode.
+            output_dir: Directory into which the trace file is written.
+            episode_index: Zero-based index of the episode, used to name the file.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The path written, or ``None`` when this environment writes no trace.
+        """
+        trace = self.build_episode_trace(
+            history=history, episode_index=episode_index, policy_name=policy_name
+        )
+        if trace is None:
+            return None
+        return trace.write(Path(output_dir) / f"trace_{episode_index}.json")
 
     def get_metric_specs(self) -> "List[StepInfoMetric]":
         """Declare metrics derived from this environment's per-step channels.

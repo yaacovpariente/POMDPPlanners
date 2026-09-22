@@ -402,9 +402,7 @@ class TestCue:
             for phase in (CUE_UNSEEN, CUE_EMITTING, CUE_CONSUMED)
         ]
         for observation in list(OBSERVATIONS) + ["not_an_observation"]:
-            batched = env.observation_log_probability_per_state(
-                np.stack(states), "up", observation
-            )
+            batched = env.observation_log_probability_per_state(np.stack(states), "up", observation)
             looped = np.array(
                 [
                     float(env.observation_log_probability(state, "up", [observation])[0])
@@ -533,9 +531,7 @@ class TestBeliefMemory:
         for _ in range(env.stem_length - 1):
             belief = belief.update(action="up", observation=OBSERVATION_EMPTY, pomdp=env)
         assert self._left_mass(belief) == pytest.approx(env.cue_accuracy, abs=1e-9)
-        assert all(
-            (int(p[STATE_X]), int(p[STATE_Y])) == env.junction for p in belief.particles
-        )
+        assert all((int(p[STATE_X]), int(p[STATE_Y])) == env.junction for p in belief.particles)
 
     def test_deterministic_cue_collapses_the_belief(self):
         """At ``cue_accuracy=1.0`` one cue settles the goal side outright.

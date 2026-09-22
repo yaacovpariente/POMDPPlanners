@@ -104,15 +104,9 @@ def _create_hover_text(
     return hover_text
 
 
-def _collect_node_data(all_nodes: List[Any], pos: Dict[Any, Tuple[float, float]]) -> Tuple[
-    List[float],
-    List[float],
-    List[str],
-    List[float],
-    List[int],
-    List[float],
-    List[str],
-]:
+def _collect_node_data(
+    all_nodes: List[Any], pos: Dict[Any, Tuple[float, float]]
+) -> Tuple[List[float], List[float], List[str], List[float], List[int], List[float], List[str],]:
     """Collect data from all nodes for visualization."""
     node_x = []
     node_y = []
@@ -237,9 +231,15 @@ def plot_tree_graphs(root_node: BeliefNode):
     edge_trace = _create_edge_trace(all_nodes, pos)
 
     # Collect node data
-    node_x, node_y, node_text, node_values, node_visits, node_sizes, node_labels = (
-        _collect_node_data(all_nodes, pos)
-    )
+    (
+        node_x,
+        node_y,
+        node_text,
+        node_values,
+        node_visits,
+        node_sizes,
+        node_labels,
+    ) = _collect_node_data(all_nodes, pos)
 
     # Create subplots
     fig = make_subplots(

@@ -9,11 +9,15 @@ must navigate while avoiding unsafe velocities.
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
 )
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
+    SAFETY_ANT_VELOCITY_PAYLOAD_KIND,
     SafeAntVelocityVisualizer,
+    build_safety_ant_velocity_trace,
 )
 
 __all__ = [
+    "SAFETY_ANT_VELOCITY_PAYLOAD_KIND",
     "SafeAntVelocityPOMDP",
     "SafeAntVelocityVisualizer",
+    "build_safety_ant_velocity_trace",
 ]

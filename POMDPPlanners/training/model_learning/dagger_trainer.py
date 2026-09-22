@@ -194,9 +194,7 @@ class DAggerModelTrainer:
         if episodes_per_round <= 0:
             raise ValueError(f"episodes_per_round must be positive, got {episodes_per_round}")
         if evaluation_fn is not None and evaluation_episodes <= 0:
-            raise ValueError(
-                f"evaluation_episodes must be positive, got {evaluation_episodes}"
-            )
+            raise ValueError(f"evaluation_episodes must be positive, got {evaluation_episodes}")
         self.world = world
         self.diagnostics_world = world if diagnostics_world is None else diagnostics_world
         self.learner = learner
@@ -286,9 +284,7 @@ class DAggerModelTrainer:
             points=tuple(result.control for result in self._rounds if result.control is not None),
         )
 
-    def _evaluate_control(
-        self, model: TransitionModel, round_index: int
-    ) -> Optional[ControlPoint]:
+    def _evaluate_control(self, model: TransitionModel, round_index: int) -> Optional[ControlPoint]:
         """Score this round's model in the true world, if an evaluator was given."""
         if self.evaluation_fn is None:
             return None

@@ -83,8 +83,7 @@ def test_each_qa_board_is_a_distinct_layout_and_a_distinct_cache_entry():
     first board's result and the whole comparison would be a single board.
     """
     worlds = [
-        BattleshipFixedBoardWorld(board_id=b, discount_factor=0.99)
-        for b in BATTLESHIP_QA_BOARD_IDS
+        BattleshipFixedBoardWorld(board_id=b, discount_factor=0.99) for b in BATTLESHIP_QA_BOARD_IDS
     ]
     assert len({w.layout_index for w in worlds}) == len(worlds)
     assert len({w.name for w in worlds}) == len(worlds)
@@ -121,8 +120,7 @@ def test_pinning_the_world_does_not_narrow_the_planners_prior(world):
     np.random.seed(0)
     belief = BattleshipBelief.from_environment(BattleshipPOMDP(discount_factor=0.99), 200)
     occupancies = {
-        np.asarray(p, dtype=np.float64)[: world.num_cells].tobytes()
-        for p in belief.particles
+        np.asarray(p, dtype=np.float64)[: world.num_cells].tobytes() for p in belief.particles
     }
     assert len(occupancies) > 1
     marginal = np.mean(

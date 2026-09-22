@@ -90,9 +90,7 @@ def _robot_view(world: _WorldWithStart) -> Any:
             full = SCHEMA.pack(
                 {"robot": np.asarray(state, dtype=float), "hazard_type": np.array([1.0, 0.0])}
             )
-            successors = np.atleast_2d(world.sample_next_state(full, action, n_samples))[
-                :, indices
-            ]
+            successors = np.atleast_2d(world.sample_next_state(full, action, n_samples))[:, indices]
             return successors[0] if n_samples == 1 else successors
 
     return _View()

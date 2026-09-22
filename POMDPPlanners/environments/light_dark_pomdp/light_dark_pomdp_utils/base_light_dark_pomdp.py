@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
 import logging
 import numpy as np
@@ -17,10 +17,13 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
     LightDarkPOMDPVisualizer,
 )
 from POMDPPlanners.utils.config_to_id import config_to_id
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 
 class BaseLightDarkPOMDP(Environment, ABC):
@@ -339,6 +342,34 @@ class BaseLightDarkPOMDP(Environment, ABC):
         cache_path = output_dir / f"agent_path_{episode_index}.gif"
         visualizer = LightDarkPOMDPVisualizer(self)
         visualizer.cache_visualization(history, cache_path)
+
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``light_dark.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Light-Dark run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
+            build_light_dark_trace,
+        )
+
+        return build_light_dark_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)

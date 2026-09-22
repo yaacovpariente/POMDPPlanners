@@ -152,9 +152,7 @@ class BaseMazeVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
         goal_is_left = particles[:, STATE_GOAL] == GOAL_LEFT
         matches = goal_is_left if code == OBS_LEFT_CUE else ~goal_is_left
-        return np.where(
-            emitting, np.where(matches, self._log_accuracy, self._log_error), -np.inf
-        )
+        return np.where(emitting, np.where(matches, self._log_accuracy, self._log_error), -np.inf)
 
     @property
     def config_id(self) -> str:
@@ -312,9 +310,7 @@ class DiscreteMazeVectorizedUpdater(BaseMazeVectorizedUpdater):
         landed_y = self._next_y[x, y, action_index]
 
         blocked = (landed_x == x) & (landed_y == y)
-        entered_cue = (
-            (landed_x == self.cue_cell[0]) & (landed_y == self.cue_cell[1]) & ~blocked
-        )
+        entered_cue = (landed_x == self.cue_cell[0]) & (landed_y == self.cue_cell[1]) & ~blocked
         position = np.stack([landed_x, landed_y], axis=1).astype(np.float64)
         return self._assemble(states, position, entered_cue, self._terminal_mask(states))
 

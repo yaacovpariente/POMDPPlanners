@@ -152,3 +152,33 @@ def test_version_matches_pyproject() -> None:
         f"version mismatch: POMDPPlanners.__version__={pkg.__version__!r}, "
         f"pyproject.toml version={pyproject_version!r}"
     )
+
+
+def test_sdist_bundles_the_results_site_assets(built_sdist: pathlib.Path) -> None:
+    """sdist must bundle the results site's CSS, vendored three.js and viewer.
+
+    Purpose: The site is served from the installed package, and it is
+        deliberately offline — three.js is vendored rather than loaded from a
+        CDN. A missing ``package-data`` glob would not fail any import, so the
+        breakage would only show as a blank viewer after a pip install.
+
+    Given: The project sdist freshly built from the working tree.
+    When: The tarball is inspected for the reporting package's static files.
+    Then: Every static file on disk under ``POMDPPlanners/reporting/static``
+        appears in the sdist.
+
+    Test type: integration
+    """
+    static_root = PACKAGE_ROOT / "reporting" / "static"
+    on_disk = {
+        str(path.relative_to(REPO_ROOT))
+        for path in static_root.rglob("*")
+        if path.is_file() and "__pycache__" not in path.parts
+    }
+    assert on_disk, "the reporting package ships no static files at all"
+
+    missing = sorted(on_disk - _sdist_members(built_sdist))
+    assert not missing, (
+        "Results-site static files present on disk but missing from the sdist. "
+        f"Update [tool.setuptools.package-data]. Missing: {missing}"
+    )

@@ -259,9 +259,10 @@ def test_a_negative_reading_has_no_support_under_the_truncated_law_only():
     forged = truncated.state_from_observation(state, negative)
     assert truncated.transition_log_probability(state, 2, [forged])[0] == -np.inf
     assert np.isfinite(gaussian.transition_log_probability(state, 2, [forged])[0])
-    assert truncated.predictive_observation_log_probability(
-        state, 2, np.array([3, 3, 1, 0.0])
-    ) > -np.inf
+    assert (
+        truncated.predictive_observation_log_probability(state, 2, np.array([3, 3, 1, 0.0]))
+        > -np.inf
+    )
 
 
 def test_truncated_filter_weights_carry_each_particle_normaliser():
@@ -272,9 +273,7 @@ def test_truncated_filter_weights_carry_each_particle_normaliser():
     belief = OccupancyGridMappingBelief([empty, hit], np.log([0.5, 0.5]))
     observation = np.array([3, 3, 1, 1.5])
     result = belief.update(2, observation, env, state=hit)
-    gaussian_ratio = np.exp(
-        -0.5 * ((1.5 - 1) / 1.5) ** 2 + 0.5 * ((1.5 - 2) / 1.5) ** 2
-    )
+    gaussian_ratio = np.exp(-0.5 * ((1.5 - 1) / 1.5) ** 2 + 0.5 * ((1.5 - 2) / 1.5) ** 2)
     truncated_ratio = gaussian_ratio * np.exp(log_ndtr(2 / 1.5) - log_ndtr(1 / 1.5))
     weights = result.normalized_weights
     assert weights[1] / weights[0] == pytest.approx(truncated_ratio)

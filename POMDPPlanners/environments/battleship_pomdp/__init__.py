@@ -31,7 +31,7 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_vectorized_belief im
     BattleshipVectorizedWeightedParticleBelief,
     create_battleship_belief,
 )
-from POMDPPlanners.environments.battleship_pomdp.battleship_visualizer import (
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualization import (
     BattleshipVisualizer,
 )
 

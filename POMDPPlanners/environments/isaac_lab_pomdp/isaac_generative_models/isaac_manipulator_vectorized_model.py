@@ -244,17 +244,17 @@ class ManipulatorVectorizedModel:
         )
         next_velocities = (next_positions - positions) / self._step_dt
         next_states = states.clone()
-        next_states[:, joint_start:joint_stop] = (
-            next_positions + self._position_std * torch.randn_like(next_positions)
-        )
+        next_states[
+            :, joint_start:joint_stop
+        ] = next_positions + self._position_std * torch.randn_like(next_positions)
         velocity_start, velocity_stop = self._velocity_slice
-        next_states[:, velocity_start:velocity_stop] = (
-            next_velocities + self._velocity_std * torch.randn_like(next_velocities)
-        )
+        next_states[
+            :, velocity_start:velocity_stop
+        ] = next_velocities + self._velocity_std * torch.randn_like(next_velocities)
         action_start, action_stop = self._action_slice
-        next_states[:, action_start:action_stop] = (
-            commands + self._recorded_action_std * torch.randn_like(commands)
-        )
+        next_states[
+            :, action_start:action_stop
+        ] = commands + self._recorded_action_std * torch.randn_like(commands)
         return next_states
 
     def sample_observations(self, next_states: Tensor, actions: Tensor) -> Tensor:

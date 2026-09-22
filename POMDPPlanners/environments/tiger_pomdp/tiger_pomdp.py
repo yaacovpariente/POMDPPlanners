@@ -23,7 +23,7 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -39,6 +39,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     StepInfoMetric,
     order_and_fill_metrics,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.simulation.traces import EpisodeTrace
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
@@ -275,11 +278,41 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def cache_history_artifacts(self, history: History, cache_path: Path) -> None:
         pass
 
+    def build_episode_trace(
+        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
+    ) -> "EpisodeTrace":
+        """Write this episode as data, beside the GIF.
+
+        Args:
+            history: List of step data from an episode.
+            episode_index: Zero-based episode index within its run.
+            policy_name: Name of the policy that produced the episode.
+
+        Returns:
+            The episode's trace, with payload kind ``tiger.v1``.
+        """
+        # Imported here rather than at module scope: the exporter pulls in the
+        # trace schema, and this module is imported by every Tiger run
+        # including ones that never write anything.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.trace_exporter import (
+            build_tiger_trace,
+        )
+
+        return build_tiger_trace(
+            environment=self,
+            history=history,
+            episode_index=episode_index,
+            policy_name=policy_name,
+        )
+
     def cache_visualization(
         self, history: List[StepData], output_dir: Path, episode_index: int
     ) -> None:
         """Save the recorded episode without sampling the Tiger model."""
-        from POMDPPlanners.environments.tiger_pomdp.tiger_visualizer import TigerVisualizer
+        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
+            TigerVisualizer,
+        )
 
         TigerVisualizer().create_visualization(
             history, output_dir / f"agent_path_{episode_index}.gif"

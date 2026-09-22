@@ -1456,9 +1456,9 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         # (reproducing the code from _initialize_client)
         scheduler_options = {}
         if task_manager.enable_dashboard:
-            scheduler_options["dashboard_address"] = (
-                f"{task_manager.dashboard_address}:{task_manager.dashboard_port}"
-            )
+            scheduler_options[
+                "dashboard_address"
+            ] = f"{task_manager.dashboard_address}:{task_manager.dashboard_port}"
             if task_manager.dashboard_prefix:
                 scheduler_options["dashboard_prefix"] = task_manager.dashboard_prefix
 

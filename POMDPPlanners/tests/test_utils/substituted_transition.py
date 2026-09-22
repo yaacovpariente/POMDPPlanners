@@ -92,7 +92,11 @@ def assert_transition_is_used_everywhere(
     state: np.ndarray,
     action: Any,
     dim: int,
-    paths: Sequence[str] = ("sample_next_state", "sample_next_state_batch", "transition_log_probability"),
+    paths: Sequence[str] = (
+        "sample_next_state",
+        "sample_next_state_batch",
+        "transition_log_probability",
+    ),
 ) -> None:
     """Assert every dynamics path of the model consults the substituted transition.
 
@@ -188,11 +192,13 @@ def assert_observation_matches_reference(
             reference's, which is the shape of handing the planner a hidden channel.
     """
     observed = _observation_width(
-        model.sample_observation(state, action) if action is not None
+        model.sample_observation(state, action)
+        if action is not None
         else model.sample_observation(state)
     )
     expected = _observation_width(
-        reference.sample_observation(state, action) if action is not None
+        reference.sample_observation(state, action)
+        if action is not None
         else reference.sample_observation(state)
     )
     assert observed <= expected, (

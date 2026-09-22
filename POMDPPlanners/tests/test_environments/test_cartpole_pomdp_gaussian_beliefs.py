@@ -647,3 +647,91 @@ class TestBeliefFactoryIntegration:
         assert isinstance(belief, GaussianBelief)
         assert isinstance(belief.updater, ExtendedKalmanFilterUpdater)
         np.testing.assert_array_equal(belief.covariance, custom_cov)
+
+
+# ---------------------------------------------------------------------------
+# Pickling tests
+# ---------------------------------------------------------------------------
+
+
+class TestPickling:
+    """A Gaussian belief must survive joblib's hashing and pickling.
+
+    ``LocalSimulationsAPI`` pickles every episode task to derive its cache
+    key, so an unpicklable updater makes the belief unusable in any
+    simulation run, at every ``n_jobs``.
+    """
+
+    @pytest.mark.parametrize(
+        "updater_type",
+        [GaussianBeliefUpdaterType.EKF, GaussianBeliefUpdaterType.UKF],
+    )
+    def test_belief_is_picklable(self, env, initial_cov, updater_type):
+        """Test that a CartPole Gaussian belief can be pickled.
+
+        Purpose: Guards the simulation path, which pickles the belief.
+
+        Given: A CartPole Gaussian belief with the EKF or UKF updater.
+        When: The belief is pickled and joblib-hashed.
+        Then: Neither raises, and joblib.hash is stable across calls.
+
+        Test type: unit
+        """
+        import pickle
+
+        import joblib
+
+        belief = create_cartpole_gaussian_belief(
+            env=env, updater_type=updater_type, initial_covariance=initial_cov
+        )
+        restored = pickle.loads(pickle.dumps(belief))
+        assert isinstance(restored, GaussianBelief)
+        assert joblib.hash(belief) == joblib.hash(belief)
+
+    @pytest.mark.parametrize(
+        "updater_type",
+        [GaussianBeliefUpdaterType.EKF, GaussianBeliefUpdaterType.UKF],
+    )
+    def test_unpickled_updater_transitions_identically(self, env, initial_cov, updater_type):
+        """Test that pickling preserves the transition function's output.
+
+        Purpose: A picklable updater is useless if the round trip loses the
+        environment's physics constants.
+
+        Given: A CartPole Gaussian belief.
+        When: It is pickled, restored, and its transition_fn is evaluated.
+        Then: The restored output equals the original exactly.
+
+        Test type: unit
+        """
+        import pickle
+
+        belief = create_cartpole_gaussian_belief(
+            env=env, updater_type=updater_type, initial_covariance=initial_cov
+        )
+        restored = pickle.loads(pickle.dumps(belief))
+
+        # Only EKF and UKF are parametrised here, and only they carry a
+        # transition function; the base updater does not, so say which one
+        # this is rather than reaching through the base class.
+        assert isinstance(
+            belief.updater, (ExtendedKalmanFilterUpdater, UnscentedKalmanFilterUpdater)
+        )
+        assert isinstance(
+            restored.updater, (ExtendedKalmanFilterUpdater, UnscentedKalmanFilterUpdater)
+        )
+
+        state = np.array([0.05, -0.2, 0.03, 0.15])
+        action = np.array([1.0])
+        np.testing.assert_array_equal(
+            belief.updater.transition_fn(state, action),
+            restored.updater.transition_fn(state, action),
+        )
+        if updater_type is GaussianBeliefUpdaterType.EKF:
+            # Only the EKF carries a Jacobian; the UKF samples sigma points.
+            assert isinstance(belief.updater, ExtendedKalmanFilterUpdater)
+            assert isinstance(restored.updater, ExtendedKalmanFilterUpdater)
+            np.testing.assert_array_equal(
+                belief.updater.transition_jacobian(state, action),
+                restored.updater.transition_jacobian(state, action),
+            )
