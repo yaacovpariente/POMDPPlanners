@@ -44,9 +44,6 @@ from typing import TYPE_CHECKING, Any, Tuple
 import numpy as np
 
 from POMDPPlanners.core.belief.belief_utils import get_initial_belief
-from POMDPPlanners.core.belief.running_episode_conditioning import (
-    condition_log_weights_on_a_running_episode,
-)
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
@@ -121,7 +118,6 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.state_size = int(env.state_size)
         self.observation_size = int(env.observation_size)
         self.robot_block = ROBOT_FIELD_WIDTH * self.num_robots
-        self.is_all_robots_disabled_terminal = bool(env.is_all_robots_disabled_terminal)
 
         self.obstacle_mask = np.asarray(env.obstacle_mask, dtype=bool)
         self._action_table = np.asarray(
@@ -268,46 +264,12 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             return np.full(states.shape[0], -np.inf, dtype=np.float64)
         return np.where(impossible, -np.inf, scores)
 
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> np.ndarray:
-        """Which particles the robots being asked to act again have ruled out.
-
-        This environment needs the conditioning because "the fire is out" is
-        terminal *and* invisible. A robot sees only the cells inside its
-        sensing radius; every other cell reports ``UNKNOWN``, so a reading
-        taken while three cells burn out of sight is identical to one taken
-        over a grid that is already cold. Burnt and wet cells never re-ignite,
-        so a particle whose last alight cell goes out can never come back, and
-        :meth:`cell_log_likelihood` has nothing to contradict it with. Measured
-        over random episodes on the pinned environment, up to 1.0000 of the
-        belief's weight sat on "the fire is out" while it was still burning,
-        and once there it stayed for the rest of the episode.
-
-        The step limit is deliberately left out. Every particle carries the
-        same counter, so it rules out all of them or none, and a factor
-        identical across particles cancels in the posterior; conditioning on it
-        would empty the belief on the final step for nothing.
-
-        Args:
-            next_particles: ``(N, state_size)`` transitioned particles.
-
-        Returns:
-            A boolean mask over ``next_particles``.
-        """
-        fire = self.fire_maps(next_particles).reshape(len(next_particles), -1)
-        alight = (fire == int(FireCategory.SMOLDERING)) | (fire == int(FireCategory.BURNING))
-        ruled_out = ~np.any(alight, axis=1)
-        if self.is_all_robots_disabled_terminal:
-            health = self.robot_block_view(next_particles)[:, :, 3]
-            ruled_out = ruled_out | ~np.any(health > 0, axis=1)
-        return ruled_out
-
     @property
     def config_id(self) -> str:
         """Return a deterministic identifier for this updater configuration."""
         return config_to_id(
             {
                 "class": "FirefightingVectorizedUpdater",
-                "is_all_robots_disabled_terminal": self.is_all_robots_disabled_terminal,
                 "num_rows": self.num_rows,
                 "num_cols": self.num_cols,
                 "num_robots": self.num_robots,
@@ -521,18 +483,12 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
             action: The joint action that was executed.
             observation: This step's reading.
             pomdp: Unused; the updater carries the rules.
-            state: Never read, so the true state cannot leak into the belief.
-                Its *presence* is read: only the episode driver passes it, and
-                that is what makes this a real filter step rather than a
-                planner's hypothetical, which is the difference between the
-                episode having continued being evidence and its being one of
-                the outcomes the search still has to weigh. See
-                :class:`VectorizedWeightedParticleBelief`.
+            state: Ignored, so the true state cannot leak into the belief.
 
         Returns:
             The posterior belief.
         """
-        del pomdp
+        del pomdp, state
         updater: FirefightingVectorizedUpdater = self.updater
         values = np.asarray(observation, dtype=np.float64).ravel()
         next_particles = updater.batch_transition(self.particles, action)
@@ -545,16 +501,6 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
         else:
             log_likelihoods = updater.batch_observation_log_likelihood(
                 next_particles, action, values
-            )
-
-        if state is not None:
-            # Conditioned on the likelihoods rather than on the posterior: the
-            # stratified update below carries a wind value forward untouched
-            # when all of its particles score zero, so a stratum whose every
-            # particle had gone cold would otherwise keep its full weight and
-            # the conditioning would be undone one stratum at a time.
-            log_likelihoods, _ = condition_log_weights_on_a_running_episode(
-                log_likelihoods, updater.ruled_out_by_a_running_episode(next_particles)
             )
 
         particles, log_weights = self._stratified_update(next_particles, log_likelihoods)
