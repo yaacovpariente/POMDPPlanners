@@ -40,9 +40,6 @@ from POMDPPlanners.core.belief.particle_beliefs import (
     WeightedParticleBelief,
     WeightedParticleBeliefReinvigoration,
 )
-from POMDPPlanners.core.belief.running_episode_conditioning import (
-    condition_log_weights_on_a_running_episode,
-)
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
     IMPOSSIBLE_LOG_PROBABILITY,
@@ -65,9 +62,7 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema
     OBSERVED_RADAR_REPORTED,
     OBSERVED_RADAR_ROWS,
     SHIP_COLUMN_INDEX,
-    SHIP_HIT_INDEX,
     chicken_slots,
-    ruled_out_by_a_running_episode,
 )
 from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensors import (
     camera_sees,
@@ -130,67 +125,6 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
         self.num_columns = int(num_columns)
         self.num_rows = int(num_rows)
         self.dive_probability = float(dive_probability)
-        # Set for the length of one execution-time update, and read by
-        # reinvigorate(), whose signature the base class fixes and so cannot
-        # carry it. False for every belief a planner builds.
-        self._episode_is_running = False
-
-    def update(
-        self,
-        action: Any,
-        observation: Any,
-        pomdp: Environment,
-        state: Optional[Any] = None,
-    ) -> "WeightedParticleBelief":
-        """Reweight by the reading, then by the fact that the episode continued.
-
-        The sensor likelihood cannot see the difference between a live world
-        and a lost one: the reading carries the ship's column and what the two
-        sensors found, and nothing else. A particle in which a chicken has
-        reached the ship therefore keeps whatever its flock's positions earn,
-        and keeps it forever, because a hit state is absorbing -- the flag
-        never clears and the chicken that set it stays parked on row 0. The
-        ship being asked for another action is the missing evidence.
-
-        Args:
-            action: The action just taken.
-            observation: This step's reading.
-            pomdp: The environment.
-            state: Never read, so the true state cannot leak into the belief.
-                Its *presence* is read: only the episode driver passes it, and
-                only then is the episode's continuation evidence. Inside a
-                planner's tree the ship's destruction is an outcome the search
-                has to be able to reach, so nothing is conditioned there.
-
-        Returns:
-            The updated belief.
-        """
-        self._episode_is_running = state is not None
-        try:
-            return super().update(action=action, observation=observation, pomdp=pomdp, state=state)
-        finally:
-            self._episode_is_running = False
-
-    def _update_weights(self, action: Any, observation: Any, pomdp: Environment):
-        """Apply the sensor likelihood, then the running-episode conditioning.
-
-        Args:
-            action: The action just taken.
-            observation: This step's reading.
-            pomdp: The environment.
-
-        Returns:
-            ``(next particles, next log-weights)``, as the base class defines.
-        """
-        next_particles, next_log_weights = super()._update_weights(
-            action=action, observation=observation, pomdp=pomdp
-        )
-        if self._episode_is_running:
-            next_log_weights, _ = condition_log_weights_on_a_running_episode(
-                next_log_weights,
-                ruled_out_by_a_running_episode(next_particles, self.num_chickens),
-            )
-        return next_particles, next_log_weights
 
     @property
     def config_id(self) -> str:
@@ -274,12 +208,6 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
         if self._every_particle_contradicts(particles, observation, pomdp):
             for particle in particles:
                 self._rebuild_from_reading(particle, observation, pomdp)
-                if self._episode_is_running:
-                    # The rebuild re-seats the flock but carries the ship-hit
-                    # flag forward, and it hands every particle the same weight
-                    # -- so without this the rebuild would reinstate, at full
-                    # weight, the very hypothesis the step just ruled out.
-                    self._revive(particle, pomdp)
             return self._successor(particles, self._uniform_log_weights(len(particles)), belief)
 
         count = int(round(self.reinvigoration_fraction * len(particles)))
@@ -291,29 +219,6 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
                 self._refresh(particles[int(index)], untouched)
         return self._successor(
             particles, np.array(belief.log_weights, dtype=np.float64, copy=True), belief
-        )
-
-    def _revive(self, particle: np.ndarray, pomdp: Environment) -> None:
-        """Undo, in place, whatever made a rebuilt particle terminal.
-
-        The step being taken says the ship was not destroyed and the flock was
-        not cleared, so a rebuilt particle must claim neither. The hit flag is
-        cleared, and a particle whose every slot is dead has one brought back,
-        seated out of reach of both sensors so it does not contradict their
-        silence.
-
-        Args:
-            particle: One rebuilt particle, modified in place.
-            pomdp: The environment, read for its sensor geometry.
-        """
-        particle[SHIP_HIT_INDEX] = 0.0
-        flock = chicken_slots(particle, self.num_chickens)
-        if np.any(flock[:, CHICKEN_ALIVE] > 0.0):
-            return
-        revived = int(np.random.randint(self.num_chickens))
-        flock[revived, CHICKEN_ALIVE] = 1.0
-        self._seat_out_of_reach(
-            flock[revived], int(round(float(particle[SHIP_COLUMN_INDEX]))), pomdp
         )
 
     @staticmethod
@@ -366,17 +271,8 @@ class ChicheckInvadersBelief(WeightedParticleBeliefReinvigoration):
         """
         if not isinstance(pomdp, ChicheckInvadersPOMDP) or not particles:
             return False
-        admissible = np.ones(len(particles), dtype=bool)
-        if self._episode_is_running:
-            admissible = ~ruled_out_by_a_running_episode(
-                np.asarray(particles, dtype=np.float64), self.num_chickens
-            )
-            if not np.any(admissible):
-                return True
-        scores = np.asarray(
-            pomdp.observation_log_probability_per_state(particles, None, observation)
-        )
-        return bool(np.all(scores[admissible] <= IMPOSSIBLE_LOG_PROBABILITY))
+        scores = pomdp.observation_log_probability_per_state(particles, None, observation)
+        return bool(np.all(np.asarray(scores) <= IMPOSSIBLE_LOG_PROBABILITY))
 
     def _rebuild_from_reading(
         self, particle: np.ndarray, observation: Any, pomdp: Environment

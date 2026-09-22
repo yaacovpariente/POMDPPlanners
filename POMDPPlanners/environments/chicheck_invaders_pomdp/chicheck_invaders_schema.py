@@ -146,38 +146,6 @@ def chicken_slots(state: np.ndarray, num_chickens: int) -> np.ndarray:
     return state[SHIP_WIDTH:stop].reshape(int(num_chickens), CHICKEN_WIDTH)
 
 
-def ruled_out_by_a_running_episode(particles: np.ndarray, num_chickens: int) -> np.ndarray:
-    """Which particles the ship being asked to act again has ruled out.
-
-    The two ways :meth:`ChicheckInvadersPOMDP.is_terminal` can be true of one
-    particle and false of another: the ship has been hit, or the flock has been
-    cleared. Both are absorbing and neither is named anywhere in a reading, so
-    the sensor likelihood can never remove such a particle -- which is what
-    lets them accumulate until the belief is certain the episode is over while
-    it runs on.
-
-    The step limit is deliberately not here. Every particle carries the same
-    counter, so it rules out all of them or none, and a factor identical across
-    particles cancels in the posterior; conditioning on it would empty the
-    belief on the final step for nothing.
-
-    Lives beside the layout constants it reads because both the scalar and the
-    vectorized belief need it, and two copies of this rule would drift.
-
-    Args:
-        particles: ``(N, state_size)`` particles.
-        num_chickens: Number of chicken slots per particle.
-
-    Returns:
-        A boolean mask over ``particles``.
-    """
-    values = np.asarray(particles, dtype=np.float64)
-    if values.ndim != 2:
-        return np.zeros(len(particles), dtype=bool)
-    alive = values[:, SHIP_WIDTH + CHICKEN_ALIVE :: CHICKEN_WIDTH][:, :num_chickens]
-    return (values[:, SHIP_HIT_INDEX] > 0.0) | ~np.any(alive > 0.0, axis=1)
-
-
 def make_state(
     num_chickens: int,
     ship_column: int,

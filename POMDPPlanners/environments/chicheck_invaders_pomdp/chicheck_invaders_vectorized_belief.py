@@ -41,9 +41,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from POMDPPlanners.core.belief.running_episode_conditioning import (
-    condition_log_weights_on_a_running_episode,
-)
 from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
     VectorizedParticleBeliefUpdater,
 )
@@ -77,7 +74,6 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema
     SHIP_HIT_INDEX,
     SHIP_WIDTH,
     STEP_INDEX,
-    ruled_out_by_a_running_episode,
 )
 from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensors import (
     camera_sees,
@@ -283,35 +279,6 @@ class ChicheckInvadersVectorizedUpdater(VectorizedParticleBeliefUpdater):
         total = total + self._camera_log_factor(slots, camera, offsets).sum(axis=1)
         total = total + self._radar_log_factor(slots, radar, rows, modes).sum(axis=1)
         return np.where(total <= IMPOSSIBLE_LOG_PROBABILITY, IMPOSSIBLE_LOG_PROBABILITY, total)
-
-    def ruled_out_by_a_running_episode(self, next_particles: np.ndarray) -> np.ndarray:
-        """Which particles the ship being asked to act again has ruled out.
-
-        Nothing in the reading names the ship-hit flag: it carries the ship's
-        column and what the two sensors found, and that is all. So the sensor
-        likelihood cannot tell a live world from a lost one, and a hit state is
-        absorbing -- the flag never clears and the chicken that set it parks on
-        row 0 -- so a particle that drifts in is never removed and never moves
-        again. Measured over the golden action sequence, the belief went
-        entirely certain the ship was already destroyed in 8 of 20 seeds at 60
-        particles, 5 of 20 at 400 and 3 of 20 at 2000, while the real episode
-        ran on.
-
-        A cleared flock is ruled out for the same reason and by the same
-        evidence: it too ends the episode, and it too varies between particles.
-
-        The step limit is deliberately left out. Every particle carries the
-        same counter, so it rules out all of them or none, and a factor
-        identical across particles cancels in the posterior; flooring on it
-        would empty the belief on the final step for nothing.
-
-        Args:
-            next_particles: ``(N, state_size)`` transitioned particles.
-
-        Returns:
-            A boolean mask over ``next_particles``.
-        """
-        return ruled_out_by_a_running_episode(next_particles, self.num_chickens)
 
     @property
     def config_id(self) -> str:
@@ -567,46 +534,25 @@ class ChicheckInvadersVectorizedBelief(VectorizedWeightedParticleBelief):
             observation: This step's reading.
             pomdp: Unused; the updater carries the observation mode and the
                 sensor model.
-            state: Never read, so the true state cannot leak into the belief.
-                Its *presence* is read: only the episode driver passes it, and
-                that is what separates a real filter step -- where the ship
-                being asked to act again is evidence it was not destroyed --
-                from a planner's hypothetical, where the ship's destruction is
-                one of the outcomes the search still has to be able to reach.
-                See :class:`VectorizedWeightedParticleBelief`.
+            state: Ignored, so the true state cannot leak into the belief.
 
         Returns:
             The posterior belief, of this class, so the refresh repeats next
             step.
         """
-        del pomdp
+        del pomdp, state
         reading = np.asarray(observation, dtype=np.float64).ravel()
         next_particles = self.updater.batch_transition(self.particles, action)
         log_likelihoods = self.updater.batch_observation_log_likelihood(
             next_particles, action, reading
         )
-        ruled_out = np.zeros(len(next_particles), dtype=bool)
-        if state is not None:
-            ruled_out = self.updater.ruled_out_by_a_running_episode(next_particles)
-            # Folded into the likelihoods, not just the weights: _reinvigorate
-            # reads them to decide whether the population needs rebuilding, and
-            # a particle the running episode has ruled out must not count as
-            # one that can still explain the reading.
-            log_likelihoods, _ = condition_log_weights_on_a_running_episode(
-                log_likelihoods, ruled_out
-            )
         next_log_weights = self.log_weights + log_likelihoods
 
         if self.resampling:
             next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
 
         particles, log_weights = self._reinvigorate(
-            next_particles,
-            next_log_weights,
-            log_likelihoods,
-            reading,
-            ruled_out,
-            state is not None,
+            next_particles, next_log_weights, log_likelihoods, reading
         )
         return ChicheckInvadersVectorizedBelief(
             particles=particles,
@@ -627,61 +573,26 @@ class ChicheckInvadersVectorizedBelief(VectorizedWeightedParticleBelief):
         log_weights: np.ndarray,
         log_likelihoods: np.ndarray,
         reading: np.ndarray,
-        ruled_out: np.ndarray,
-        episode_is_running: bool,
     ) -> tuple:
         """Collapse onto the truth, rebuild after a wipe-out, or re-draw a few.
 
         Three cases, in order of how much of the belief they replace. A fully
         observable episode is a point mass on what was observed. A step where
-        the particles carry nothing left to resample rebuilds the flock from
-        the reading. Every other step re-draws the unreported chickens of a
-        small fraction of the particles.
-
-        There are two ways to carry nothing left to resample, and both land in
-        the rebuild. The reading may be impossible under every particle. Or the
-        running episode may have ruled every particle out -- the conditioning
-        cannot floor those, because flooring them all leaves a belief supported
-        on nothing, so it stands aside and the rebuild takes over instead.
-
-        Either way, on a real step of the episode the rebuilt particles are
-        revived. The rebuild re-seats the flock but carries the ship-hit flag
-        forward, and it hands every particle the same uniform weight -- so a
-        rebuild that kept the flag would reinstate the very hypothesis the
-        conditioning had just floored, at full weight. That is where the
-        conditioning alone left up to 0.8167 of the belief on terminal
-        particles at 60 particles.
-
-        Args:
-            particles: The transitioned particles.
-            log_weights: Their log-weights.
-            log_likelihoods: This step's conditioned log-likelihoods.
-            reading: This step's observation.
-            ruled_out: Mask of the particles the running episode ruled out.
-            episode_is_running: Whether this is a real step of the episode
-                rather than a planner's hypothetical. Only then may a rebuilt
-                particle be revived; inside a search the ship's destruction is
-                an outcome the tree has to be able to reach.
-
-        Returns:
-            ``(particles, log_weights)``.
+        the reading is impossible under every particle rebuilds the flock from
+        the reading, because the particles carry nothing left to resample. Every
+        other step re-draws the unreported chickens of a small fraction of the
+        particles.
         """
         updater: ChicheckInvadersVectorizedUpdater = self.updater
         count = len(particles)
         if updater.observation_mode is ObservationMode.FULL:
             return np.tile(reading, (count, 1)), _uniform_log_weights(count)
 
-        if ruled_out.all() or np.all(log_likelihoods <= IMPOSSIBLE_LOG_PROBABILITY):
+        if np.all(log_likelihoods <= IMPOSSIBLE_LOG_PROBABILITY):
             # A normalised weight vector looks identical whether every particle
             # was plausible or every particle was impossible, so this is checked
-            # rather than inferred from the weights. A population the running
-            # episode has emptied is checked separately, because the
-            # conditioning leaves those likelihoods untouched: it refuses to
-            # floor every particle, so nothing in the weights records it.
-            rebuilt = self._rebuild_from_reading(particles, reading)
-            if episode_is_running:
-                self._revive(rebuilt)
-            return rebuilt, _uniform_log_weights(count)
+            # rather than inferred from the weights.
+            return self._rebuild_from_reading(particles, reading), _uniform_log_weights(count)
 
         reported = _reported_slots(reading, updater)
         chosen_count = int(round(self.reinvigoration_fraction * count))
@@ -718,35 +629,6 @@ class ChicheckInvadersVectorizedBelief(VectorizedWeightedParticleBelief):
             flock[:, :, CHICKEN_MODE],
         )
         particles[chosen, SHIP_WIDTH:] = flock.reshape(len(chosen), -1)
-
-    def _revive(self, particles: np.ndarray) -> None:
-        """Undo, in place, whatever made a rebuilt particle terminal.
-
-        The rebuild re-seats the flock but carries the ship-hit flag forward,
-        and it leaves a slot the particle believes dead dead -- so a population
-        rebuilt because the running episode ruled it out would still read as
-        "the ship is already destroyed" and the repair would do nothing. The
-        step being taken says otherwise on both counts: the flag is cleared,
-        and a particle whose every slot is dead has one brought back, out of
-        reach of both sensors so it does not contradict their silence.
-
-        Args:
-            particles: ``(N, state_size)`` rebuilt particles, modified in place.
-        """
-        updater: ChicheckInvadersVectorizedUpdater = self.updater
-        particles[:, SHIP_HIT_INDEX] = 0.0
-
-        flock = updater.flock_view(particles)
-        empty = np.flatnonzero(~np.any(flock[:, :, CHICKEN_ALIVE] > 0.0, axis=1))
-        if not empty.size:
-            return
-        ships = np.rint(particles[:, SHIP_COLUMN_INDEX])
-        hidden_columns, hidden_rows = self._hidden_cells(ships, flock.shape[:2])
-        slot = np.random.randint(0, updater.num_chickens, size=empty.size)
-        flock[empty, slot, CHICKEN_ALIVE] = 1.0
-        flock[empty, slot, CHICKEN_COLUMN] = hidden_columns[empty, slot]
-        flock[empty, slot, CHICKEN_ROW] = hidden_rows[empty, slot]
-        particles[:, SHIP_WIDTH:] = flock.reshape(len(particles), -1)
 
     def _rebuild_from_reading(self, particles: np.ndarray, reading: np.ndarray) -> np.ndarray:
         """Re-seat every particle's flock so it could have produced the reading.
