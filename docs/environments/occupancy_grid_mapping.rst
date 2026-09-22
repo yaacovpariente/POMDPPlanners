@@ -367,14 +367,16 @@ fraction. ``average_obstacle_collisions`` counts blocked moves;
 ``average_successful_translations`` counts successful moves, including revisits.
 It is not a unique-cell count.
 
-.. image:: ../images/occupancy_grid_mapping_visualization.gif
-   :alt: Observed map, the weighted map estimate, and the true map with the robot pose.
-   :width: 100%
+.. episode-viewer:: traces/occupancy_grid_mapping.json
 
-The left panel shows the observation-derived inverse map. The middle shows
-weighted occupancy marginals over whole-map particles. The right shows the
-hidden true map for review. Panels depict the state before the captioned action;
-the caption's reward is the realised inverse-map entropy reduction.
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its left
+panel shows the observation-derived inverse map. The middle shows weighted
+occupancy marginals over whole-map particles. The right shows the hidden true
+map for review. Panels depict the state before the captioned action; the
+caption's reward is the realised inverse-map entropy reduction.
 
 There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
 uses the environment and the whole-map filters shown above. Sensor contract

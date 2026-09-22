@@ -1,9 +1,10 @@
 RockSample
 ==========
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/rock_sample_visualization.gif
-   :alt: A robot crossing the RockSample grid, checking and sampling rocks.
-   :width: 480px
+.. episode-viewer:: traces/rock_sample.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 A robot on a grid must sample the good rocks and skip the bad ones, then leave
 by walking east off the right-hand edge. Whether a rock is good is hidden; a

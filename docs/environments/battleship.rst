@@ -122,28 +122,30 @@ by the exact belief.
 Hitting the runner's step limit first is a timeout, recorded separately from
 completion.
 
-Recorded visualization
-----------------------
+Episode replay
+--------------
 
-.. image:: ../artifacts/battleship_redesign/review.gif
-   :alt: Three Battleship boards showing previous probes, belief occupancy probabilities, and the hidden fleet for review.
-   :width: 100%
+.. episode-viewer:: traces/battleship.json
 
-The left board shows prior probes: crosses mark hits, dots mark misses, and
-pale cells are unprobed. The amber ring marks the current action. The center
-board shows recorded belief probabilities on a fixed 0–100% scale. Gray cells
-with dashes mean belief data is unavailable. The right board shows the hidden
-fleet for human review; the policy does not receive this view. Each ship shape
-marks one occupied cell, without assigning ship identities.
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+Runs also write a GIF of each episode through ``cache_visualization``. Its left
+board shows prior probes: crosses mark hits, dots mark misses, and pale cells
+are unprobed. The amber ring marks the current action. The center board shows
+recorded belief probabilities on a fixed 0–100% scale. Gray cells with dashes
+mean belief data is unavailable. The right board shows the hidden fleet for
+human review; the policy does not receive this view. Each ship shape marks one
+occupied cell, without assigning ship identities.
 
 Boards show the state before the displayed action. The caption reports that
 action's observation and reward separately. The final record has no action
 ring and says “Final recorded state”; that label alone does not mean the fleet
 was sunk. Frames last 1.4 seconds, with 2.4 seconds for the final record.
 
-This approved package-generated GIF replays 11 records from the seed-7 renderer
-fixture, using real transitions and belief updates. It demonstrates the
-renderer, not planner performance. The
+The approved :download:`review GIF <../artifacts/battleship_redesign/review.gif>`
+of that renderer replays 11 records from the seed-7 renderer fixture, using
+real transitions and belief updates. The
 :download:`contact sheet <../artifacts/battleship_redesign/contact-sheet.png>`
 shows six decoded frames. See the
 :download:`asset provenance <../artifacts/battleship_redesign/README.md>`

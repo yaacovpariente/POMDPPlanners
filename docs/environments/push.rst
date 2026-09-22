@@ -1,9 +1,10 @@
 Push
 ====
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/push_visualization.gif
-   :alt: A robot manoeuvring around a block to push it towards the target corner.
-   :width: 480px
+.. episode-viewer:: traces/push.json
+
+   ``PushPOMDP``: one real episode planned by PFT-DPW, replayed in 3D. Drag to
+   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 A robot moves around a square arena and pushes an object towards a fixed target
 corner. Only the object's position is observed noisily; the robot always knows
@@ -18,9 +19,10 @@ Two variants:
   <POMDPPlanners.environments.push_pomdp.continuous_push_pomdp.ContinuousPushPOMDP>`
   — a circular robot and free 2-D displacement actions, with square obstacles.
 
-.. image:: ../../POMDPPlanners/tests/test_environments/golden_visualizations/continuous_push_visualization.gif
-   :alt: The continuous Push variant, with a circular robot and square obstacles.
-   :width: 480px
+.. episode-viewer:: traces/continuous_push.json
+
+   ``ContinuousPushPOMDP``: the same, in the continuous world. Drag to orbit,
+   scroll to zoom, and use the bar to play, scrub and switch camera.
 
 .. note::
 
