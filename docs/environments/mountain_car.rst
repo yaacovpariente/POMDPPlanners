@@ -22,26 +22,37 @@ What the agent sees and does
 - **Actions** (discrete) — ``-1``, ``0``, ``1``.
 - **Observations** (continuous) — noisy ``[position, velocity]``, standard
   deviations 0.1 and 0.01.
-- **Rewards** — ``-1.0`` per step, ``0.0`` once ``position >= 0.5``.
-  ``reward_range`` is ``(-1.0, 0.0)``; the episode ends at the goal. It reports
-  a ``goal_reaching_rate`` metric.
 
 Formal definition
 -----------------
 
-Write the state as :math:`s = (p, v)`.
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`. Write the state as :math:`s = (p, v)`.
+
+**State space**
 
 .. math::
 
-   S = [-1.2,\, 0.6] \times [-0.07,\, 0.07], \qquad
-   A = \{-1, 0, 1\}, \qquad \Omega = \mathbb{R}^2
+   S = [-1.2,\, 0.6] \times [-0.07,\, 0.07]
+
+**Action space**
+
+.. math::
+
+   A = \{-1, 0, 1\}
+
+**Observation space**
+
+.. math::
+
+   \Omega = \mathbb{R}^2
 
 **Transition model.** The deterministic part is the standard Mountain Car
-map, with power :math:`\rho = 0.001` and gravity :math:`g = 0.0025`:
+map, with power :math:`k = 0.001` and gravity :math:`g = 0.0025`:
 
 .. math::
 
-   \tilde{v} &= \mathrm{clip}\big(v + a\rho - g\cos(3p),\; -0.07,\; 0.07\big) \\
+   \tilde{v} &= \mathrm{clip}\big(v + ak - g\cos(3p),\; -0.07,\; 0.07\big) \\
    \tilde{p} &= \mathrm{clip}(p + \tilde{v},\; -1.2,\; 0.6) \\
    f(s, a) &= \begin{cases}
      (\tilde{p},\, 0) & \tilde{p} = -1.2 \text{ and } \tilde{v} < 0 \\
@@ -50,12 +61,12 @@ map, with power :math:`\rho = 0.001` and gravity :math:`g = 0.0025`:
 
 The left wall is inelastic: hitting it zeroes the velocity. Gaussian process
 noise is then added and the result projected back into :math:`S` by the same
-clipping rule :math:`\Pi`:
+clipping rule :math:`\mathrm{proj}`:
 
 .. math::
 
-   s' = \Pi\big(f(s, a) + \varepsilon\big), \qquad
-   \varepsilon \sim \mathcal{N}(0, \Sigma_T), \qquad
+   s' = \mathrm{proj}\big(f(s, a) + w\big), \qquad
+   w \sim \mathcal{N}(0, \Sigma_T), \qquad
    \Sigma_T = \mathrm{diag}(2.5 \times 10^{-5},\; 10^{-6})
 
 :math:`\Sigma_T` is the ``state_transition_cov`` constructor argument.
@@ -90,7 +101,7 @@ velocity exactly zero:
 
 .. math::
 
-   b_0 = \mathrm{Unif}([-0.6,\, -0.4]) \otimes \delta_0
+   b_0:\quad p \sim \mathrm{Unif}([-0.6,\, -0.4]), \qquad v = 0
 
 with the initial observation reported as :math:`(0, 0)` rather than sampled
 from :math:`O`.
@@ -98,6 +109,24 @@ from :math:`O`.
 **Discount.** :math:`\gamma` = ``discount_factor``, required.
 
 **Terminal set.** :math:`S_T = \{(p, v) \in S : p \geq 0.5\}`.
+
+Rewards
+-------
+
+======================  =========
+Event                   Reward
+======================  =========
+Step before the goal    -1.0
+Step at the goal        0.0
+======================  =========
+
+The goal is ``position >= 0.5``. ``reward_range`` is ``(-1.0, 0.0)``, and the
+episode ends at the goal.
+
+Metrics
+-------
+
+It reports a ``goal_reaching_rate`` metric.
 
 Minimal example
 ---------------

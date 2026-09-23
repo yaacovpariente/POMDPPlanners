@@ -1,6 +1,26 @@
 Maze
 ====
 
+**DiscreteMazePOMDP** — a generated maze, one-cell moves.
+
+.. episode-viewer:: traces/discrete_maze.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+**ContinuousMazePOMDP** — the same maze, with bounded displacements.
+
+.. episode-viewer:: traces/continuous_maze.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+**TMazePOMDP** — a T-shaped corridor.
+
+.. episode-viewer:: traces/t_maze.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
 
 These three environments test memory of a noisy, single-use cue. The map is
 known and movement is deterministic; only the rewarding goal side is hidden.
@@ -8,18 +28,32 @@ Entering either goal ends the episode, but only the correct goal counts as
 success. The cue names that side with probability ``cue_accuracy``; later
 observations are ``empty``.
 
+What the agent sees and does
+----------------------------
+
+- **State** — a ``float64`` array ``[x, y, goal, cue_phase]``: the position,
+  the goal side (``0.0`` left, ``1.0`` right) and the cue phase (``0.0``
+  unseen, ``1.0`` emitting, ``2.0`` consumed). ``x`` and ``y`` are integer
+  cells in the discrete variants and real numbers in the continuous one.
+- **Actions** — discrete ``"up"``, ``"down"``, ``"left"``, ``"right"`` for
+  ``DiscreteMazePOMDP`` and ``TMazePOMDP``; continuous ``[dx, dy]``, at most
+  ``max_step_size`` long, for ``ContinuousMazePOMDP``.
+- **Observations** (discrete) — ``"left_cue"``, ``"right_cue"``, ``"empty"``.
+  Only the step that crosses the cue cell can return a cue.
+
 Formal definition
 -----------------
 
-All three share one model and differ only in :math:`A` and how a move is
-resolved. Let :math:`G` be the walkable cells, :math:`\chi \in G` the cue
-cell, and :math:`\gamma_L, \gamma_R \in G` the two goal cells.
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`. All three variants share one model and differ only in :math:`A` and
+how a move is resolved. Let :math:`G` be the walkable cells, :math:`c \in G`
+the cue cell, and :math:`g_L, g_R \in G` the two goal cells.
 
 **State space.** Position, the hidden goal side, and the cue's delivery phase:
 
 .. math::
 
-   s = (x,\; y,\; \mathrm{side},\; \varphi)
+   s = (x,\; y,\; \mathrm{side},\; \mathrm{phase})
 
 .. math::
 
@@ -28,7 +62,7 @@ cell, and :math:`\gamma_L, \gamma_R \in G` the two goal cells.
 
 with :math:`\mathcal{P} = G` for the discrete variants and
 :math:`\mathcal{P} \subseteq \mathbb{R}^2` the walkable region for the
-continuous one. Carrying :math:`\varphi` *in the state* rather than as a flag
+continuous one. Carrying :math:`\mathrm{phase}` *in the state* rather than as a flag
 on the environment object is what keeps the problem Markov: a planner
 resamples transitions from arbitrary states out of order, and an episode flag
 living on ``self`` would be written by the search as well as by the world.
@@ -45,6 +79,12 @@ living on ``self`` would be written by the search as well as by the world.
    \end{cases}
 
 A longer displacement is rescaled to the cap rather than rejected.
+
+**Observation space**
+
+.. math::
+
+   \Omega = \{\textsf{left\_cue},\; \textsf{right\_cue},\; \textsf{empty}\}
 
 **Transition model.** Deterministic, and a goal is absorbing:
 
@@ -70,40 +110,36 @@ wall refused:
 
 .. math::
 
-   \varphi' = \begin{cases}
-     \textsf{EMITTING} & \varphi = \textsf{UNSEEN}
-       \text{ and the step crosses } \chi \\
-     \textsf{CONSUMED} & \varphi = \textsf{EMITTING} \\
-     \varphi & \text{otherwise}
+   \mathrm{phase}' = \begin{cases}
+     \textsf{EMITTING} & \mathrm{phase} = \textsf{UNSEEN}
+       \text{ and the step crosses } c \\
+     \textsf{CONSUMED} & \mathrm{phase} = \textsf{EMITTING} \\
+     \mathrm{phase} & \text{otherwise}
    \end{cases}
 
 That middle branch is what makes the cue **single-use**: it is consumed by
 whatever action follows it, so standing still on the cue cell cannot re-read
 it and a revisit never yields a second reading.
 
-**Observation model.**
-
-.. math::
-
-   \Omega = \{\textsf{left\_cue},\; \textsf{right\_cue},\; \textsf{empty}\}
+**Observation model**
 
 .. math::
 
    O(\textsf{left\_cue} \mid s', \cdot) &= \begin{cases}
-     \alpha & \varphi' = \textsf{EMITTING},\ \mathrm{side} = \textsf{L} \\
-     1 - \alpha & \varphi' = \textsf{EMITTING},\ \mathrm{side} = \textsf{R} \\
-     0 & \varphi' \neq \textsf{EMITTING}
+     p_{\text{cue}} & \mathrm{phase}' = \textsf{EMITTING},\ \mathrm{side} = \textsf{L} \\
+     1 - p_{\text{cue}} & \mathrm{phase}' = \textsf{EMITTING},\ \mathrm{side} = \textsf{R} \\
+     0 & \mathrm{phase}' \neq \textsf{EMITTING}
    \end{cases} \\
-   O(\textsf{empty} \mid s', \cdot) &= \mathbb{1}[\varphi' \neq \textsf{EMITTING}]
+   O(\textsf{empty} \mid s', \cdot) &= \mathbb{1}[\mathrm{phase}' \neq \textsf{EMITTING}]
 
-with :math:`\alpha` = ``cue_accuracy`` :math:`\in [0.5, 1]`, and
+with :math:`p_{\text{cue}}` = ``cue_accuracy`` :math:`\in [0.5, 1]`, and
 :math:`\textsf{right\_cue}` mirrored. The action does not enter. There is
 deliberately **no** wall observation: three of the four actions bump into a
 wall almost everywhere on a corridor, so such a reading would leak position
 information the task is not about.
 
 Under the uniform prior, one :math:`\textsf{left\_cue}` at
-:math:`\alpha = 0.9` moves the belief to :math:`0.9 / 0.1`, and every
+:math:`p_{\text{cue}} = 0.9` moves the belief to :math:`0.9 / 0.1`, and every
 subsequent :math:`\textsf{empty}` leaves it exactly there. That flat stretch
 is the whole task: a planner that does not track a belief has nothing left to
 turn on when it reaches the junction.
@@ -115,7 +151,7 @@ than stacking with it, so no two terms ever add:
 
    R(s, a) = \begin{cases}
      0 & s \in S_T \\
-     +\texttt{goal\_reward} & \text{the step enters } \gamma_{\mathrm{side}} \\
+     +\texttt{goal\_reward} & \text{the step enters } g_{\mathrm{side}} \\
      -\texttt{wrong\_goal\_penalty} & \text{the step enters the other goal} \\
      -\texttt{step\_penalty} & \text{otherwise, wall collisions included}
    \end{cases}
@@ -140,10 +176,25 @@ reading here would hand the agent the answer before it had moved.
 
 .. math::
 
-   S_T = \{s : (x, y) \in \gamma_L \cup \gamma_R\}
+   S_T = \{s : (x, y) \in g_L \cup g_R\}
 
 Both are reported, separately: a planner that guesses wrong at the junction
 and one that never reaches it fail for opposite reasons.
+
+Rewards
+-------
+
+======================================  =========
+Event                                   Reward
+======================================  =========
+Step (including a wall collision)       -1.0
+Enter the correct goal                  +10.0
+Enter the wrong goal                    -10.0
+======================================  =========
+
+These are the defaults of ``step_penalty``, ``goal_reward`` and
+``wrong_goal_penalty``, the same in all three variants. ``reward_range`` is
+built from them, ``(-10.0, 10.0)`` by default.
 
 DiscreteMazePOMDP
 -----------------
@@ -153,12 +204,6 @@ four actions, ``up``, ``down``, ``left`` and ``right``, move one cell; a wall
 blocks the move. ``maze_width``, ``maze_height``, ``maze_seed`` and
 ``loop_fraction`` control the layout.
 
-.. episode-viewer:: traces/discrete_maze.json
-
-   ``DiscreteMazePOMDP``: one real episode planned by PFT-DPW, replayed in 3D.
-   Drag to orbit, scroll to zoom, and use the bar to play, scrub and switch
-   camera.
-
 ContinuousMazePOMDP
 -------------------
 
@@ -167,10 +212,13 @@ ContinuousMazePOMDP
 the whole movement path. With the same layout settings as DiscreteMazePOMDP,
 it uses the same maze geometry.
 
-.. episode-viewer:: traces/continuous_maze.json
+TMazePOMDP
+----------
 
-   ``ContinuousMazePOMDP``: the same, with bounded displacements. Drag to
-   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
+``TMazePOMDP`` uses a T-shaped corridor and the same four one-cell actions as
+the discrete maze. ``stem_length`` sets the distance to the junction and
+``arm_length`` sets the distance from the junction to each endpoint. The
+agent must remember the cue while walking up the stem, then choose an arm.
 
 Belief
 ------
@@ -188,19 +236,6 @@ the world refuses would be searching a different maze. The continuous updater's
 positions agree with the environment's to within its cell tolerance rather than
 bit for bit, because it stops a step at the tolerance-widened cell boundary the
 same code uses to decide membership.
-
-TMazePOMDP
-----------
-
-``TMazePOMDP`` uses a T-shaped corridor and the same four one-cell actions as
-the discrete maze. ``stem_length`` sets the distance to the junction and
-``arm_length`` sets the distance from the junction to each endpoint. The
-agent must remember the cue while walking up the stem, then choose an arm.
-
-.. episode-viewer:: traces/t_maze.json
-
-   ``TMazePOMDP``: one real episode planned by PFT-DPW, replayed in 3D. Drag to
-   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
 
 Create a visualization
 ----------------------
@@ -239,3 +274,11 @@ a terminal record, as supplied by the simulation workflow.
 
 The public ``MazeVisualizer`` import and legacy ``TMazeVisualizer`` alias are
 unchanged. The renderer isolates its style from the caller's matplotlib theme.
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.maze_pomdp.DiscreteMazePOMDP`
+- :class:`POMDPPlanners.environments.maze_pomdp.ContinuousMazePOMDP`
+- :class:`POMDPPlanners.environments.maze_pomdp.TMazePOMDP`
+- :doc:`index` — the full catalog.

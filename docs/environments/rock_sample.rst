@@ -7,12 +7,9 @@ RockSample
    to zoom, and use the bar to play, scrub and switch camera.
 
 A robot on a grid must sample the good rocks and skip the bad ones, then leave
-by walking east off the right-hand edge. Whether a rock is good is hidden; a
-long-range sensor answers, but its accuracy decays with distance as
-``(1 + 2 ** (-distance / sensor_efficiency)) / 2`` — the accuracy of Smith &
-Simmons, "Heuristic Search Value Iteration for POMDPs" (2004). It is ``1.0`` at
-the rock and falls towards ``0.5``, never below, so a check from far away tells
-you nothing rather than telling you the opposite of the truth.
+by walking east off the right-hand edge. Whether a rock is good is hidden. A
+long-range sensor answers, but it gets less accurate with distance: at the rock
+it is always right, and far away it is a coin flip, never worse.
 
 This is the standard long-horizon information-gathering benchmark. Getting a
 good score means walking *towards* a rock to make its reading trustworthy, which
@@ -35,8 +32,9 @@ What the agent sees and does
 Formal definition
 -----------------
 
-Fix a grid of :math:`M \times N` cells and rock positions :math:`\rho_1, \dots,
-\rho_R`. Write a state as :math:`s = (x, c)` with position :math:`x \in
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+Fix a grid of :math:`M \times N` cells and rock positions :math:`y_1, \dots,
+y_R`. Write a state as :math:`s = (x, c)` with position :math:`x \in
 \mathbb{Z}^2` and rock qualities :math:`c \in \{0, 1\}^R` (:math:`1` good).
 
 **State space.** The grid, the rock flags, and one absorbing exit state
@@ -84,64 +82,66 @@ with :math:`f(\top, a) = \top` and, for :math:`s = (x, c)` where
      \big((r,\, k+1),\; c\big) & \text{otherwise}
    \end{cases} \\
    f(s, 0) &= \big(x,\; c \text{ with } c_i \leftarrow 0
-     \text{ if } \rho_i = x\big) \\
+     \text{ if } y_i = x\big) \\
    f(s, a) &= s \qquad a \geq 5
 
 Sampling a rock consumes it: a good rock becomes bad, so sampling twice pays
 the penalty the second time. Check actions never move the robot.
 
 **Observation model.** Only a check returns information. For
-:math:`a = 5 + i`, let :math:`d = \lVert x' - \rho_i \rVert_2` be the Euclidean
-distance from the robot to rock :math:`i` and let :math:`\eta` be
-``sensor_efficiency``. The accuracy is the Smith & Simmons (2004) law
+:math:`a = 5 + i`, let :math:`d = \lVert x' - y_i \rVert_2` be the Euclidean
+distance from the robot to rock :math:`i` and let :math:`w` be
+``sensor_efficiency``. The accuracy is the law of Smith & Simmons,
+"Heuristic Search Value Iteration for POMDPs" (2004), in code
+``(1 + 2 ** (-distance / sensor_efficiency)) / 2``:
 
 .. math::
 
-   \alpha(d) = \tfrac{1}{2}\big(1 + 2^{-d/\eta}\big)
+   \mathrm{acc}(d) = \tfrac{1}{2}\big(1 + 2^{-d/w}\big)
 
-which is :math:`1` at the rock, :math:`0.75` at :math:`d = \eta`, and decays to
+which is :math:`1` at the rock, :math:`0.75` at :math:`d = w`, and decays to
 :math:`\tfrac{1}{2}` — never below it, so a distant check is uninformative
 rather than misleading. Then
 
 .. math::
 
    O(\textsf{good} \mid s', 5+i) &= \begin{cases}
-     \alpha(d) & c'_i = 1 \\ 1 - \alpha(d) & c'_i = 0 \end{cases} \\
+     \mathrm{acc}(d) & c'_i = 1 \\ 1 - \mathrm{acc}(d) & c'_i = 0 \end{cases} \\
    O(\textsf{bad} \mid s', 5+i) &= 1 - O(\textsf{good} \mid s', 5+i) \\
    O(\textsf{none} \mid s', a) &= 1 \qquad a < 5
 
 **Reward function.** Terms are **added**, evaluated on the pre-transition
 state :math:`s = (x, c)` except the hazard term, which uses the realised
-:math:`x'`. Write :math:`\sigma` for ``step_penalty``, :math:`g` for
-``good_rock_reward``, :math:`\beta` for ``bad_rock_penalty``, :math:`\varsigma`
+:math:`x'`. Write :math:`t` for ``step_penalty``, :math:`g` for
+``good_rock_reward``, :math:`\ell` for ``bad_rock_penalty``, :math:`u`
 for ``sensor_use_penalty`` and :math:`e` for ``exit_reward``:
 
 .. math::
 
-   R(s, a, s') = \sigma + \begin{cases}
+   R(s, a, s') = t + \begin{cases}
      e & a = 2,\; k = N-1 \\
-     g\,c_i + \beta(1 - c_i) & a = 0,\; x = \rho_i \\
-     \varsigma & a \geq 5 \\
+     g\,c_i + \ell(1 - c_i) & a = 0,\; x = y_i \\
+     u & a \geq 5 \\
      0 & \text{otherwise}
    \end{cases} \;+\; D(x')
 
-The exit term short-circuits: an exiting step pays :math:`\sigma + e` and no
+The exit term short-circuits: an exiting step pays :math:`t + e` and no
 hazard term. The hazard term :math:`D` is where the three
-``reward_model_type`` variants differ. Let :math:`\delta(x')` be the distance
-from :math:`x'` to the nearest hazard centre, :math:`\varrho` the
+``reward_model_type`` variants differ. Let :math:`\mathrm{dist}(x')` be the distance
+from :math:`x'` to the nearest hazard centre, :math:`\mathrm{rad}` the
 ``dangerous_area_radius``, :math:`P` the ``dangerous_area_penalty`` and
 :math:`q` the ``dangerous_area_hit_probability``:
 
 .. math::
 
-   D_{\text{constant}}(x') &= P \cdot \mathbb{1}[\delta(x') \leq \varrho]
+   D_{\text{constant}}(x') &= P \cdot \mathbb{1}[\mathrm{dist}(x') \leq \mathrm{rad}]
      \cdot \mathrm{Bern}(q) \\
    D_{\text{decayed}}(x') &= P \cdot
-     \mathrm{Bern}\big(e^{-\delta(x') / \lambda}\big) \\
+     \mathrm{Bern}\big(\exp\big(-\mathrm{dist}(x') / v\big)\big) \\
    D_{\text{shock}}(x') &= \pm |P| \text{ with probability } \tfrac{1}{2}
-     \text{ each}, \quad \delta(x') \leq \varrho
+     \text{ each}, \quad \mathrm{dist}(x') \leq \mathrm{rad}
 
-where :math:`\lambda` is ``penalty_decay``. The decayed variant has no radius
+where :math:`v` is ``penalty_decay``. The decayed variant has no radius
 cutoff — it draws on every step. The shock variant has zero mean and exists to
 separate risk-sensitive planners from risk-neutral ones, which cannot tell it
 from :math:`D \equiv 0`.

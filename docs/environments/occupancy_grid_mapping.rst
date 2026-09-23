@@ -1,28 +1,41 @@
 Occupancy grid mapping
 ======================
 
+.. episode-viewer:: traces/occupancy_grid_mapping.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
 ``OccupancyGridMappingPOMDP`` models a robot mapping a hidden static grid with
 known pose and noisy range scans. The default world is 10 by 10 cells with a
 boundary wall and three random rectangular obstacles. The robot starts at the
-centre, facing north. Actions are forward one cell, turn left and turn right.
-Integer pose is a design simplification; particle-based MCTS also supports
-continuous states.
+centre, facing north.
 
-.. code-block:: python
+The reward is the entropy removed from the robot's own map, so the planner has
+to choose where to drive to see the cells it is still unsure about. Integer
+pose is a design simplification; particle-based MCTS also supports continuous
+states.
 
-   from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
-       OccupancyGridMappingPOMDP,
-   )
-   from POMDPPlanners.utils.belief_factory import create_environment_belief
+What the agent sees and does
+----------------------------
 
-   env = OccupancyGridMappingPOMDP()
-   belief = create_environment_belief(env, n_particles=30)
+- **State** — a ``float64`` vector of length ``4 + 2 * num_cells + num_beams``
+  (228 at the defaults): step, row, column, heading, the hidden true
+  occupancy, the observation-derived map log-odds, and the last noisy scan.
+- **Actions** (discrete) — ``OccupancyGridAction``: ``FORWARD = 0`` moves one
+  cell along the heading; ``TURN_LEFT = 1`` and ``TURN_RIGHT = 2`` rotate 90
+  degrees in place.
+- **Observations** (continuous) — a ``float64`` vector
+  ``[row, column, heading, ranges...]`` of length ``3 + num_beams``. Pose is
+  exact and integer; the ``num_beams`` ranges (24 by default) are noisy, in
+  cells.
 
 Formal definition
 -----------------
 
-Let the grid have :math:`H` rows and :math:`W` columns, :math:`C = HW` cells,
-and :math:`K` = ``num_beams``.
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`. Let the grid have :math:`H` rows and :math:`W` columns,
+:math:`C = HW` cells, and :math:`K` = ``num_beams``.
 
 **State space.** The state is *augmented*: it carries the robot's own map
 estimate and the scan drawn this step, alongside the hidden world.
@@ -30,9 +43,9 @@ estimate and the scan drawn this step, alongside the hidden world.
 .. math::
 
    s = \big(\underbrace{t}_{\text{step}},\;
-   \underbrace{(r, c, \theta)}_{\text{pose}},\;
+   \underbrace{(r, c, d)}_{\text{pose}},\;
    \underbrace{m}_{\text{true map}},\;
-   \underbrace{\lambda}_{\text{log-odds}},\;
+   \underbrace{g}_{\text{log-odds}},\;
    \underbrace{z}_{\text{scan}}\big)
 
 .. math::
@@ -42,7 +55,7 @@ estimate and the scan drawn this step, alongside the hidden world.
    \{0,1\}^{C} \times [-L, L]^{C} \times \mathbb{R}^{K}
 
 of length :math:`4 + 2C + K`, with :math:`L` = ``log_odds_clamp``. The hidden
-part is :math:`m`; the robot's map :math:`\lambda` is a *statistic the agent
+part is :math:`m`; the robot's map :math:`g` is a *statistic the agent
 computed*, not a fact about the world, and is carried in the state only so the
 reward can be a function of it.
 
@@ -53,38 +66,45 @@ reward can be a function of it.
    A = \{\textsf{forward},\; \textsf{turn\_left},\; \textsf{turn\_right}\}
      = \{0, 1, 2\}
 
+**Observation space.** The exact pose and one range per beam:
+
+.. math::
+
+   \Omega = \{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}
+   \times \mathbb{R}^{K}
+
 **Transition model.** Three stages.
 
-*Motion.* Turning is deterministic, :math:`\theta' = (\theta \mp 1) \bmod 4`.
+*Motion.* Turning is deterministic, :math:`d' = (d \mp 1) \bmod 4`.
 A forward move into an occupied or out-of-bounds cell is blocked; an otherwise
 valid move fails with probability :math:`p_f` = ``move_failure_probability``:
 
 .. math::
 
-   \Pr[(r', c') = \mathrm{fwd}(r, c, \theta)] = 1 - p_f, \qquad
+   \Pr[(r', c') = \mathrm{fwd}(r, c, d)] = 1 - p_f, \qquad
    \Pr[(r', c') = (r, c)] = p_f
 
 The true map :math:`m` never changes.
 
 *Scan.* Ray-cast the :math:`K` beams of the fan from the new pose against
-:math:`m` to get noise-free ranges :math:`\rho_k`, then draw
+:math:`m` to get noise-free ranges :math:`\bar{z}_k`, then draw
 
 .. math::
 
-   z_k \sim \mathcal{N}(\rho_k, \sigma^2) \quad\text{or}\quad
-   \mathcal{N}_{\geq 0}(\rho_k, \sigma^2)
+   z_k \sim \mathcal{N}(\bar{z}_k, \sigma^2) \quad\text{or}\quad
+   \mathcal{N}_{\geq 0}(\bar{z}_k, \sigma^2)
 
 independently per beam, per ``range_noise_model``, with :math:`\sigma` =
 ``range_noise_std_cells``.
 
-*Map update.* The scan is folded into :math:`\lambda` by the inverse sensor
+*Map update.* The scan is folded into :math:`g` by the inverse sensor
 model. Under the default ``NearestCellLogOddsUpdateRule``, with
 :math:`\ell_{\text{occ}} = \operatorname{logit}(\texttt{hit\_probability})` and
 :math:`\ell_{\text{free}} = \operatorname{logit}(\texttt{miss\_probability})`:
 
 .. math::
 
-   \lambda'_j = \mathrm{clip}\Big(\lambda_j + \sum_{k=1}^{K}
+   g'_j = \mathrm{clip}\Big(g_j + \sum_{k=1}^{K}
    \big(\ell_{\text{occ}}\,\mathbb{1}[j = h_k]
    + \ell_{\text{free}}\,\mathbb{1}[j \prec h_k]\big)
    + \ell_{\text{free}}\,\mathbb{1}[j = (r', c')],\;
@@ -103,8 +123,8 @@ in :math:`s'`, the observation kernel is a point mass:
 
 .. math::
 
-   o = (r', c', \theta', z'), \qquad
-   O(o \mid s', a) = \mathbb{1}[o = (r', c', \theta', z')]
+   o = (r', c', d', z'), \qquad
+   O(o \mid s', a) = \mathbb{1}[o = (r', c', d', z')]
 
 This is a deliberate reformulation, not a claim that the robot sees
 everything: all the stochasticity has been moved into :math:`T`. The quantity
@@ -114,8 +134,8 @@ discrete motion outcome against the per-beam range law:
 .. math::
 
    p(o \mid s, a) = \sum_{u} \Pr[u \mid s, a]\,
-   \mathbb{1}\big[(r', c', \theta') = \mathrm{pose}(u)\big]
-   \prod_{k=1}^{K} p\big(z_k \mid \rho_k(u), \sigma\big)
+   \mathbb{1}\big[(r', c', d') = \mathrm{pose}(u)\big]
+   \prod_{k=1}^{K} p\big(z_k \mid \bar{z}_k(u), \sigma\big)
 
 exposed as ``predictive_observation_log_probability``.
 
@@ -125,22 +145,22 @@ mapping is defined under — write
 
 .. math::
 
-   \mathcal{H}(\lambda) = \sum_{j=1}^{C} H_b\big(\varsigma(\lambda_j)\big),
-   \qquad \varsigma(x) = \frac{1}{1 + e^{-x}}
+   \mathcal{H}(g) = \sum_{j=1}^{C} H_{\text{bin}}\big(\mathrm{sigmoid}(g_j)\big),
+   \qquad \mathrm{sigmoid}(x) = \frac{1}{1 + e^{-x}}
 
-with :math:`H_b` the binary entropy in bits, so one unknown cell is worth
+with :math:`H_{\text{bin}}` the binary entropy in bits, so one unknown cell is worth
 exactly :math:`1.0` and a wholly unknown grid exactly :math:`C`. Then
 
 .. math::
 
-   R(s, a, s') = \mathcal{H}(\lambda) - \mathcal{H}(\lambda')
+   R(s, a, s') = \mathcal{H}(g) - \mathcal{H}(g')
    - \texttt{step\_cost}
 
 .. note::
 
    Called without :math:`s'` — as a belief-space planner's expected reward
    does — the environment returns the numerical expectation
-   :math:`\mathcal{H}(\lambda) - \mathbb{E}[\mathcal{H}(\lambda')]` over eight
+   :math:`\mathcal{H}(g) - \mathbb{E}[\mathcal{H}(g')]` over eight
    fixed antithetic quadrature points per beam, not a fresh sample. It is an
    approximation and uses no global randomness. Neither quantity is posterior
    whole-map information gain.
@@ -149,14 +169,14 @@ exactly :math:`1.0` and a wholly unknown grid exactly :math:`C`. Then
 
 .. math::
 
-   b_0 = \delta_{(0,\, r_0,\, c_0,\, \theta_0)} \otimes
-   \mathrm{Prior}(m) \otimes \delta_{\lambda = 0} \otimes \delta_{z = 0}
+   b_0 = \mathbb{1}\big[(t, r, c, d) = (0, r_0, c_0, d_0)\big] \otimes
+   \mathrm{Prior}(m) \otimes \mathbb{1}[g = 0] \otimes \mathbb{1}[z = 0]
 
 where :math:`\mathrm{Prior}(m)` places ``num_obstacles`` random rectangles of
 side at most ``max_obstacle_size``, plus the boundary wall when
-``has_boundary_wall``, keeping the start cell free. :math:`\lambda = 0` is the
+``has_boundary_wall``, keeping the start cell free. :math:`g = 0` is the
 uninformative prior :math:`p = \tfrac{1}{2}` everywhere, so
-:math:`\mathcal{H}(\lambda_0) = C`. The opening observation is the start pose
+:math:`\mathcal{H}(g_0) = C`. The opening observation is the start pose
 with zero ranges, a sentinel never passed to the map update.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
@@ -165,36 +185,36 @@ with zero ranges, a sentinel never passed to the map update.
 
 .. math::
 
-   S_T = \{s : \mathcal{H}(\lambda) \leq \tau \mathcal{H}(\lambda_0)\}
+   S_T = \{s : \mathcal{H}(g) \leq q\, \mathcal{H}(g_0)\}
    \;\cup\; \{s : t \geq \texttt{max\_steps}\}
 
-with :math:`\tau` = ``entropy_threshold_fraction``. At the default
-:math:`\tau = 0.25` that is a quarter of a bit per cell on average, roughly
+with :math:`q` = ``entropy_threshold_fraction``. At the default
+:math:`q = 0.25` that is a quarter of a bit per cell on average, roughly
 96 % certainty per cell.
 
 State and observation contract
 ------------------------------
 
-The state contains the step, row, column, heading, hidden true occupancy,
-observation-derived map log-odds, and last noisy scan. Its length is
-``4 + 2 * num_cells + num_beams``. The hidden map constrains motion and produces
-nominal ranges. Range noise is drawn once in the transition, then the same
-scan is stored, used for mapping, and revealed by the observation.
+The hidden map constrains motion and produces nominal ranges. Range noise is
+drawn once in the transition, then the same scan is stored, used for mapping,
+and revealed by the observation.
 
-Observations contain ``[row, column, heading, ranges...]``. Pose is exact and
-integer. Repeated observation calls on one successor reveal the same stored
-scan. The augmented observation kernel is a point mass. The predictive density
+Repeated observation calls on one successor reveal the same stored scan. The
+augmented observation kernel is a point mass. The predictive density
 ``p(observation | prior state, action)`` combines the per-beam range density
 with the probability of the observed motion outcome.
+
+The initial observation contains known pose and zero range placeholders.
+It is a sentinel before any scan and is never applied to the map.
 
 Range noise model
 -----------------
 
 ``range_noise_model`` selects the per-beam range law that
 ``range_noise_std_cells`` parametrises. Both laws are centred on the noise-free
-range ``rho`` and neither truncates above the maximum range.
+range :math:`\bar{z}` and neither truncates above the maximum range.
 
-``gaussian`` (the default) is the unbounded normal ``N(rho, sigma^2)``. It is
+``gaussian`` (the default) is the unbounded normal :math:`\mathcal{N}(\bar{z}, \sigma^2)`. It is
 what every result produced before the option existed used, and its seeded
 draws are unchanged, so earlier runs still reproduce. A reading below zero is
 possible under it; the inverse model treats such a reading as a hit in the
@@ -204,11 +224,13 @@ first ray cell.
 
 .. math::
 
-   p(z \mid \rho, \sigma) = \frac{\phi((z - \rho) / \sigma)}{\sigma \, \Phi(\rho / \sigma)}
-   \quad \text{for } z \ge 0, \qquad 0 \text{ otherwise.}
+   p(z \mid \bar{z}, \sigma) = \frac{\mathcal{N}(z;\, \bar{z}, \sigma^2)}{F(\bar{z} / \sigma)}
+   \quad \text{for } z \ge 0, \qquad 0 \text{ otherwise,}
+
+with :math:`F` the standard normal CDF.
 
 It is a renormalised density, not a clamp: no probability mass is moved onto
-zero. The normaliser ``Phi(rho / sigma)`` depends on the nominal range, so two
+zero. The normaliser :math:`F(\bar{z} / \sigma)` depends on the nominal range, so two
 map particles that predict different ranges for one beam are normalised
 differently, and both filters carry that term per beam and per particle. A
 negative reading has zero likelihood under this law. Sampling inverts the
@@ -225,9 +247,6 @@ deviations of the robot.
 The mode is part of ``config_id`` and of both filters' identities, so results
 cached under one law are never reused for the other. The sensor contract
 version is 3 from this option onwards.
-
-The initial observation contains known pose and zero range placeholders.
-It is a sentinel before any scan and is never applied to the map.
 
 Mapping and reward
 ------------------
@@ -300,6 +319,9 @@ measurement, not hidden truth.
 Simulation reward is the realised decrease in the observed inverse map's
 summed binary entropy, minus ``step_cost``. The environment declares
 ``reward_requires_next_state=True`` so the runner supplies that realised map.
+Its ``reward_range`` is ``(-num_cells - step_cost, num_cells - step_cost)``:
+both entropies lie in ``[0, num_cells]``, so one step can neither gain nor lose
+more than the whole grid.
 When a planner requests reward without a successor, the explicit fallback uses
 eight fixed antithetic unit-normal points per motion outcome, mapped through
 the selected range law, to approximate the expected decrease. This
@@ -357,8 +379,11 @@ sampling and may leave only one effective hypothesis. Inspect effective sample
 size, unique maps, restarts and map error alongside completion. Unweighted
 rejection filters are unsuitable for exact matching of continuous scans.
 
-Metrics and visualization
--------------------------
+There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
+uses the environment and the whole-map filters shown above.
+
+Metrics
+-------
 
 ``task_completion_rate`` reports threshold crossing. ``ended_by_goal``,
 ``ended_by_failure`` and ``ended_by_timeout`` report episode endings; failure
@@ -367,10 +392,8 @@ fraction. ``average_obstacle_collisions`` counts blocked moves;
 ``average_successful_translations`` counts successful moves, including revisits.
 It is not a unique-cell count.
 
-.. episode-viewer:: traces/occupancy_grid_mapping.json
-
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
-   to zoom, and use the bar to play, scrub and switch camera.
+Visualization
+-------------
 
 Runs also write a GIF of each episode through ``cache_visualization``. Its left
 panel shows the observation-derived inverse map. The middle shows weighted
@@ -378,8 +401,25 @@ occupancy marginals over whole-map particles. The right shows the hidden true
 map for review. Panels depict the state before the captioned action; the
 caption's reward is the realised inverse-map entropy reduction.
 
-There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
-uses the environment and the whole-map filters shown above. Sensor contract
-versions 2 and 3 each changed cache identity; old results and GIFs describe
-the earlier behavior. The golden GIF is rendered in the default Gaussian mode
+Sensor contract versions 2 and 3 each changed cache identity; old results and
+GIFs describe the earlier behavior. The golden GIF is rendered in the default Gaussian mode
 and is unchanged by the truncated option.
+
+Minimal example
+---------------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
+       OccupancyGridMappingPOMDP,
+   )
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+   env = OccupancyGridMappingPOMDP()
+   belief = create_environment_belief(env, n_particles=30)
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP`
+- :doc:`index` — the full catalog.

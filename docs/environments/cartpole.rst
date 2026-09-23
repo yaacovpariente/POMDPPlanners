@@ -29,37 +29,49 @@ What the agent sees and does
 Formal definition
 -----------------
 
-Write the state as :math:`s = (x, \dot{x}, \vartheta, \dot{\vartheta})`.
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+Write the state as :math:`s = (x, \dot{x}, q, \dot{q})`.
 
-**State and observation spaces**
+**State space**
 
 .. math::
 
-   S = \Omega = \mathbb{R}^4, \qquad A = \{0, 1\}
-   \quad (\text{push left, push right})
+   S = \mathbb{R}^4
+
+**Action space**
+
+.. math::
+
+   A = \{0, 1\} \quad (\text{push left, push right})
+
+**Observation space**
+
+.. math::
+
+   \Omega = \mathbb{R}^4
 
 **Transition model.** The Gym CartPole physics, with :math:`m_c = 1.0`,
 :math:`m_p = 0.1`, half-length :math:`\ell = 0.5`, :math:`g = 9.8`,
-:math:`F = 10` and :math:`\tau = 0.02`. Let :math:`F_a = +F` for
+:math:`F = 10` and :math:`\Delta t = 0.02`. Let :math:`F_a = +F` for
 :math:`a = 1` and :math:`-F` for :math:`a = 0`. The accelerations are
 
 .. math::
 
-   \varphi &= \frac{F_a + m_p \ell \dot{\vartheta}^2 \sin\vartheta}
+   h &= \frac{F_a + m_p \ell \dot{q}^2 \sin q}
      {m_c + m_p} \\
-   \ddot{\vartheta} &= \frac{g \sin\vartheta - \varphi \cos\vartheta}
+   \ddot{q} &= \frac{g \sin q - h \cos q}
      {\ell\left(\tfrac{4}{3} -
-     \dfrac{m_p \cos^2\vartheta}{m_c + m_p}\right)} \\
-   \ddot{x} &= \varphi - \frac{m_p \ell \ddot{\vartheta} \cos\vartheta}
+     \dfrac{m_p \cos^2 q}{m_c + m_p}\right)} \\
+   \ddot{x} &= h - \frac{m_p \ell \ddot{q} \cos q}
      {m_c + m_p}
 
 integrated by explicit Euler (the configured default):
 
 .. math::
 
-   f(s, a) = \big(x + \tau\dot{x},\;\; \dot{x} + \tau\ddot{x},\;\;
-   \vartheta + \tau\dot{\vartheta},\;\;
-   \dot{\vartheta} + \tau\ddot{\vartheta}\big)
+   f(s, a) = \big(x + \Delta t\,\dot{x},\;\; \dot{x} + \Delta t\,\ddot{x},\;\;
+   q + \Delta t\,\dot{q},\;\;
+   \dot{q} + \Delta t\,\ddot{q}\big)
 
 Gaussian process noise is then added:
 
@@ -108,11 +120,11 @@ The opening observation is a real draw: a state from :math:`b_0` plus
 
 .. math::
 
-   S_T = \{s : |x| > 2.4 \ \text{ or }\ |\vartheta| > 12^\circ\}
+   S_T = \{s : |x| > 2.4 \ \text{ or }\ |q| > 12^\circ\}
 
 .. note::
 
-   :math:`S_T` is a predicate on :math:`x` and :math:`\vartheta`, which the
+   :math:`S_T` is a predicate on :math:`x` and :math:`q`, which the
    agent never observes exactly. A planner therefore cannot know it has
    terminated; it can only hold a belief about it.
 
