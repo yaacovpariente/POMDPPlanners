@@ -1,27 +1,43 @@
 Multi-agent firefighting
 ========================
 
+.. episode-viewer:: traces/multiagent_firefighting.json
+
+   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
 ``MultiAgentFirefightingPOMDP`` puts ``N`` firefighting robots on an ``R x C``
 grid and asks them to put out a fire that spreads under a **hidden, constant
-wind**. The default world is 10 by 10 with two robots, one small obstacle blob
-just past the middle, and a depot in the north-west corner. The robots see the
-fire only near themselves, carry a finite tank of suppressant, and take heat
-damage for standing in flames. The task is complete when no cell is burning.
+wind**. The robots see the fire only near themselves, carry a finite tank of
+suppressant, and take heat damage for standing in flames. The task is complete
+when no cell is burning.
 
-.. code-block:: python
+The wind is never observed. It has to be inferred from how the fire spreads,
+while the robots decide where to look, where to spray, and when to go back to
+the depot to refill. Use it to test planning over a large joint action space
+with a belief over a whole map.
 
-   from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
-       MultiAgentFirefightingPOMDP,
-   )
-   from POMDPPlanners.utils.belief_factory import create_environment_belief
+What the agent sees and does
+----------------------------
 
-   env = MultiAgentFirefightingPOMDP()
-   belief = create_environment_belief(env, n_particles=100)
+- **State** — one ``float64`` vector of length ``3 + 4N + R*C``: the step
+  counter, ``(row, col, tank, health)`` per robot, the wind direction and
+  strength, then one category per cell (``0`` unburnt to ``4`` wet). Length
+  111 at the defaults.
+- **Actions** (discrete) — one ``int`` in ``[0, 5 ** N)``. Its base-5 digits,
+  least significant first, are the per-robot actions ``NORTH`` (0), ``EAST``
+  (1), ``SOUTH`` (2), ``WEST`` (3), ``SUPPRESS`` (4). 25 actions at the default
+  two robots.
+- **Observations** (discrete) — one ``float64`` vector of length
+  ``4N + R*C``: exact ``(row, col, tank, health)`` per robot, then a noisy
+  category per cell within ``sensing_radius`` of a live robot and ``-1``
+  (unknown) everywhere else. The wind never appears.
 
 Formal definition
 -----------------
 
-Let the grid have :math:`H \times W` cells with obstacle set :math:`\mathcal{O}`,
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`. Let the grid have :math:`H \times W` cells with obstacle set :math:`\mathcal{O}`,
 and let :math:`M` = ``num_robots``. Cell categories are
 
 .. math::
@@ -34,12 +50,12 @@ alight categories. :math:`\textsf{BURNT}` and :math:`\textsf{WET}` are
 absorbing — no rule maps either back — which is what makes "no cell is alight"
 a genuine terminal state rather than a moment that can be undone.
 
-**State space.**
+**State space**
 
 .. math::
 
-   s = \big(t,\; (y_j, z_j, \theta_j, \eta_j)_{j=1}^{M},\;
-   (\omega_d, \omega_g),\; \mathbf{f}\big)
+   s = \big(t,\; (y_j, z_j, \text{tank}_j, \text{hp}_j)_{j=1}^{M},\;
+   (w_{\text{dir}}, w_{\text{str}}),\; \mathbf{f}\big)
 
 .. math::
 
@@ -48,8 +64,8 @@ a genuine terminal state rather than a moment that can be undone.
    \times \{0..\texttt{max\_health}\}\big)^{M}
    \times \mathcal{W} \times \mathcal{C}^{HW}
 
-where :math:`(y_j, z_j)` is robot :math:`j`'s cell, :math:`\theta_j` its tank,
-:math:`\eta_j` its health, :math:`\mathbf{f}` the fire map, and
+where :math:`(y_j, z_j)` is robot :math:`j`'s cell, :math:`\text{tank}_j` its tank,
+:math:`\text{hp}_j` its health, :math:`\mathbf{f}` the fire map, and
 
 .. math::
 
@@ -80,11 +96,11 @@ which is where a tree search starts to feel the branching.
       \Pr[(y'_j, z'_j) = \text{target}] = 1 - p_s, \qquad
       \Pr[(y'_j, z'_j) = (y_j, z_j)] = p_s
 
-   A disabled robot (:math:`\eta_j = 0`) and a suppressing robot do not move,
+   A disabled robot (:math:`\text{hp}_j = 0`) and a suppressing robot do not move,
    and take no draw.
 
 2. **Suppression.** Robot :math:`j` sprays iff it is live, chose
-   :math:`\textsf{SUPPRESS}`, and :math:`\theta_j > 0`; an empty tank does
+   :math:`\textsf{SUPPRESS}`, and :math:`\text{tank}_j > 0`; an empty tank does
    nothing and costs nothing. A spray covers its own cell and its four
    neighbours, and coverage **counts add** — two robots covering one cell each
    get an independent attempt. With :math:`k` covering sprays,
@@ -101,18 +117,18 @@ which is where a tree search starts to feel the branching.
 3. **Spread.** A cell catches unless *every* alight neighbour fails to ignite
    it. Write :math:`\mathcal{N}^{\uparrow}(k)` for the four-neighbours of
    :math:`k` that are alight after suppression. The one sitting directly
-   upwind under :math:`\omega_d` gets the boosted rate; the other three the
+   upwind under :math:`w_{\text{dir}}` gets the boosted rate; the other three the
    attenuated one:
 
    .. math::
 
       \Pr[\text{$k$ ignites}] = 1 - \prod_{n \in \mathcal{N}^{\uparrow}(k)}
-      \big(1 - \varrho(n, k)\big)
+      \big(1 - p_{\text{ign}}(n, k)\big)
 
    .. math::
 
-      \varrho(n,k) = \begin{cases}
-        \min(1,\, p_0 \cdot g(\omega_g)) & k - n = \Delta_{\omega_d} \\
+      p_{\text{ign}}(n,k) = \begin{cases}
+        \min(1,\, p_0 \cdot g(w_{\text{str}})) & k - n = \Delta_{w_{\text{dir}}} \\
         p_0 \,(1 - \texttt{crosswind\_attenuation}) & \text{otherwise}
       \end{cases}
 
@@ -131,7 +147,7 @@ which is where a tree search starts to feel the branching.
         \texttt{burnout\_probability}
 
 5. **Heat damage,** read off the final map at each robot's final cell:
-   :math:`\eta'_j = \max(0, \eta_j - \mathrm{dmg}(\mathbf{f}'_{k_j}))`, with
+   :math:`\text{hp}'_j = \max(0, \text{hp}_j - \mathrm{dmg}(\mathbf{f}'_{k_j}))`, with
    :math:`\mathrm{dmg} = (0, 1, 2, 0, 0)` over :math:`\mathcal{C}`. At the
    default ``max_health`` of 3 a robot survives one burning step and is
    disabled by the second — which is what makes fighting from an *adjacent*
@@ -143,12 +159,21 @@ Suppression resolving before spread is what lets a robot stop a front by
 soaking the cell ahead of it in the same step. The wind never changing is what
 makes it identifiable from the spread pattern across an episode.
 
+**Observation space.** Exact robot fields, then one reported category per
+cell, with :math:`\textsf{UNKNOWN} = -1` for a cell no live robot senses:
+
+.. math::
+
+   \Omega = \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
+   \times \{0..\texttt{max\_health}\}\big)^{M}
+   \times \big(\mathcal{C} \cup \{\textsf{UNKNOWN}\}\big)^{HW}
+
 **Observation model.** Robot fields are reported exactly; the fire map is seen
 only inside the union of the live robots' Chebyshev footprints:
 
 .. math::
 
-   V(s') = \bigcup_{j : \eta'_j > 0}
+   V(s') = \bigcup_{j : \text{hp}'_j > 0}
    \{k : \lVert k - (y'_j, z'_j) \rVert_\infty \leq \texttt{sensing\_radius}\}
 
 A disabled robot sees nothing, and two robots standing together see barely
@@ -156,20 +181,20 @@ more than one — spreading out is what buys information. The reading is
 
 .. math::
 
-   o = \big((y'_j, z'_j, \theta'_j, \eta'_j)_{j=1}^{M},\; \hat{\mathbf{f}}\big),
+   o = \big((y'_j, z'_j, \text{tank}'_j, \text{hp}'_j)_{j=1}^{M},\; \hat{\mathbf{f}}\big),
    \qquad
    \hat{f}_k = \begin{cases}
      \textsf{UNKNOWN} = -1 & k \notin V(s') \\
-     f'_k & \text{w.p. } 1 - p_\epsilon \\
-     \mathrm{Unif}(\mathcal{C} \setminus \{f'_k\}) & \text{w.p. } p_\epsilon
+     f'_k & \text{w.p. } 1 - p_{\text{err}} \\
+     \mathrm{Unif}(\mathcal{C} \setminus \{f'_k\}) & \text{w.p. } p_{\text{err}}
    \end{cases}
 
-with :math:`p_\epsilon` = ``observation_error_probability``: a symmetric
+with :math:`p_{\text{err}}` = ``observation_error_probability``: a symmetric
 confusion matrix spreading its error mass evenly over the four wrong
 categories. The observation depends on :math:`s'` alone, not on the action.
 
 Note what is **never** observed: the wind. It has to be inferred from how the
-fire spreads, and because only :math:`\omega_g` sets the downwind gain, a
+fire spreads, and because only :math:`w_{\text{str}}` sets the downwind gain, a
 strong wind of unknown direction is a different inference problem from a weak
 one — the belief over the eight wind values need not collapse to a point for a
 planner to act well.
@@ -183,7 +208,7 @@ planner to act well.
    &-\; \texttt{burning\_cell\_cost} \cdot |\{k : f'_k = \textsf{BURNING}\}| \\
    &-\; \texttt{burnt\_cell\_cost} \cdot
      |\{k : f'_k = \textsf{BURNT},\, f_k \neq \textsf{BURNT}\}| \\
-   &-\; \texttt{damage\_cost} \cdot \textstyle\sum_j (\eta_j - \eta'_j)
+   &-\; \texttt{damage\_cost} \cdot \textstyle\sum_j (\text{hp}_j - \text{hp}'_j)
    \;-\; \texttt{water\_cost} \cdot |\text{sprayers}| \\
    &+\; \texttt{success\_reward} \cdot
      \mathbb{1}\big[\{k : f'_k \in \mathcal{A}\ell\} = \emptyset\big]
@@ -199,7 +224,7 @@ without replacement from the non-obstacle cells and set to
 
 .. math::
 
-   b_0 = \delta_{\text{robots}} \otimes
+   b_0 = \mathbb{1}\big[\text{robots} = \text{robots}_0\big] \otimes
    \mathrm{Unif}(\mathcal{W}) \otimes
    \mathrm{Unif}\big(\text{$n_0$-subsets of } \overline{\mathcal{O}}\big)
 
@@ -214,7 +239,7 @@ first transition.
 .. math::
 
    S_T = \{s : \{k : f_k \in \mathcal{A}\ell\} = \emptyset\}
-   \;\cup\; \{s : \forall j,\, \eta_j = 0\}
+   \;\cup\; \{s : \forall j,\, \text{hp}_j = 0\}
    \;\cup\; \{s : t \geq \texttt{max\_steps}\}
 
 the middle set only when ``is_all_robots_disabled_terminal``.
@@ -289,18 +314,6 @@ Six stages resolve in a fixed order, and the order is not cosmetic.
    disabled by the second.
 6. **Bookkeeping.** The step counter advances and the wind is copied unchanged.
 
-Spread and burnout defaults
----------------------------
-
-``spread_probability`` defaults to **0.10** and ``burnout_probability`` to
-**0.03**, and the pair was measured rather than proposed. At the originally
-drafted 0.06 and 0.12 an *unattended* fire on the default world went out by
-itself in 93% of episodes: a planner that did nothing would have "completed the
-task" nine times in ten, and no margin over a random baseline would have been
-measurable. At 0.10 and 0.03 the same unattended fire goes out 6% of the time, a
-uniformly random policy 27%, and a hand-written greedy firefighter 89%, so the
-completion rate reports what the planner did.
-
 Observation
 -----------
 
@@ -371,8 +384,36 @@ Termination is evaluated in this order: **goal** (no cell alight), **failure**
 default). Goal wins over failure, so a fire put out by robots that then burned
 out is still a success.
 
-Metrics and visualization
--------------------------
+Key settings
+------------
+
+The default world is 10 by 10 with two robots, one small obstacle blob just
+past the middle, and a depot in the north-west corner.
+
+``spread_probability`` defaults to **0.10** and ``burnout_probability`` to
+**0.03**, and the pair was measured rather than proposed. At the originally
+drafted 0.06 and 0.12 an *unattended* fire on the default world went out by
+itself in 93% of episodes: a planner that did nothing would have "completed the
+task" nine times in ten, and no margin over a random baseline would have been
+measurable. At 0.10 and 0.03 the same unattended fire goes out 6% of the time, a
+uniformly random policy 27%, and a hand-written greedy firefighter 89%, so the
+completion rate reports what the planner did.
+
+Minimal example
+---------------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+       MultiAgentFirefightingPOMDP,
+   )
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+   env = MultiAgentFirefightingPOMDP()
+   belief = create_environment_belief(env, n_particles=100)
+
+Metrics
+-------
 
 ``task_completion_rate`` reports a fire-free map, reduced with ``ANY``: wet and
 burnt are absorbing, so a fire-free map cannot be undone and ``ANY`` and
@@ -387,10 +428,8 @@ lets the fire reach forty cells and then beats it out is not the same as one
 that never let it past five, and the totals alone would not distinguish them.
 ``suppressant_units_used`` and ``robots_disabled_at_end`` round out the picture.
 
-.. episode-viewer:: traces/multiagent_firefighting.json
-
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
-   to zoom, and use the bar to play, scrub and switch camera.
+Visualization
+-------------
 
 Runs also write a GIF of each episode through ``cache_visualization``. Its left
 panel is the truth: the five categories, the obstacles, the depot, each live
@@ -428,3 +467,9 @@ twenty-five steps -- but with random actions this filter is slower than that: in
 a six-episode check it held about 0.4 of its weight on the true wind after
 thirty steps, against a prior of 0.125. A flat histogram late in an episode is a
 statement about the filter, not about the environment.
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP`
+- :doc:`index` — the full catalog.

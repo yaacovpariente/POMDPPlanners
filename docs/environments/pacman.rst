@@ -33,21 +33,22 @@ What the agent sees and does
 Formal definition
 -----------------
 
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
 Let the maze be :math:`M \times N` with wall set :math:`\mathcal{W}`, free
-cells :math:`G`, :math:`P` initial pellet cells :math:`\pi_1, \dots, \pi_P`,
+cells :math:`G`, :math:`P` initial pellet cells :math:`c_1, \dots, c_P`,
 and :math:`g` = ``num_ghosts``.
 
 **State space.**
 
 .. math::
 
-   s = \big(x,\; (y_k)_{k=1}^{g},\; \mathbf{m},\; \varsigma,\; \top\big),
+   s = \big(x,\; (y_k)_{k=1}^{g},\; \mathbf{m},\; \text{score},\; \top\big),
    \qquad
    S = G \times G^{g} \times \{0,1\}^{P} \times \mathbb{R} \times \{0,1\}
 
 with :math:`x` PacMan's cell, :math:`y_k` ghost :math:`k`'s cell,
 :math:`\mathbf{m}` the pellet mask (:math:`m_p = 1` still there),
-:math:`\varsigma` the running score and :math:`\top` an absorbing terminal
+:math:`\text{score}` the running score and :math:`\top` an absorbing terminal
 flag. The state space is the package's largest discrete one:
 :math:`|G|^{g+1} 2^{P}`.
 
@@ -57,6 +58,14 @@ flag. The state space is the package's largest discrete one:
 
    A = \{\textsf{N}, \textsf{E}, \textsf{S}, \textsf{W}, \textsf{stay}\}
      = \{0,1,2,3,4\}
+
+**Observation space.** One cell per ghost; PacMan's own cell is not part of
+it. A terminal state reports :math:`(-1, -1)` for every ghost.
+
+.. math::
+
+   \Omega = \big(\{0..M{-}1\} \times \{0..N{-}1\}\big)^{g}
+   \cup \{(-1, -1)^{g}\}
 
 **Transition model.** :math:`\top` is absorbing. Otherwise one step resolves
 in this order.
@@ -73,16 +82,16 @@ the cell:
 *Ghosts move,* each from its own stochastic policy, evaluated against
 PacMan's **pre-move** cell :math:`x`. Let :math:`\mathcal{M}(y_k)` be the
 valid moves from :math:`y_k`. An *aggressive* ghost is a Boltzmann pursuer
-over Manhattan distance, with temperature :math:`\beta` =
+over Manhattan distance, with temperature :math:`t` =
 ``ghost_aggressiveness``:
 
 .. math::
 
-   \Pr[y'_k = u] = \frac{\exp\big(-\mathrm{d}(u, x)/\beta\big)}
-   {\sum_{v \in \mathcal{M}(y_k)} \exp\big(-\mathrm{d}(v, x)/\beta\big)},
+   \Pr[y'_k = u] = \frac{\exp\big(-\mathrm{d}(u, x)/t\big)}
+   {\sum_{v \in \mathcal{M}(y_k)} \exp\big(-\mathrm{d}(v, x)/t\big)},
    \qquad u \in \mathcal{M}(y_k)
 
-Small :math:`\beta` makes a near-greedy chaser; large :math:`\beta` tends to
+Small :math:`t` makes a near-greedy chaser; large :math:`t` tends to
 a uniform random walk. A *patrol* ghost continues in its stored direction
 while that move is valid, else rotates clockwise and picks uniformly from
 :math:`\mathcal{M}(y_k)`. An *ambush* ghost is deterministic: it minimizes a
@@ -100,20 +109,14 @@ would walk through PacMan:
    y'_k = x' \;\vee\; \big(y_k = x' \wedge y'_k = x\big)
 
 *Pellets.* Landing on an active pellet clears it and adds ``pellet_reward``
-to :math:`\varsigma`. If no pellet remains, :math:`\top' = 1`.
+to :math:`\text{score}`. If no pellet remains, :math:`\top' = 1`.
 
 *Hazard.* When ``is_dangerous_area_hit_terminal``, a final draw terminates
 the episode if :math:`x'` lies in a hazard zone — taken last, and only when
 the step has not already ended, so the terminal flag stays absorbing.
 
 **Observation model.** PacMan's own cell is known and never reported; the
-observation is one noisy cell per ghost:
-
-.. math::
-
-   \Omega = \big(\{0..M{-}1\} \times \{0..N{-}1\}\big)^{g}
-
-The noise grows with the distance to the ghost and then saturates:
+observation is one noisy cell per ghost. The noise grows with the distance to the ghost and then saturates:
 
 .. math::
 
@@ -125,9 +128,9 @@ Each coordinate is drawn, rounded and clamped to the grid independently:
 
 .. math::
 
-   \hat{y}_k = \mathrm{clip}\big(\mathrm{round}(y'_k + \varepsilon_k),\;
+   \hat{y}_k = \mathrm{clip}\big(\mathrm{round}(y'_k + n_k),\;
    0,\; (M{-}1, N{-}1)\big), \qquad
-   \varepsilon_k \sim \mathcal{N}(0, \sigma_k^2 I)
+   n_k \sim \mathcal{N}(0, \sigma_k^2 I)
 
 so the likelihood of a reading is the Gaussian mass of its rounding bin, with
 the two end bins absorbing the tails. A terminal state reports
@@ -162,7 +165,7 @@ with the hazard term :math:`D` following the same three
 
 .. math::
 
-   b_0 = \delta_{s_0}, \qquad
+   b_0(s) = \mathbb{1}[s = s_0], \qquad
    s_0 = \big(x_0,\, (y_k^0),\, \mathbf{1},\, 0,\, 0\big)
 
 Uncertainty does not come from the prior here — it accumulates from the
