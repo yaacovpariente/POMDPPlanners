@@ -36,28 +36,41 @@ What the agent sees and does
 Formal definition
 -----------------
 
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
 Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
 :math:`\mathbf{p}, \mathbf{v} \in \mathbb{R}^2`, and let
 :math:`\lVert \mathbf{v} \rVert` be the speed.
 
-**Spaces**
+**State space**
 
 .. math::
 
-   S = \Omega = \mathbb{R}^4, \qquad A = \{0, 1, 2, 3\}
+   S = \mathbb{R}^4
+
+**Action space.** Four force magnitudes:
+
+.. math::
+
+   A = \{0, 1, 2, 3\}
+
+**Observation space**
+
+.. math::
+
+   \Omega = \mathbb{R}^4
 
 **Transition model.** The agent chooses a force *magnitude*; the **direction
 is drawn by the environment**:
 
 .. math::
 
-   \phi = \kappa_a \cdot \texttt{max\_force}, \qquad
-   \kappa = (0,\; 0.33,\; 0.67,\; 1.0)
+   u = k_a \cdot \texttt{max\_force}, \qquad
+   k = (0,\; 0.33,\; 0.67,\; 1.0)
 
 .. math::
 
-   \theta \sim \mathrm{Unif}(-\pi, \pi), \qquad
-   \mathbf{F} = \phi\,(\cos\theta,\; \sin\theta)
+   q \sim \mathrm{Unif}(-180^\circ, 180^\circ), \qquad
+   \mathbf{F} = u\,(\cos q,\; \sin q)
 
 The damped point-mass dynamics are then integrated semi-implicitly:
 
@@ -76,8 +89,8 @@ Position is updated with the *new* velocity, not the old one.
    an additive Gaussian on the state. So :math:`T(\cdot \mid s, a)` is
    supported on a *circle* in velocity space — a one-dimensional set in
    :math:`\mathbb{R}^4` — rather than having a density over it. For
-   :math:`a = 0` the transition is deterministic, since :math:`\phi = 0`
-   makes :math:`\theta` irrelevant.
+   :math:`a = 0` the transition is deterministic, since :math:`u = 0`
+   makes :math:`q` irrelevant.
 
 **Observation model.** The full state with independent diagonal noise:
 
@@ -98,20 +111,20 @@ read off the state the action is taken **from**:
    R(s, a) = \lVert \mathbf{v} \rVert \cdot
    \texttt{movement\_reward\_scale}
    + \texttt{safety\_violation\_penalty} \cdot
-   \mathbb{1}\big[\lVert \mathbf{v} \rVert > \tau\big]
+   \mathbb{1}\big[\lVert \mathbf{v} \rVert > v_{\text{safe}}\big]
 
-with :math:`\tau` = ``safe_velocity_threshold``. This is the whole tension:
-:math:`R` grows linearly in speed right up to :math:`\tau`, then falls off a
+with :math:`v_{\text{safe}}` = ``safe_velocity_threshold``. This is the whole tension:
+:math:`R` grows linearly in speed right up to :math:`v_{\text{safe}}`, then falls off a
 cliff of :math:`-100` by default. Because the agent only ever sees
 :math:`\lVert \mathbf{v} \rVert` through noise of width :math:`\sigma_v`, it
-cannot know which side of :math:`\tau` it is on — it can only trade expected
+cannot know which side of :math:`v_{\text{safe}}` it is on — it can only trade expected
 speed against the probability of having crossed.
 
 **Initial belief.** Position uniform in a unit box, velocity exactly zero:
 
 .. math::
 
-   b_0 = \mathrm{Unif}\big([-1, 1]^2\big) \otimes \delta_{\mathbf{0}}
+   b_0 = \mathrm{Unif}\big([-1, 1]^2\big) \otimes \mathbb{1}[\mathbf{v} = \mathbf{0}]
 
 .. note::
 
@@ -125,9 +138,9 @@ speed against the probability of having crossed.
 
 .. math::
 
-   S_T = \{s : \lVert \mathbf{v} \rVert > 1.5\,\tau\}
+   S_T = \{s : \lVert \mathbf{v} \rVert > 1.5\,v_{\text{safe}}\}
 
-so there is a band :math:`\tau < \lVert \mathbf{v} \rVert \leq 1.5\tau` where
+so there is a band :math:`v_{\text{safe}} < \lVert \mathbf{v} \rVert \leq 1.5\,v_{\text{safe}}` where
 the agent is being penalized every step but the episode continues — it can
 still brake back under the limit.
 

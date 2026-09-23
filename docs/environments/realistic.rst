@@ -51,23 +51,23 @@ What *is* fully specified is :math:`S`, :math:`A`, :math:`\Omega` and
 :math:`R`.
 
 **Driving reward (CARLA and nuPlan).** Both use the same gym-carla-style
-score. Let :math:`\psi` be the ego yaw, :math:`e_\psi` the heading error,
+score. Let :math:`\mathrm{yaw}` be the ego yaw, :math:`e_{\mathrm{yaw}}` the heading error,
 :math:`(v_x, v_y)` the velocity and :math:`d` the lateral offset from the
 route. The along-route speed is
 
 .. math::
 
-   v_\parallel = v_x \cos(\psi - e_\psi) + v_y \sin(\psi - e_\psi)
+   v_\parallel = v_x \cos(\mathrm{yaw} - e_{\mathrm{yaw}}) + v_y \sin(\mathrm{yaw} - e_{\mathrm{yaw}})
 
-and with steering command :math:`\delta`:
+and with steering command :math:`u`:
 
 .. math::
 
    R = \;&1.0 \cdot v_\parallel
    \;-\; 10.0 \cdot \mathbb{1}[v_\parallel > v_{\text{des}}]
    \;-\; 1.0 \cdot \mathbb{1}\big[|d| > d_{\max}\big] \\
-   &-\; 5.0\,\delta^2
-   \;-\; 0.2\,|\delta|\,v_\parallel^2
+   &-\; 5.0\,u^2
+   \;-\; 0.2\,|u|\,v_\parallel^2
    \;-\; 0.1
    \;-\; \texttt{collision\_penalty} \cdot \mathbb{1}[\text{collision}] \\
    &+\; \texttt{success\_reward} \cdot \mathbb{1}[\text{destination}]
@@ -75,7 +75,7 @@ and with steering command :math:`\delta`:
 The last two terms are CARLA's; nuPlan carries the collision term without the
 success bonus. Note :math:`R` rewards speed linearly and then penalizes
 exceeding :math:`v_{\text{des}}` by a flat :math:`-10`, so the optimum sits
-just under the limit; the :math:`|\delta| v_\parallel^2` term is what
+just under the limit; the :math:`|u| v_\parallel^2` term is what
 discourages fast turns specifically rather than turning in general.
 
 **Isaac Lab** is the one wrapper with a genuine

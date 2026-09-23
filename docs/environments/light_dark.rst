@@ -1,6 +1,9 @@
 Light-Dark
 ==========
 
+**ContinuousLightDarkPOMDP** — continuous position, action and observation.
+The discrete variant has no replay.
+
 .. episode-viewer:: traces/light_dark.json
 
    ``ContinuousLightDarkPOMDP``: one real episode planned by PFT-DPW, replayed
@@ -16,28 +19,50 @@ This is the cleanest test of whether a planner values information. A planner
 optimizing expected reward under a point estimate drives straight at the goal
 and misses; one that reasons over beliefs detours.
 
-Two variants ship, sharing the same reward shape:
+Two variants ship, a continuous one and a discrete grid one, sharing the same
+reward shape. See `Variants`_.
 
-- :class:`ContinuousLightDarkPOMDP
-  <POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP>`
-  — continuous 2-D position, continuous action, continuous observation.
-- :class:`DiscreteLightDarkPOMDP
-  <POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP>`
-  — integer grid, four moves, grid-cell observations.
+What the agent sees and does
+----------------------------
 
-There is also ``ContinuousLightDarkPOMDPDiscreteActions``: the continuous world
-with the four discrete moves, for planners that need a finite action set. Note
-its noise defaults differ — ``np.eye(2)`` rather than ``np.eye(2) * 0.05``.
+Continuous variant
+~~~~~~~~~~~~~~~~~~
+
+- **State** — ``np.array([x, y])``. Because ``is_obstacle_hit_terminal``
+  defaults to ``True``, a third terminal-flag slot is appended, so states are
+  3-D by default.
+- **Actions** (continuous) — a displacement ``np.array([dx, dy])``. The next
+  state is ``state + action + N(0, state_transition_cov_matrix)``. No bound on
+  the step is enforced.
+- **Observations** (continuous) — noisy position. The covariance is halved
+  within ``beacon_radius`` of any beacon. Three models are selectable through
+  ``observation_model_type``: ``NORMAL_NOISE``, ``NORMAL_NOISE_NO_OBS_IN_DARK``
+  and ``DISTANCE_BASED``.
+
+Discrete variant
+~~~~~~~~~~~~~~~~
+
+- **State** — ``np.array([x, y])`` on an integer grid.
+- **Actions** (discrete) — ``"up"``, ``"down"``, ``"right"``, ``"left"``.
+- **Observations** (discrete) — a grid cell: the true cell with probability
+  ``1 - error``, otherwise a neighbour. The error is
+  ``observation_error_prob * 0.2`` near a beacon and ``observation_error_prob``
+  away from one. Its ``observation_model_type`` is a *different* enum, with
+  members ``NORMAL``, ``NO_OBS_IN_DARK`` and ``DISTANCE_BASED``.
 
 Formal definition
 -----------------
 
-Both variants share one geometry: beacons :math:`\mathcal{B}`, obstacles
+Both variants share one geometry: beacons :math:`\mathcal{Q}`, obstacles
 :math:`\mathcal{O}`, goal :math:`\mathbf{g}`, start :math:`\mathbf{x}_0`, and
-a grid of side :math:`\mathcal{G}` = ``grid_size``.
+a grid of side :math:`\mathcal{G}` = ``grid_size``. Each variant is its own
+tuple.
 
 Continuous variant
 ~~~~~~~~~~~~~~~~~~
+
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`.
 
 **State space.** The plane, plus a terminal slot when
 ``is_obstacle_hit_terminal`` (which defaults to ``True``, so states are 3-D by
@@ -58,6 +83,14 @@ weights near the edges.
 
    A = \mathbb{R}^2
 
+**Observation space.** A position reading, plus the null symbol under the two
+models that can withhold one:
+
+.. math::
+
+   \Omega = \mathbb{R}^2 \quad (\texttt{NORMAL\_NOISE}), \qquad
+   \Omega = \mathbb{R}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
+
 **Transition model.** Additive Gaussian, with the commanded displacement as
 the mean:
 
@@ -76,10 +109,10 @@ given :math:`s'`.
 
 .. math::
 
-   \nu(\mathbf{p}) = \min_{\mathbf{b} \in \mathcal{B}}
-   \lVert \mathbf{p} - \mathbf{b} \rVert_2
+   d(\mathbf{p}) = \min_{\mathbf{q} \in \mathcal{Q}}
+   \lVert \mathbf{p} - \mathbf{q} \rVert_2
 
-be the distance to the nearest beacon and :math:`r_\mathcal{B}` =
+be the distance to the nearest beacon and :math:`r_\mathcal{Q}` =
 ``beacon_radius``. Under ``NORMAL_NOISE`` (the default) the agent always sees
 its position, but the covariance is **halved** inside a beacon:
 
@@ -89,7 +122,7 @@ its position, but the covariance is **halved** inside a beacon:
    \mathcal{N}\big(\mathbf{o};\; \mathbf{p}',\; \Sigma_O(\mathbf{p}')\big),
    \qquad
    \Sigma_O(\mathbf{p}') = \begin{cases}
-     \tfrac{1}{2}\Sigma_O & \nu(\mathbf{p}') < r_\mathcal{B} \\
+     \tfrac{1}{2}\Sigma_O & d(\mathbf{p}') < r_\mathcal{Q} \\
      \Sigma_O & \text{otherwise}
    \end{cases}
 
@@ -101,7 +134,7 @@ instead of a wider one:
    \texttt{NORMAL\_NOISE\_NO\_OBS\_IN\_DARK}: \quad
    \mathbf{o} = \begin{cases}
      \mathcal{N}(\mathbf{p}', \tfrac{1}{2}\Sigma_O)
-       & \nu(\mathbf{p}') < r_\mathcal{B} \\
+       & d(\mathbf{p}') < r_\mathcal{Q} \\
      \textsf{None} & \text{otherwise}
    \end{cases}
 
@@ -109,9 +142,9 @@ instead of a wider one:
 
    \texttt{DISTANCE\_BASED}: \quad
    \mathbf{o} = \begin{cases}
-     \textsf{None} & \nu(\mathbf{p}') > r_\mathcal{B} \\
+     \textsf{None} & d(\mathbf{p}') > r_\mathcal{Q} \\
      \mathcal{N}(\mathbf{p}', \tfrac{1}{2}\Sigma_O)
-       & \nu(\mathbf{p}') < r_\mathcal{B} \\
+       & d(\mathbf{p}') < r_\mathcal{Q} \\
      \mathcal{N}(\mathbf{p}', \Sigma_O) & \text{otherwise (on the boundary)}
    \end{cases}
 
@@ -119,7 +152,7 @@ instead of a wider one:
 
    That third branch is not a typo. The "near" test is a strict :math:`<` and
    the "no reading" test is a strict :math:`>`, so a position exactly at
-   :math:`\nu = r_\mathcal{B}` falls through to the wide covariance. The
+   :math:`d = r_\mathcal{Q}` falls through to the wide covariance. The
    mismatch is preserved from the original model.
 
 **Reward function.** A fuel cost plus a distance-to-goal shaping term, with
@@ -148,9 +181,14 @@ follows straight into the dark.
    reward can fall below that minimum. Those states sit outside the region
    the bound is defined over.
 
-**Initial belief.** :math:`b_0 = \delta_{\mathbf{x}_0}` — the start is known
+**Initial belief.** :math:`b_0(\mathbf{p}) = \mathbb{1}[\mathbf{p} = \mathbf{x}_0]` — the start is known
 exactly. Uncertainty is produced entirely by the process noise as the agent
-moves, and removed only by visiting a beacon.
+moves, and removed only by visiting a beacon. A zero terminal slot is appended
+when ``is_obstacle_hit_terminal=True``, and the initial observation is fixed
+at the placeholder value :math:`1.0`.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required; the class has no
+default.
 
 **Terminal set.**
 
@@ -162,7 +200,15 @@ moves, and removed only by visiting a beacon.
 Discrete variant
 ~~~~~~~~~~~~~~~~
 
-**State space.** :math:`S = \mathbb{Z}^2` (with the optional terminal slot).
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+\rangle`.
+
+**State space.** The integer grid, with the optional terminal slot when
+``is_obstacle_hit_terminal=True``:
+
+.. math::
+
+   S = \mathbb{Z}^2
 
 **Action space.**
 
@@ -171,17 +217,25 @@ Discrete variant
    A = \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\},
    \qquad \Delta = \{(0,1), (0,-1), (1,0), (-1,0)\}
 
+**Observation space.** A grid cell, plus the null symbol under
+``NO_OBS_IN_DARK`` and ``DISTANCE_BASED``:
+
+.. math::
+
+   \Omega = \mathbb{Z}^2 \quad (\texttt{NORMAL}), \qquad
+   \Omega = \mathbb{Z}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
+
 **Transition model.** The commanded move is executed with probability
-:math:`1 - \epsilon_T`, and otherwise one of the other three fires, uniformly:
+:math:`1 - e_T`, and otherwise one of the other three fires, uniformly:
 
 .. math::
 
    T(\mathbf{p}' \mid \mathbf{p}, a) = \begin{cases}
-     1 - \epsilon_T & \mathbf{p}' = \mathbf{p} + \Delta_a \\
-     \epsilon_T / 3 & \mathbf{p}' = \mathbf{p} + \Delta_{a'},\; a' \neq a
+     1 - e_T & \mathbf{p}' = \mathbf{p} + \Delta_a \\
+     e_T / 3 & \mathbf{p}' = \mathbf{p} + \Delta_{a'},\; a' \neq a
    \end{cases}
 
-with :math:`\epsilon_T` = ``transition_error_prob``. There are no walls: the
+with :math:`e_T` = ``transition_error_prob``. There are no walls: the
 agent can step outside the grid, and pays for it through the reward.
 
 **Observation model.** Five outcomes — the true cell, or one of the four
@@ -190,8 +244,8 @@ neighbours:
 .. math::
 
    O(\mathbf{o} \mid \mathbf{p}', \cdot) = \begin{cases}
-     1 - \epsilon(\mathbf{p}') & \mathbf{o} = \mathbf{p}' \\
-     \epsilon(\mathbf{p}') / 4 & \mathbf{o} = \mathbf{p}' + \Delta_{a'}
+     1 - e(\mathbf{p}') & \mathbf{o} = \mathbf{p}' \\
+     e(\mathbf{p}') / 4 & \mathbf{o} = \mathbf{p}' + \Delta_{a'}
    \end{cases}
 
 The beacon effect is a **five-fold** reduction in the error rate rather than
@@ -199,12 +253,12 @@ the continuous variant's halved covariance:
 
 .. math::
 
-   \epsilon(\mathbf{p}') = \begin{cases}
-     0.2 \cdot \epsilon_O & \nu(\mathbf{p}') < r_\mathcal{B} \\
-     \epsilon_O & \text{otherwise}
+   e(\mathbf{p}') = \begin{cases}
+     0.2 \cdot e_O & d(\mathbf{p}') < r_\mathcal{Q} \\
+     e_O & \text{otherwise}
    \end{cases}
 
-with :math:`\epsilon_O` = ``observation_error_prob``.
+with :math:`e_O` = ``observation_error_prob``.
 
 **Reward function.** The same shape, with the goal and obstacle tests by
 exact cell equality rather than by radius, and the obstacle penalty gated by
@@ -227,32 +281,28 @@ non-deterministic in :math:`(s, a)`; ``is_obstacle_hit_terminal=True`` moves
 the draw into the transition and removes that. This class declares no
 ``reward_range``.
 
-Continuous variant
-------------------
+**Initial belief.** As in the continuous variant, the start is known exactly:
 
-- **State** — ``np.array([x, y])``. Because ``is_obstacle_hit_terminal``
-  defaults to ``True``, a third terminal-flag slot is appended, so states are
-  3-D by default.
-- **Actions** (continuous) — a displacement ``np.array([dx, dy])``. The next
-  state is ``state + action + N(0, state_transition_cov_matrix)``. No bound on
-  the step is enforced.
-- **Observations** (continuous) — noisy position. The covariance is halved
-  within ``beacon_radius`` of any beacon. Three models are selectable through
-  ``observation_model_type``: ``NORMAL_NOISE``, ``NORMAL_NOISE_NO_OBS_IN_DARK``
-  and ``DISTANCE_BASED``.
+.. math::
 
-Discrete variant
-----------------
+   b_0(\mathbf{p}) = \mathbb{1}[\mathbf{p} = \mathbf{x}_0]
 
-- **State** — ``np.array([x, y])`` on an integer grid.
-- **Actions** (discrete) — ``"up"``, ``"down"``, ``"right"``, ``"left"``.
-- **Observations** (discrete) — a grid cell: the true cell with probability
-  ``1 - error``, otherwise a neighbour. The error is
-  ``observation_error_prob * 0.2`` near a beacon and ``observation_error_prob``
-  away from one.
-- Its ``observation_model_type`` is a *different* enum, with members ``NORMAL``,
-  ``NO_OBS_IN_DARK`` and ``DISTANCE_BASED``.
-- ``reward_range`` is ``None`` on this class — it does not declare one.
+with a zero terminal slot appended when ``is_obstacle_hit_terminal=True``, and
+the initial observation fixed at the placeholder value :math:`1.0`.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required; the class has no
+default.
+
+**Terminal set.** The goal cell, plus either every obstacle cell (the default,
+``is_obstacle_hit_terminal=False``) or only the states whose terminal slot the
+hazard draw set (``True``):
+
+.. math::
+
+   S_T = \{s : \mathbf{p} = \mathbf{g}\} \;\cup\; \begin{cases}
+     \{s : \mathbf{p} \in \mathcal{O}\} & \texttt{is\_obstacle\_hit\_terminal=False} \\
+     \{s : \top = 1\} & \texttt{is\_obstacle\_hit\_terminal=True}
+   \end{cases}
 
 Rewards
 -------
@@ -324,6 +374,20 @@ Key settings
 An episode ends at the goal — inside ``goal_state_radius`` on the continuous
 variant, on the exact cell on the discrete one — or on an obstacle hit under
 the rule above. Leaving the grid is penalized but not terminal.
+
+Variants
+--------
+
+- :class:`ContinuousLightDarkPOMDP
+  <POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP>`
+  — continuous 2-D position, continuous action, continuous observation.
+- :class:`DiscreteLightDarkPOMDP
+  <POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP>`
+  — integer grid, four moves, grid-cell observations.
+
+There is also ``ContinuousLightDarkPOMDPDiscreteActions``: the continuous world
+with the four discrete moves, for planners that need a finite action set. Note
+its noise defaults differ — ``np.eye(2)`` rather than ``np.eye(2) * 0.05``.
 
 Minimal example
 ---------------

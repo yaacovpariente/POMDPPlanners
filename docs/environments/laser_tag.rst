@@ -3,8 +3,15 @@ LaserTag
 
 .. episode-viewer:: traces/laser_tag.json
 
-   ``LaserTagPOMDP``: one real episode planned by PFT-DPW, replayed in 3D. Drag
-   to orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
+   Grid variant, ``LaserTagPOMDP``: one real episode planned by PFT-DPW,
+   replayed in 3D. Drag to orbit, scroll to zoom, and use the bar to play,
+   scrub and switch camera.
+
+.. episode-viewer:: traces/continuous_laser_tag.json
+
+   Continuous variant, ``ContinuousLaserTagPOMDP``: the same, in the
+   continuous world. Drag to orbit, scroll to zoom, and use the bar to play,
+   scrub and switch camera.
 
 Chase an opponent through a walled arena and fire the tag action from its cell.
 The only sensor is eight noisy laser ranges, one per compass direction. A ray
@@ -15,23 +22,8 @@ says almost nothing.
 That is what makes the problem interesting: information arrives in rare, sharp
 bursts rather than continuously. Between sightings the belief spreads out under
 the opponent's movement model, so a planner has to decide whether to manoeuvre
-for a clean line of sight or to commit to a tag on stale evidence.
-
-Two variants:
-
-- :class:`LaserTagPOMDP
-  <POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.LaserTagPOMDP>` —
-  a grid, five discrete actions.
-- :class:`ContinuousLaserTagPOMDP
-  <POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp.ContinuousLaserTagPOMDP>`
-  — continuous positions, axis-aligned box walls, and a continuous
-  ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
-  gives that world a five-action set.
-
-.. episode-viewer:: traces/continuous_laser_tag.json
-
-   ``ContinuousLaserTagPOMDP``: the same, in the continuous world. Drag to
-   orbit, scroll to zoom, and use the bar to play, scrub and switch camera.
+for a clean line of sight or to commit to a tag on stale evidence. There is a
+grid variant and a continuous one; see `Variants`_.
 
 What the agent sees and does
 ----------------------------
@@ -39,9 +31,10 @@ What the agent sees and does
 - **State** — ``np.ndarray`` of shape ``(5,)``:
   ``[robot_row, robot_col, opponent_row, opponent_col, terminal_flag]`` (grid),
   or the same layout in continuous coordinates.
-- **Actions** — grid: integers ``0`` north, ``1`` south, ``2`` east, ``3`` west,
-  ``4`` tag. Continuous: ``[dx, dy, tag_flag]``.
-- **Observations** — eight laser ranges with Gaussian noise
+- **Actions** (discrete in the grid, continuous otherwise) — grid: integers
+  ``0`` north, ``1`` south, ``2`` east, ``3`` west, ``4`` tag. Continuous:
+  ``[dx, dy, tag_flag]``.
+- **Observations** (continuous) — eight laser ranges with Gaussian noise
   ``measurement_noise``. The grid variant returns a tuple, the continuous one a
   length-8 ``np.ndarray``. Terminal grid states emit ``(-1.0,) * 8``. Both
   variants sweep the same eight headings but number them differently: the grid
@@ -50,19 +43,12 @@ What the agent sees and does
   :math:`(i + 2) \bmod 8`, so a planner must not carry a beam index from one
   variant to the other.
 
-The opponent moves with probability 0.4 along x, 0.4 along y and stays with
-probability 0.2. Those are nominal weights: when the robot is aligned on an
-axis the 0.4 splits 0.2/0.2 across both directions, and a blocked neighbour
-folds its mass into "stay", so 0.2 is a floor rather than the actual stay
-probability. ``opponent_policy`` selects ``EVADE`` (default; away from the
-robot's pre-move position), ``PURSUE``, or ``EVADE_WHEN_SPOTTED``, which only
-runs from the robot once a laser has actually seen it.
-
 Formal definition
 -----------------
 
-Let :math:`G` be the free cells of an :math:`M \times N` grid with wall set
-:math:`\mathcal{W}`.
+The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+It is written for the grid variant. Let :math:`G` be the free cells of an
+:math:`M \times N` grid with wall set :math:`\mathcal{W}`.
 
 **State space.** Both positions and an absorbing flag:
 
@@ -83,9 +69,19 @@ with :math:`\mathbf{u}` the robot and :math:`\mathbf{v}` the opponent.
 The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
 \in \mathbb{R}^3` instead.
 
-**Transition model.** The robot's move first. With :math:`\epsilon` =
+**Observation space.** Eight non-negative laser ranges, or the all
+:math:`-1` vector a terminal state emits:
+
+.. math::
+
+   \Omega = \mathbb{R}_{\geq 0}^{8} \cup \{(-1, \dots, -1)\}
+
+The continuous variant returns the same eight ranges as a length-8 array,
+in a different beam order (see above).
+
+**Transition model.** The robot's move first. With :math:`p` =
 ``transition_error_prob``, a movement action executes as commanded with
-probability :math:`1 - \epsilon` and as one of the other three otherwise:
+probability :math:`1 - p` and as one of the other three otherwise:
 
 .. math::
 
@@ -123,6 +119,14 @@ cardinal neighbour, remainder on stay); once spotted, it flees as
 ``EVADE``. That makes the robot's own sensing change the opponent's dynamics
 — the reason this variant is harder than either fixed policy.
 
+In short: the opponent moves with probability 0.4 along x, 0.4 along y and stays with
+probability 0.2. Those are nominal weights: when the robot is aligned on an
+axis the 0.4 splits 0.2/0.2 across both directions, and a blocked neighbour
+folds its mass into "stay", so 0.2 is a floor rather than the actual stay
+probability. ``opponent_policy`` selects ``EVADE`` (default; away from the
+robot's pre-move position), ``PURSUE``, or ``EVADE_WHEN_SPOTTED``, which only
+runs from the robot once a laser has actually seen it.
+
 **Observation model.** Eight laser ranges, one per compass direction
 :math:`\Delta_k` (N, NE, E, SE, S, SW, W, NW). The true range is the number of
 free cells before the first blocker — a wall, the grid edge, **or the
@@ -130,7 +134,7 @@ opponent**:
 
 .. math::
 
-   \rho_k(s') = \min\{ j \geq 0 :\;
+   d_k(s') = \min\{ j \geq 0 :\;
    \mathbf{u}' + (j{+}1)\Delta_k \notin G \ \text{ or }\
    \mathbf{u}' + (j{+}1)\Delta_k = \mathbf{v}' \}
 
@@ -138,8 +142,8 @@ Each is read through independent noise and clipped at zero:
 
 .. math::
 
-   o_k = \max\big(0,\; \rho_k(s') + \varepsilon_k\big), \qquad
-   \varepsilon_k \sim \mathcal{N}(0, \sigma^2)
+   o_k = \max\big(0,\; d_k(s') + n_k\big), \qquad
+   n_k \sim \mathcal{N}(0, \sigma^2)
 
 with :math:`\sigma` = ``measurement_noise``. This is the whole inference
 problem: the opponent is visible only as a **shortened ray**, so a reading
@@ -168,7 +172,7 @@ for each:
 
    H(\mathbf{u}') = -\texttt{dangerous\_area\_penalty} \cdot
    \mathbb{1}\big[\mathbf{u}' \in \mathcal{W} \ \text{ or }\
-   \exists c:\ \lVert \mathbf{u}' - c \rVert_2 \leq \varrho \big]
+   \exists c:\ \lVert \mathbf{u}' - c \rVert_2 \leq \texttt{dangerous\_area\_radius} \big]
 
 A mistimed tag costs ``tag_penalty`` rather than merely a step, which is what
 makes guessing expensive and the belief worth maintaining.
@@ -196,6 +200,18 @@ mass on it instead.
 
 **Terminal set.** :math:`S_T = \{s : \top = 1\}` — set by a successful tag,
 or by a hazard hit when ``is_dangerous_area_hit_terminal``.
+
+Variants
+--------
+
+- :class:`LaserTagPOMDP
+  <POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.LaserTagPOMDP>` —
+  a grid, five discrete actions.
+- :class:`ContinuousLaserTagPOMDP
+  <POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp.ContinuousLaserTagPOMDP>`
+  — continuous positions, axis-aligned box walls, and a continuous
+  ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
+  gives that world a five-action set.
 
 Rewards
 -------
