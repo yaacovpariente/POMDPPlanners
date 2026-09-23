@@ -1900,14 +1900,15 @@
       running.push(total);
     }
 
-    /* Cells are interpolated with a smoothstep, so a unit runs between them
-       the way the GIF's substeps do, instead of teleporting. A respawn IS a
-       teleport, though: a tagged player is put back on its own base, so a slide
-       across the map would draw a walk nobody took. */
+    /* Cells are interpolated linearly, so a unit runs at constant speed
+       between them instead of decelerating to a stop at each grid boundary
+       (a smoothstep) or teleporting. A respawn IS a teleport, though: a
+       tagged player is put back on its own base, so a slide across the map
+       would draw a walk nobody took. */
     function cellAt(path, t) {
       var i0 = Math.floor(clamp(t, 0, N_STEPS - 1));
       var i1 = Math.min(i0 + 1, N_STEPS - 1);
-      var f = smooth(0, 1, clamp(t - i0, 0, 1));
+      var f = clamp(t - i0, 0, 1);
       var a = path[i0], b = path[i1];
       if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) > 2.5) {
         return { x: f < 0.5 ? a[0] : b[0], y: f < 0.5 ? a[1] : b[1], jump: true };
