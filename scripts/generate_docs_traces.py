@@ -203,7 +203,7 @@ WORLDS: List[DocsWorld] = [
     DocsWorld(
         "mountain_car", _env(ENV, "MountainCarPOMDP", discount_factor=0.99), num_steps=60, depth=20
     ),
-    DocsWorld("multiagent_firefighting", _env(ENV, "MultiAgentFirefightingPOMDP"), num_steps=20),
+    DocsWorld("firefighting", _env(ENV, "FirefightingPOMDP"), num_steps=20),
     DocsWorld(
         "occupancy_grid_mapping",
         # A particle is a whole map, so fewer of them keep the trace small.

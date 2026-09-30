@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""The world a multi-agent firefighting episode is played on, and its prior.
+"""The world a firefighting episode is played on, and its prior.
 
 This module holds everything about the firefighting POMDP that is *not* the
 transition, observation or reward law: the cell categories, the per-robot
@@ -19,7 +19,7 @@ Classes:
     FirefightingAction: The five per-robot actions.
     WindDirection: The four wind directions.
     WindStrength: The two wind strengths.
-    MultiAgentFirefightingInitialStateDistribution: The reset distribution.
+    FirefightingInitialStateDistribution: The reset distribution.
 
 Functions:
     default_obstacle_cells: The default obstacle blob for a grid.
@@ -258,7 +258,7 @@ def default_robot_start_cells(
     )
 
 
-class MultiAgentFirefightingInitialStateDistribution(Distribution):
+class FirefightingInitialStateDistribution(Distribution):
     """The reset distribution: a uniform wind and a uniformly placed fire.
 
     Everything else is fixed and known -- the step counter is 0, the robots are

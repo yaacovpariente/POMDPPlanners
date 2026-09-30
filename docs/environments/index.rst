@@ -19,7 +19,7 @@ registry:
 
    ``get_environment`` covers the classic suite only, which now includes
    ``OccupancyGridMappingPOMDP``, ``ChicheckInvadersPOMDP`` and
-   ``MultiAgentFirefightingPOMDP``. Import ``BattleshipPOMDP`` and
+   ``FirefightingPOMDP``. Import ``BattleshipPOMDP`` and
    ``SnakePOMDP`` directly. ``ContinuousPushPOMDP``,
    ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
    Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
@@ -86,13 +86,13 @@ actually stores.
      - discrete
      - none
      - :doc:`chicheck_invaders`
-   * - ``MultiAgentFirefightingPOMDP``
+   * - ``FirefightingPOMDP``
      - Put out a wind-driven grid fire with several partially sighted robots.
      - ``[step, robots, wind, cells]``
      - discrete
      - discrete
      - none
-     - :doc:`multiagent_firefighting`
+     - :doc:`firefighting`
    * - ``SnakePOMDP``
      - Grow the snake to a target length while the food stays hidden.
      - ``[status, length, counter, food, body]``
@@ -267,7 +267,7 @@ Guide column of the catalog above says which page to open for a given class.
    capture_the_flag
    occupancy_grid_mapping
    chicheck_invaders
-   multiagent_firefighting
+   firefighting
    snake
    pacman
    maze
@@ -325,7 +325,7 @@ API listing
    POMDPPlanners.environments.capture_the_flag_pomdp.CaptureTheFlagPOMDP
    POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
    POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP
-   POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP
+   POMDPPlanners.environments.firefighting_pomdp.FirefightingPOMDP
    POMDPPlanners.environments.snake_pomdp.SnakePOMDP
    POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
    POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP

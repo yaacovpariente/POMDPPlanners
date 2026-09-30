@@ -90,8 +90,8 @@ from POMDPPlanners.environments.maze_pomdp import (
     DiscreteMazePOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
-    MultiAgentFirefightingPOMDP,
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
+    FirefightingPOMDP,
 )
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
     OccupancyGridMappingPOMDP,
@@ -124,7 +124,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
-    multiagent_firefighting_pinned_kwargs,
+    firefighting_pinned_kwargs,
     occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -206,21 +206,17 @@ def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMD
     )
 
 
-def _build_multiagent_firefighting() -> MultiAgentFirefightingPOMDP:
-    return MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
-    )
+def _build_firefighting() -> FirefightingPOMDP:
+    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
 
 
-def _build_multiagent_firefighting_three_robots() -> MultiAgentFirefightingPOMDP:
+def _build_firefighting_three_robots() -> FirefightingPOMDP:
     # A third robot is a different action space (125 joint actions, not 25) and
     # a different state length, so the layout arithmetic and the base-5 action
     # decoding get covered at more than one width.
-    return MultiAgentFirefightingPOMDP(
+    return FirefightingPOMDP(
         discount_factor=0.95,
-        **multiagent_firefighting_pinned_kwargs(
-            num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)]
-        ),
+        **firefighting_pinned_kwargs(num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)]),
     )
 
 
@@ -301,10 +297,10 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("ContinuousPushPOMDPDiscreteActions", _build_continuous_push_discrete),
     ("DiscreteLightDarkPOMDP", _build_discrete_light_dark),
     ("DiscreteMazePOMDP", _build_discrete_maze),
+    ("FirefightingPOMDP", _build_firefighting),
+    ("FirefightingPOMDP[3 robots]", _build_firefighting_three_robots),
     ("LaserTagPOMDP", _build_laser_tag),
     ("MountainCarPOMDP", _build_mountain_car),
-    ("MultiAgentFirefightingPOMDP", _build_multiagent_firefighting),
-    ("MultiAgentFirefightingPOMDP[3 robots]", _build_multiagent_firefighting_three_robots),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
     ("PacManPOMDP", _build_pacman),

@@ -78,11 +78,11 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     ChicheckInvadersVisualizer,
     create_chicheck_invaders_belief,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp import (
     FireCategory,
     FirefightingAction,
-    MultiAgentFirefightingPOMDP,
-    MultiAgentFirefightingVisualizer,
+    FirefightingPOMDP,
+    FirefightingVisualizer,
     WindDirection,
     WindStrength,
     create_firefighting_state,
@@ -147,7 +147,7 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_pinned_kwargs,
     discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
-    multiagent_firefighting_pinned_kwargs,
+    firefighting_pinned_kwargs,
     occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
@@ -327,14 +327,12 @@ def create_deterministic_chicheck_invaders_episode(seed: int = 11) -> List[StepD
     return history
 
 
-def build_multiagent_firefighting_env() -> MultiAgentFirefightingPOMDP:
-    """Build the environment the multi-agent firefighting golden GIF is rendered for."""
-    return MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
-    )
+def build_firefighting_env() -> FirefightingPOMDP:
+    """Build the environment the firefighting golden GIF is rendered for."""
+    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
 
 
-def create_deterministic_multiagent_firefighting_episode(seed: int = 5) -> List[StepData]:
+def create_deterministic_firefighting_episode(seed: int = 5) -> List[StepData]:
     """Create a deterministic firefighting episode for the golden GIF.
 
     The belief attached to each step is a real :class:`WeightedParticleBelief`
@@ -357,7 +355,7 @@ def create_deterministic_multiagent_firefighting_episode(seed: int = 5) -> List[
     """
     random.seed(seed)
     np.random.seed(seed)
-    env = build_multiagent_firefighting_env()
+    env = build_firefighting_env()
 
     # The true world is stated rather than drawn. The reset distribution puts
     # the fire in a uniformly random cell, and on most seeds that is nowhere
@@ -1507,9 +1505,9 @@ def _renderer_light_dark() -> Renderer:
     return LightDarkPOMDPVisualizer(env).cache_visualization
 
 
-def _renderer_multiagent_firefighting() -> Renderer:
-    """Build the multi-agent firefighting renderer."""
-    visualizer = MultiAgentFirefightingVisualizer(build_multiagent_firefighting_env())
+def _renderer_firefighting() -> Renderer:
+    """Build the firefighting renderer."""
+    visualizer = FirefightingVisualizer(build_firefighting_env())
     return visualizer.create_visualization
 
 
@@ -1643,6 +1641,12 @@ GOLDEN_VISUALIZATIONS: Tuple[GoldenVisualization, ...] = (
         build_renderer=_renderer_maze(_DISCRETE_MAZE_ENV),
     ),
     GoldenVisualization(
+        name="firefighting",
+        build_history=lambda: create_deterministic_firefighting_episode(seed=5),
+        build_renderer=_renderer_firefighting,
+        check_repeated_render=True,
+    ),
+    GoldenVisualization(
         name="laser_tag",
         build_history=lambda: create_deterministic_laser_tag_episode(seed=42),
         build_renderer=_renderer_laser_tag,
@@ -1651,12 +1655,6 @@ GOLDEN_VISUALIZATIONS: Tuple[GoldenVisualization, ...] = (
         name="light_dark",
         build_history=lambda: create_deterministic_light_dark_episode(seed=42),
         build_renderer=_renderer_light_dark,
-    ),
-    GoldenVisualization(
-        name="multiagent_firefighting",
-        build_history=lambda: create_deterministic_multiagent_firefighting_episode(seed=5),
-        build_renderer=_renderer_multiagent_firefighting,
-        check_repeated_render=True,
     ),
     GoldenVisualization(
         name="occupancy_grid_mapping",

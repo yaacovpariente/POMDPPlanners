@@ -201,6 +201,19 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         viewers=("docs/environments/traces/chicheck_invaders.json",),
     ),
     EnvironmentFamily(
+        package="firefighting_pomdp",
+        label="Firefighting",
+        hooks=(
+            (
+                "firefighting_pomdp/firefighting_pomdp.py",
+                "FirefightingPOMDP",
+            ),
+        ),
+        docs_page="firefighting.rst",
+        docs_section=None,
+        viewers=("docs/environments/traces/firefighting.json",),
+    ),
+    EnvironmentFamily(
         package="isaac_lab_pomdp",
         label="IsaacLab",
         hooks=(("isaac_lab_pomdp/isaac_lab_pomdp.py", "IsaacLabPOMDP"),),
@@ -258,19 +271,6 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         docs_page="mountain_car.rst",
         docs_section=None,
         viewers=("docs/environments/traces/mountain_car.json",),
-    ),
-    EnvironmentFamily(
-        package="multiagent_firefighting_pomdp",
-        label="MultiAgentFirefighting",
-        hooks=(
-            (
-                "multiagent_firefighting_pomdp/multiagent_firefighting_pomdp.py",
-                "MultiAgentFirefightingPOMDP",
-            ),
-        ),
-        docs_page="multiagent_firefighting.rst",
-        docs_section=None,
-        viewers=("docs/environments/traces/multiagent_firefighting.json",),
     ),
     EnvironmentFamily(
         package="occupancy_grid_mapping_pomdp",

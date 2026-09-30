@@ -362,49 +362,8 @@ def discrete_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``LaserTagPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "floor_shape": (11, 7),
-        "walls": {
-            (1, 2),
-            (3, 0),
-            (3, 4),
-            (5, 0),
-            (6, 4),
-            (9, 1),
-            (9, 4),
-            (10, 6),
-        },
-        "tag_reward": 10.0,
-        "tag_penalty": 10.0,
-        "step_cost": 1.0,
-        "measurement_noise": 1.0,
-        "dangerous_areas": {(5, 3), (7, 1), (2, 5)},
-        "dangerous_area_radius": 1.0,
-        "dangerous_area_penalty": 5.0,
-        "initial_state": None,
-        "transition_error_prob": 0.0,
-        "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
-        "penalty_decay": 1.0,
-        "is_dangerous_area_hit_terminal": False,
-        "opponent_policy": OpponentPolicy.EVADE,
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def mountain_car_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``MountainCarPOMDP``."""
-    pinned: Dict[str, Any] = {
-        "state_transition_cov": np.diag([2.5e-5, 1e-6]),
-    }
-    pinned.update(overrides)
-    return pinned
-
-
-def multiagent_firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``MultiAgentFirefightingPOMDP``.
+def firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``FirefightingPOMDP``.
 
     ``obstacle_cells``, ``depot_cell`` and ``robot_start_cells`` default to
     ``None`` in the constructor and are substituted with a concrete layout, so
@@ -443,6 +402,47 @@ def multiagent_firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "damage_cost": 10.0,
         "water_cost": 0.1,
         "is_all_robots_disabled_terminal": True,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def laser_tag_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``LaserTagPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "floor_shape": (11, 7),
+        "walls": {
+            (1, 2),
+            (3, 0),
+            (3, 4),
+            (5, 0),
+            (6, 4),
+            (9, 1),
+            (9, 4),
+            (10, 6),
+        },
+        "tag_reward": 10.0,
+        "tag_penalty": 10.0,
+        "step_cost": 1.0,
+        "measurement_noise": 1.0,
+        "dangerous_areas": {(5, 3), (7, 1), (2, 5)},
+        "dangerous_area_radius": 1.0,
+        "dangerous_area_penalty": 5.0,
+        "initial_state": None,
+        "transition_error_prob": 0.0,
+        "reward_model_type": LaserTagRewardModelType.CONSTANT_HAZARD_PENALTY,
+        "penalty_decay": 1.0,
+        "is_dangerous_area_hit_terminal": False,
+        "opponent_policy": OpponentPolicy.EVADE,
+    }
+    pinned.update(overrides)
+    return pinned
+
+
+def mountain_car_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``MountainCarPOMDP``."""
+    pinned: Dict[str, Any] = {
+        "state_transition_cov": np.diag([2.5e-5, 1e-6]),
     }
     pinned.update(overrides)
     return pinned

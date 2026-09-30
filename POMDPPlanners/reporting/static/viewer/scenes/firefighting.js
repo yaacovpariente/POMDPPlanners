@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: MIT
  *
- * Multi-agent firefighting scene module.
+ * Firefighting scene module.
  *
  * Builds the world from a trace's `payload.world` block and moves it from the
  * trace's recorded fire maps, robot poses and beliefs. Nothing here is
@@ -957,7 +957,7 @@
    * Build the firefighting world from one trace.
    *
    * @param {Object} core   A renderer core.
-   * @param {Object} trace  A parsed trace.json of kind multiagent_firefighting.v1.
+   * @param {Object} trace  A parsed trace.json of kind firefighting.v1.
    * @returns {Object} The scene module the player drives.
    */
   function build(core, trace) {
@@ -2886,7 +2886,7 @@
     };
   }
 
-  V.scenes["multiagent_firefighting.v1"] = {
+  V.scenes["firefighting.v1"] = {
     build: build,
     // The sun carries real intensity and every fire real lumens, so the camera
     // stops down the way a real one would. This one number sets the whole

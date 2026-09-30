@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the multi-agent firefighting trace exporter and its viewer package.
+"""Tests for the firefighting trace exporter and its viewer package.
 
 Two things are checked here, and they are the two ways this migration could
 quietly break something:
@@ -25,36 +25,34 @@ from POMDPPlanners.core.simulation.belief_payloads import (
     belief_to_payload,
 )
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
-from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp import (
     FireCategory,
     FirefightingAction,
-    MultiAgentFirefightingPOMDP,
-    MultiAgentFirefightingVisualizer,
+    FirefightingPOMDP,
+    FirefightingVisualizer,
     WindDirection,
     WindStrength,
     create_firefighting_state,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.trace_exporter import (
-    MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND,
-    build_multiagent_firefighting_trace,
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.trace_exporter import (
+    FIREFIGHTING_PAYLOAD_KIND,
+    build_firefighting_trace,
 )
 from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    create_deterministic_multiagent_firefighting_episode,
+    create_deterministic_firefighting_episode,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
-    multiagent_firefighting_pinned_kwargs,
+    firefighting_pinned_kwargs,
 )
 
 
 @pytest.fixture(name="env")
-def env_fixture() -> MultiAgentFirefightingPOMDP:
+def env_fixture() -> FirefightingPOMDP:
     """A firefighting environment with the suite's pinned configuration."""
-    return MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
-    )
+    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
 
 
-def _belief(env: MultiAgentFirefightingPOMDP, winds, fire) -> WeightedParticleBelief:
+def _belief(env: FirefightingPOMDP, winds, fire) -> WeightedParticleBelief:
     """A particle belief over the wind alone, carrying the given fire map."""
     particles = [
         create_firefighting_state(
@@ -71,7 +69,7 @@ def _belief(env: MultiAgentFirefightingPOMDP, winds, fire) -> WeightedParticleBe
     )
 
 
-def _episode(env: MultiAgentFirefightingPOMDP, length: int = 3) -> List[StepData]:
+def _episode(env: FirefightingPOMDP, length: int = 3) -> List[StepData]:
     """A short, fully stated episode: no sampling, so the assertions are exact."""
     fire = np.full((env.num_rows, env.num_cols), float(FireCategory.UNBURNT))
     fire[4, 4] = float(FireCategory.BURNING)
@@ -123,13 +121,13 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_multiagent_firefighting_trace(env, history, episode_index=2, policy_name="PFT")
+    trace = build_firefighting_trace(env, history, episode_index=2, policy_name="PFT")
 
     written = tmp_path / "trace_2.json"
     trace.write(written)
     restored = EpisodeTrace.read(written)
 
-    assert restored.payload_kind == MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND
+    assert restored.payload_kind == FIREFIGHTING_PAYLOAD_KIND
     assert restored.episode_index == 2
     assert restored.policy == "PFT"
     assert restored.num_steps == len(history)
@@ -152,7 +150,7 @@ def test_trace_carries_the_recorded_state_not_a_reconstruction(env):
     Test type: unit
     """
     history = _episode(env)
-    payload = build_multiagent_firefighting_trace(env, history, 0).payload
+    payload = build_firefighting_trace(env, history, 0).payload
 
     for index, step in enumerate(history):
         assert payload["fires"][index] == [int(v) for v in env.fire_map(step.state).ravel()]
@@ -183,7 +181,7 @@ def test_trace_delegates_belief_serialization_to_core(env):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_multiagent_firefighting_trace(env, history, 0)
+    trace = build_firefighting_trace(env, history, 0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -205,7 +203,7 @@ def test_trace_names_where_the_wind_sits_in_a_particle(env):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_multiagent_firefighting_trace(env, history, 0)
+    trace = build_firefighting_trace(env, history, 0)
     layout = trace.payload["world"]["state_layout"]
 
     assert layout["wind_direction_index"] == env.wind_direction_index
@@ -234,7 +232,7 @@ def test_trace_takes_the_world_from_the_instance(env):
 
     Test type: unit
     """
-    payload = build_multiagent_firefighting_trace(env, _episode(env), 0).payload["world"]
+    payload = build_firefighting_trace(env, _episode(env), 0).payload["world"]
 
     assert payload["num_rows"] == env.num_rows
     assert payload["num_cols"] == env.num_cols
@@ -273,7 +271,7 @@ def test_trace_inherits_the_subsampling_cap(env):
             belief=_belief(env, winds, fire),
         )
     ]
-    belief = build_multiagent_firefighting_trace(env, history, 0).payload["beliefs"][0]
+    belief = build_firefighting_trace(env, history, 0).payload["beliefs"][0]
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
@@ -285,13 +283,13 @@ def test_environment_writes_a_trace_file(env, tmp_path: Path):
         history=_episode(env), output_dir=tmp_path, episode_index=3, policy_name="POMCPOW"
     )
     assert written == tmp_path / "trace_3.json"
-    assert EpisodeTrace.read(written).payload_kind == MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND
+    assert EpisodeTrace.read(written).payload_kind == FIREFIGHTING_PAYLOAD_KIND
 
 
 def test_trace_rejects_an_empty_history(env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_multiagent_firefighting_trace(env, [], 0)
+        build_firefighting_trace(env, [], 0)
 
 
 def test_moving_the_renderer_into_the_visualizer_package_did_not_move_the_gif(tmp_path: Path):
@@ -310,13 +308,11 @@ def test_moving_the_renderer_into_the_visualizer_package_did_not_move_the_gif(tm
 
     Test type: integration
     """
-    history = create_deterministic_multiagent_firefighting_episode(seed=5)
-    env = MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
-    )
+    history = create_deterministic_firefighting_episode(seed=5)
+    env = FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
     first, second = tmp_path / "a.gif", tmp_path / "b.gif"
-    MultiAgentFirefightingVisualizer(env).create_visualization(history, first)
-    MultiAgentFirefightingVisualizer(env).create_visualization(history, second)
+    FirefightingVisualizer(env).create_visualization(history, first)
+    FirefightingVisualizer(env).create_visualization(history, second)
 
     assert first.read_bytes() == second.read_bytes()
     assert first.stat().st_size > 0
@@ -331,12 +327,10 @@ def test_the_environment_still_writes_its_gif_from_the_moved_package(tmp_path: P
 
     Test type: integration
     """
-    env = MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs()
-    )
+    env = FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
     env.cache_visualization(
-        history=create_deterministic_multiagent_firefighting_episode(seed=5),
+        history=create_deterministic_firefighting_episode(seed=5),
         output_dir=tmp_path,
         episode_index=4,
     )
-    assert (tmp_path / "multiagent_firefighting_4.gif").stat().st_size > 0
+    assert (tmp_path / "firefighting_4.gif").stat().st_size > 0

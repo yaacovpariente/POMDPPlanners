@@ -1,27 +1,27 @@
 # SPDX-License-Identifier: MIT
 
-"""Multi-agent firefighting POMDP package.
+"""Firefighting POMDP package.
 
 Exports:
-    MultiAgentFirefightingPOMDP: The environment.
-    MultiAgentFirefightingVisualizer: Episode renderer.
+    FirefightingPOMDP: The environment.
+    FirefightingVisualizer: Episode renderer.
     FirefightingVectorizedBelief: The environment's default belief.
-    MultiAgentFirefightingInitialStateDistribution: The reset distribution.
+    FirefightingInitialStateDistribution: The reset distribution.
     FireCategory: The five per-cell categories.
     FirefightingAction: The five per-robot actions.
     WindDirection, WindStrength: The two halves of the hidden wind.
     create_firefighting_state: Build one state vector in an env's layout.
 """
 
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
     UNKNOWN_CATEGORY,
     FirefightingState,
-    MultiAgentFirefightingMetrics,
-    MultiAgentFirefightingPOMDP,
-    MultiAgentFirefightingStepChannel,
+    FirefightingMetrics,
+    FirefightingPOMDP,
+    FirefightingStepChannel,
     create_firefighting_state,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_world import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
     MAX_HEAT_DAMAGE_PER_STEP,
@@ -33,7 +33,7 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
     STEP_INDEX,
     FireCategory,
     FirefightingAction,
-    MultiAgentFirefightingInitialStateDistribution,
+    FirefightingInitialStateDistribution,
     WindDirection,
     WindStrength,
     default_depot_cell,
@@ -50,11 +50,11 @@ __all__ = [
     "MAX_HEAT_DAMAGE_PER_STEP",
     "FirefightingVectorizedBelief",
     "FirefightingVectorizedUpdater",
-    "MultiAgentFirefightingInitialStateDistribution",
-    "MultiAgentFirefightingMetrics",
-    "MultiAgentFirefightingPOMDP",
-    "MultiAgentFirefightingStepChannel",
-    "MultiAgentFirefightingVisualizer",
+    "FirefightingInitialStateDistribution",
+    "FirefightingMetrics",
+    "FirefightingPOMDP",
+    "FirefightingStepChannel",
+    "FirefightingVisualizer",
     "create_firefighting_belief",
     "NUM_CATEGORIES",
     "NUM_ROBOT_ACTIONS",
@@ -71,9 +71,9 @@ __all__ = [
     "default_robot_start_cells",
 ]
 
-from .multiagent_firefighting_vectorized_belief import (
+from .firefighting_vectorized_belief import (
     FirefightingVectorizedBelief,
     FirefightingVectorizedUpdater,
     create_firefighting_belief,
 )
-from .multiagent_firefighting_visualization import MultiAgentFirefightingVisualizer
+from .firefighting_visualization import FirefightingVisualizer

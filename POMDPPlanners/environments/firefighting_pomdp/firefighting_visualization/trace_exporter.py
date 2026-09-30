@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Multi-agent firefighting episode trace exporter.
+"""Firefighting episode trace exporter.
 
 The GIF renderer beside this module draws an episode. This one writes the same
 episode as data, so the browser viewer can replay it. Nothing here is
@@ -32,7 +32,7 @@ import numpy as np
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
 from POMDPPlanners.core.simulation.traces import EpisodeTrace, envelope_steps, to_jsonable
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_world import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
     ROBOT_FIELD_WIDTH,
@@ -46,7 +46,7 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
 
 # Payload version, independent of the envelope's. Bump it when the meaning of a
 # payload field changes, so a viewer can refuse a file it would misdraw.
-MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND = "multiagent_firefighting.v1"
+FIREFIGHTING_PAYLOAD_KIND = "firefighting.v1"
 
 #: Category names in code order, so a viewer labels a cell without a table of
 #: its own that could drift from :class:`FireCategory`.
@@ -135,13 +135,13 @@ def _world_block(environment: Any) -> Dict[str, Any]:
     }
 
 
-def build_multiagent_firefighting_trace(
+def build_firefighting_trace(
     environment: Any,
     history: List[StepData],
     episode_index: int,
     policy_name: Optional[str] = None,
 ) -> EpisodeTrace:
-    """Build the trace for one multi-agent firefighting episode.
+    """Build the trace for one firefighting episode.
 
     Args:
         environment: The firefighting environment the episode ran on.
@@ -151,7 +151,7 @@ def build_multiagent_firefighting_trace(
 
     Returns:
         The episode's :class:`EpisodeTrace`, with payload kind
-        ``multiagent_firefighting.v1``.
+        ``firefighting.v1``.
 
     Raises:
         ValueError: If ``history`` is empty; there is no episode to write.
@@ -199,7 +199,7 @@ def build_multiagent_firefighting_trace(
 
     return EpisodeTrace(
         environment=str(environment.name),
-        payload_kind=MULTIAGENT_FIREFIGHTING_PAYLOAD_KIND,
+        payload_kind=FIREFIGHTING_PAYLOAD_KIND,
         episode_index=int(episode_index),
         discount_factor=float(environment.discount_factor),
         steps=envelope_steps(history),
