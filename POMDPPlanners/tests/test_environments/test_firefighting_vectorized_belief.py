@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the multi-agent firefighting vectorized particle belief.
+"""Tests for the firefighting vectorized particle belief.
 
 The fire is stochastic in four separate places, so the batched transition is
 checked two ways: against the environment's own step under a preset that turns
@@ -17,17 +17,17 @@ import pytest
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp import (
     FirefightingVectorizedBelief,
     FirefightingVectorizedUpdater,
-    MultiAgentFirefightingPOMDP,
+    FirefightingPOMDP,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
 
 
 @pytest.fixture
 def env():
-    return MultiAgentFirefightingPOMDP(discount_factor=0.95)
+    return FirefightingPOMDP(discount_factor=0.95)
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ class TestFirefightingVectorizedUpdater:
 
         Test type: unit
         """
-        quiet = MultiAgentFirefightingPOMDP(
+        quiet = FirefightingPOMDP(
             discount_factor=0.95,
             slip_probability=0.0,
             growth_probability=0.0,

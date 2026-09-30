@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests specific to :class:`MultiAgentFirefightingPOMDP`.
+"""Tests specific to :class:`FirefightingPOMDP`.
 
 The shared API contracts -- hashing, batch agreement, serialization identity,
 reward-range bounding, seeded reproducibility, metric channels -- are covered
@@ -14,23 +14,23 @@ checks.
 import numpy as np
 import pytest
 
-from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp import (
     DIRECTION_OFFSETS,
     FireCategory,
     FirefightingAction,
-    MultiAgentFirefightingMetrics,
-    MultiAgentFirefightingPOMDP,
-    MultiAgentFirefightingStepChannel,
+    FirefightingMetrics,
+    FirefightingPOMDP,
+    FirefightingStepChannel,
     WindDirection,
     WindStrength,
     create_firefighting_state,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
-    multiagent_firefighting_pinned_kwargs,
+    firefighting_pinned_kwargs,
 )
 
 
-def build_env(**overrides) -> MultiAgentFirefightingPOMDP:
+def build_env(**overrides) -> FirefightingPOMDP:
     """Build the pinned environment, with overrides merged on top.
 
     Args:
@@ -39,9 +39,7 @@ def build_env(**overrides) -> MultiAgentFirefightingPOMDP:
     Returns:
         The environment.
     """
-    return MultiAgentFirefightingPOMDP(
-        discount_factor=0.95, **multiagent_firefighting_pinned_kwargs(**overrides)
-    )
+    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs(**overrides))
 
 
 def joint(*per_robot: int) -> int:
@@ -56,7 +54,7 @@ def joint(*per_robot: int) -> int:
     return int(sum(int(action) * 5**index for index, action in enumerate(per_robot)))
 
 
-def empty_fire(env: MultiAgentFirefightingPOMDP) -> np.ndarray:
+def empty_fire(env: FirefightingPOMDP) -> np.ndarray:
     """Return an all-unburnt fire map for ``env``.
 
     Args:
@@ -450,9 +448,7 @@ def test_an_empty_tank_sprays_nothing_and_pays_nothing() -> None:
         assert int(env.fire_map(successor)[4, 4]) != int(FireCategory.WET)
         assert int(env.robots(successor)[0, 2]) == 0
     assert (
-        env.step_info(state, action, successor)[
-            MultiAgentFirefightingStepChannel.SUPPRESS_ACTIONS.value
-        ]
+        env.step_info(state, action, successor)[FirefightingStepChannel.SUPPRESS_ACTIONS.value]
         == 0.0
     )
 
@@ -792,7 +788,7 @@ def test_the_transition_density_matches_sampling_and_sums_to_one() -> None:
 
     Test type: integration
     """
-    env = MultiAgentFirefightingPOMDP(
+    env = FirefightingPOMDP(
         discount_factor=0.95,
         num_rows=3,
         num_cols=3,
@@ -929,7 +925,7 @@ def test_terminal_precedence_puts_the_goal_ahead_of_the_failure() -> None:
         (None, [(4, 4, 6, 0), (4, 5, 6, 0)], 5, "failure"),
         (None, [(4, 4, 6, 3), (4, 5, 6, 3)], env.max_steps, "timeout"),
     ]
-    channel = MultiAgentFirefightingStepChannel
+    channel = FirefightingStepChannel
     for fire, robots, step, expected in cases:
         grid = empty_fire(env) if fire is None else fire
         if expected != "goal":
@@ -997,7 +993,7 @@ def test_step_info_reports_the_danger_channels_from_the_realised_transition() ->
     after[4, 6] = float(FireCategory.BURNT)
     successor = create_firefighting_state(env, [(4, 4, 5, 1), (0, 0, 5, 3)], (0, 0), after, step=1)
     action = joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS)
-    channel = MultiAgentFirefightingStepChannel
+    channel = FirefightingStepChannel
 
     info = env.step_info(state, action, successor)
     assert info[channel.HEALTH_LOST.value] == 2.0
@@ -1035,9 +1031,7 @@ def test_every_declared_metric_has_a_channel_step_info_emits() -> None:
     emitted = set(env.step_info(state, 0, successor))
     specs = env.get_metric_specs()
     assert {spec.channel for spec in specs} <= emitted
-    assert {spec.name for spec in specs} == {
-        metric.value for metric in MultiAgentFirefightingMetrics
-    }
+    assert {spec.name for spec in specs} == {metric.value for metric in FirefightingMetrics}
 
 
 # ---------------------------------------------------------------------------
@@ -1130,14 +1124,14 @@ def test_serialization_round_trips_the_cell_sequence_arguments() -> None:
 
     Given: The default environment and one with no obstacles at all.
     When: Each is rebuilt from its own dict.
-    Then: The rebuild is a ``MultiAgentFirefightingPOMDP``, is equal to the
+    Then: The rebuild is a ``FirefightingPOMDP``, is equal to the
         original, carries the same ``config_id``, and holds the same layout.
 
     Test type: unit
     """
     for env in (build_env(), build_env(obstacle_cells=[], depot_cell=(9, 9))):
-        rebuilt = MultiAgentFirefightingPOMDP.from_dict(env.to_dict())
-        assert isinstance(rebuilt, MultiAgentFirefightingPOMDP)
+        rebuilt = FirefightingPOMDP.from_dict(env.to_dict())
+        assert isinstance(rebuilt, FirefightingPOMDP)
         assert rebuilt.config_id == env.config_id
         assert rebuilt == env
         assert rebuilt.obstacle_cells == env.obstacle_cells
@@ -1158,8 +1152,8 @@ def test_an_empty_obstacle_list_is_not_the_default_obstacle_blob() -> None:
 
     Test type: unit
     """
-    default = MultiAgentFirefightingPOMDP(discount_factor=0.95)
-    open_grid = MultiAgentFirefightingPOMDP(discount_factor=0.95, obstacle_cells=[])
+    default = FirefightingPOMDP(discount_factor=0.95)
+    open_grid = FirefightingPOMDP(discount_factor=0.95, obstacle_cells=[])
     assert default.obstacle_cells
     assert open_grid.obstacle_cells == []
     assert default != open_grid
@@ -1210,7 +1204,7 @@ def test_the_renderer_has_a_label_for_every_action() -> None:
 
     Test type: unit
     """
-    from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.multiagent_firefighting_visualizer import (  # noqa: E501
+    from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (  # noqa: E501
         ACTION_LABELS,
         action_labels,
     )
@@ -1265,7 +1259,7 @@ def test_explicit_robot_starts_are_not_judged_by_the_default_placement_rule() ->
 
     Test type: unit
     """
-    env = MultiAgentFirefightingPOMDP(
+    env = FirefightingPOMDP(
         discount_factor=0.95,
         num_rows=1,
         num_cols=1,
