@@ -1,12 +1,12 @@
-Multi-agent firefighting
-========================
+Firefighting
+============
 
-.. episode-viewer:: traces/multiagent_firefighting.json
+.. episode-viewer:: traces/firefighting.json
 
    One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
-``MultiAgentFirefightingPOMDP`` puts ``N`` firefighting robots on an ``R x C``
+``FirefightingPOMDP`` puts ``N`` firefighting robots on an ``R x C``
 grid and asks them to put out a fire that spreads under a **hidden, constant
 wind**. The robots see the fire only near themselves, carry a finite tank of
 suppressant, and take heat damage for standing in flames. The task is complete
@@ -404,12 +404,12 @@ Minimal example
 
 .. code-block:: python
 
-   from POMDPPlanners.environments.multiagent_firefighting_pomdp import (
-       MultiAgentFirefightingPOMDP,
+   from POMDPPlanners.environments.firefighting_pomdp import (
+       FirefightingPOMDP,
    )
    from POMDPPlanners.utils.belief_factory import create_environment_belief
 
-   env = MultiAgentFirefightingPOMDP()
+   env = FirefightingPOMDP()
    belief = create_environment_belief(env, n_particles=100)
 
 Metrics
@@ -471,5 +471,5 @@ statement about the filter, not about the environment.
 See also
 --------
 
-- :class:`POMDPPlanners.environments.multiagent_firefighting_pomdp.MultiAgentFirefightingPOMDP`
+- :class:`POMDPPlanners.environments.firefighting_pomdp.FirefightingPOMDP`
 - :doc:`index` — the full catalog.

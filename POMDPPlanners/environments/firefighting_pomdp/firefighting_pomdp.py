@@ -33,9 +33,9 @@ contract. ``PFT_DPW`` takes the scalar API directly and is what it is validated
 with.
 
 Classes:
-    MultiAgentFirefightingPOMDP: The environment.
-    MultiAgentFirefightingMetrics: Its metric names.
-    MultiAgentFirefightingStepChannel: Its per-step channel names.
+    FirefightingPOMDP: The environment.
+    FirefightingMetrics: Its metric names.
+    FirefightingStepChannel: Its per-step channel names.
 """
 
 # pylint: disable=too-many-lines  # one environment, its dynamics and its metrics
@@ -58,7 +58,7 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_world import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
     MAX_HEAT_DAMAGE_PER_STEP,
@@ -70,7 +70,7 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
     STEP_INDEX,
     FireCategory,
     FirefightingAction,
-    MultiAgentFirefightingInitialStateDistribution,
+    FirefightingInitialStateDistribution,
     WindDirection,
     WindStrength,
     default_depot_cell,
@@ -87,12 +87,12 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checke
 #: do, which is what lets a particle filter compare two observations elementwise.
 UNKNOWN_CATEGORY = -1.0
 
-#: Type alias for a multi-agent firefighting state.
+#: Type alias for a firefighting state.
 FirefightingState = np.ndarray
 
 
-class MultiAgentFirefightingStepChannel(Enum):
-    """Per-step channels reported by :meth:`MultiAgentFirefightingPOMDP.step_info`."""
+class FirefightingStepChannel(Enum):
+    """Per-step channels reported by :meth:`FirefightingPOMDP.step_info`."""
 
     FIRE_EXTINGUISHED = "fire_extinguished"
     ALL_ROBOTS_DISABLED = "all_robots_disabled"
@@ -106,8 +106,8 @@ class MultiAgentFirefightingStepChannel(Enum):
     ROBOTS_DISABLED = "robots_disabled"
 
 
-class MultiAgentFirefightingMetrics(Enum):
-    """Metric names for the multi-agent firefighting environment."""
+class FirefightingMetrics(Enum):
+    """Metric names for the firefighting environment."""
 
     TASK_COMPLETION_RATE = "task_completion_rate"
     ENDED_BY_GOAL = "ended_by_goal"
@@ -123,7 +123,7 @@ class MultiAgentFirefightingMetrics(Enum):
 
 
 # pylint: disable-next=too-many-public-methods,too-many-instance-attributes
-class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
+class FirefightingPOMDP(DiscreteActionsEnvironment):
     """Put out a wind-driven grid fire with ``N`` partially sighted robots.
 
     The episode ends when no cell is alight (goal), when every robot is
@@ -167,12 +167,12 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         water_cost: float = 0.1,
         is_all_robots_disabled_terminal: bool = True,
         discount_factor: float = 0.95,
-        name: str = "MultiAgentFirefighting",
+        name: str = "Firefighting",
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
-        """Initialize the multi-agent firefighting POMDP.
+        """Initialize the firefighting POMDP.
 
         Args:
             num_rows: Grid rows. Defaults to 10.
@@ -283,7 +283,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
                 ``True``. This changes only termination, never the reward, so
                 it does not move either end of the declared reward range.
             discount_factor: Discount factor. Defaults to 0.95.
-            name: Environment name. Defaults to ``"MultiAgentFirefighting"``.
+            name: Environment name. Defaults to ``"Firefighting"``.
             output_dir: Output directory for logging. Defaults to ``None``.
             debug: Enable debug logging. Defaults to ``False``.
             use_queue_logger: Whether to use queue-based logging.
@@ -535,8 +535,8 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
 
         Returns:
             ``(direction, strength)`` as the integer codes of
-            :class:`~...multiagent_firefighting_world.WindDirection` and
-            :class:`~...multiagent_firefighting_world.WindStrength`.
+            :class:`~...firefighting_world.WindDirection` and
+            :class:`~...firefighting_world.WindStrength`.
         """
         values = np.asarray(state, dtype=np.float64)
         return (
@@ -1304,7 +1304,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         Returns:
             The reset distribution.
         """
-        return MultiAgentFirefightingInitialStateDistribution(
+        return FirefightingInitialStateDistribution(
             state_size=self.state_size,
             fire_offset=self.fire_offset,
             wind_direction_index=self.wind_direction_index,
@@ -1359,7 +1359,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
                 step.
 
         Returns:
-            The channels named by :class:`MultiAgentFirefightingStepChannel`.
+            The channels named by :class:`FirefightingStepChannel`.
             The two transition channels report ``0.0`` on the terminal step,
             where no action was taken.
         """
@@ -1387,31 +1387,29 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
             and disabled == float(self.num_robots)
         )
         return {
-            MultiAgentFirefightingStepChannel.FIRE_EXTINGUISHED.value: extinguished,
-            MultiAgentFirefightingStepChannel.ALL_ROBOTS_DISABLED.value: failure,
-            MultiAgentFirefightingStepChannel.TIMED_OUT_WITH_FIRE.value: 1.0
-            - extinguished
-            - failure,
-            MultiAgentFirefightingStepChannel.RECORDED_STEP.value: 1.0,
-            MultiAgentFirefightingStepChannel.ROBOT_IN_ALIGHT_CELL.value: float(
+            FirefightingStepChannel.FIRE_EXTINGUISHED.value: extinguished,
+            FirefightingStepChannel.ALL_ROBOTS_DISABLED.value: failure,
+            FirefightingStepChannel.TIMED_OUT_WITH_FIRE.value: 1.0 - extinguished - failure,
+            FirefightingStepChannel.RECORDED_STEP.value: 1.0,
+            FirefightingStepChannel.ROBOT_IN_ALIGHT_CELL.value: float(
                 sum(
                     1
                     for robot in range(self.num_robots)
                     if robots[robot, 3] > 0 and alight[int(robots[robot, 0]), int(robots[robot, 1])]
                 )
             ),
-            MultiAgentFirefightingStepChannel.HEALTH_LOST.value: health_lost,
-            MultiAgentFirefightingStepChannel.SUPPRESS_ACTIONS.value: sprays,
-            MultiAgentFirefightingStepChannel.ALIGHT_CELLS.value: alight_cells,
-            MultiAgentFirefightingStepChannel.BURNT_CELL_FRACTION.value: float(
+            FirefightingStepChannel.HEALTH_LOST.value: health_lost,
+            FirefightingStepChannel.SUPPRESS_ACTIONS.value: sprays,
+            FirefightingStepChannel.ALIGHT_CELLS.value: alight_cells,
+            FirefightingStepChannel.BURNT_CELL_FRACTION.value: float(
                 np.count_nonzero(fire == int(FireCategory.BURNT))
             )
             / float(self.num_cells),
-            MultiAgentFirefightingStepChannel.ROBOTS_DISABLED.value: disabled,
+            FirefightingStepChannel.ROBOTS_DISABLED.value: disabled,
         }
 
     def get_metric_specs(self) -> List[StepInfoMetric]:
-        """Declare the multi-agent firefighting metrics.
+        """Declare the firefighting metrics.
 
         Completion reduces with ``ANY``. ``BURNT`` and ``WET`` are absorbing,
         so a fire-free map cannot be undone and ``ANY`` and ``LAST`` agree
@@ -1426,62 +1424,62 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         would not distinguish them.
 
         Returns:
-            One spec per metric named in :class:`MultiAgentFirefightingMetrics`.
+            One spec per metric named in :class:`FirefightingMetrics`.
         """
-        channel = MultiAgentFirefightingStepChannel
+        channel = FirefightingStepChannel
         return [
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.TASK_COMPLETION_RATE.value,
+                name=FirefightingMetrics.TASK_COMPLETION_RATE.value,
                 channel=channel.FIRE_EXTINGUISHED.value,
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ENDED_BY_GOAL.value,
+                name=FirefightingMetrics.ENDED_BY_GOAL.value,
                 channel=channel.FIRE_EXTINGUISHED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ENDED_BY_FAILURE.value,
+                name=FirefightingMetrics.ENDED_BY_FAILURE.value,
                 channel=channel.ALL_ROBOTS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ENDED_BY_TIMEOUT.value,
+                name=FirefightingMetrics.ENDED_BY_TIMEOUT.value,
                 channel=channel.TIMED_OUT_WITH_FIRE.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.AVERAGE_EPISODE_LENGTH.value,
+                name=FirefightingMetrics.AVERAGE_EPISODE_LENGTH.value,
                 channel=channel.RECORDED_STEP.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ROBOT_STEPS_IN_FIRE.value,
+                name=FirefightingMetrics.ROBOT_STEPS_IN_FIRE.value,
                 channel=channel.ROBOT_IN_ALIGHT_CELL.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ROBOT_HEALTH_LOST.value,
+                name=FirefightingMetrics.ROBOT_HEALTH_LOST.value,
                 channel=channel.HEALTH_LOST.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.SUPPRESSANT_UNITS_USED.value,
+                name=FirefightingMetrics.SUPPRESSANT_UNITS_USED.value,
                 channel=channel.SUPPRESS_ACTIONS.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.MAX_SIMULTANEOUS_ALIGHT_CELLS.value,
+                name=FirefightingMetrics.MAX_SIMULTANEOUS_ALIGHT_CELLS.value,
                 channel=channel.ALIGHT_CELLS.value,
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.MAX_BURNT_CELL_FRACTION.value,
+                name=FirefightingMetrics.MAX_BURNT_CELL_FRACTION.value,
                 channel=channel.BURNT_CELL_FRACTION.value,
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=MultiAgentFirefightingMetrics.ROBOTS_DISABLED_AT_END.value,
+                name=FirefightingMetrics.ROBOTS_DISABLED_AT_END.value,
                 channel=channel.ROBOTS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
@@ -1503,12 +1501,12 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
         # almost none of them render anything, so the renderer's palette
         # tables and fonts stay out of a planning run's memory.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.multiagent_firefighting_visualizer import (  # noqa: E501
-            MultiAgentFirefightingVisualizer,
+        from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (  # noqa: E501
+            FirefightingVisualizer,
         )
 
-        cache_path = output_dir / f"multiagent_firefighting_{episode_index}.gif"
-        MultiAgentFirefightingVisualizer(self).create_visualization(history, cache_path)
+        cache_path = output_dir / f"firefighting_{episode_index}.gif"
+        FirefightingVisualizer(self).create_visualization(history, cache_path)
 
     def build_episode_trace(
         self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
@@ -1522,18 +1520,18 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
 
         Returns:
             The episode's trace, with payload kind
-            ``multiagent_firefighting.v1``.
+            ``firefighting.v1``.
         """
         # Imported here rather than at module scope, for the same reason the
         # renderer is: the exporter pulls in the trace schema, and this module
         # is imported by every worker of every run, almost none of which write
         # anything.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_visualization.trace_exporter import (  # noqa: E501
-            build_multiagent_firefighting_trace,
+        from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.trace_exporter import (  # noqa: E501
+            build_firefighting_trace,
         )
 
-        return build_multiagent_firefighting_trace(
+        return build_firefighting_trace(
             environment=self,
             history=history,
             episode_index=episode_index,
@@ -1542,7 +1540,7 @@ class MultiAgentFirefightingPOMDP(DiscreteActionsEnvironment):
 
 
 def create_firefighting_state(
-    env: MultiAgentFirefightingPOMDP,
+    env: FirefightingPOMDP,
     robots: Sequence[Sequence[int]],
     wind: Tuple[int, int],
     fire: np.ndarray,
@@ -1587,9 +1585,9 @@ __all__ = [
     "FireCategory",
     "FirefightingAction",
     "FirefightingState",
-    "MultiAgentFirefightingMetrics",
-    "MultiAgentFirefightingPOMDP",
-    "MultiAgentFirefightingStepChannel",
+    "FirefightingMetrics",
+    "FirefightingPOMDP",
+    "FirefightingStepChannel",
     "NUM_WIND_VALUES",
     "ROBOT_FIELD_WIDTH",
     "ROBOT_OFFSET",

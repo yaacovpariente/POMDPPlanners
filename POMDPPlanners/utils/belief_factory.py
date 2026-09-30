@@ -144,9 +144,8 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_continuous_maze_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
-    "MultiAgentFirefightingPOMDP": (
-        "POMDPPlanners.environments.multiagent_firefighting_pomdp."
-        "multiagent_firefighting_vectorized_belief",
+    "FirefightingPOMDP": (
+        "POMDPPlanners.environments.firefighting_pomdp.firefighting_vectorized_belief",
         "create_firefighting_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),

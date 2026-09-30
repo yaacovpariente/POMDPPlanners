@@ -260,17 +260,17 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         viewers=("docs/environments/traces/mountain_car.json",),
     ),
     EnvironmentFamily(
-        package="multiagent_firefighting_pomdp",
-        label="MultiAgentFirefighting",
+        package="firefighting_pomdp",
+        label="Firefighting",
         hooks=(
             (
-                "multiagent_firefighting_pomdp/multiagent_firefighting_pomdp.py",
-                "MultiAgentFirefightingPOMDP",
+                "firefighting_pomdp/firefighting_pomdp.py",
+                "FirefightingPOMDP",
             ),
         ),
-        docs_page="multiagent_firefighting.rst",
+        docs_page="firefighting.rst",
         docs_section=None,
-        viewers=("docs/environments/traces/multiagent_firefighting.json",),
+        viewers=("docs/environments/traces/firefighting.json",),
     ),
     EnvironmentFamily(
         package="occupancy_grid_mapping_pomdp",

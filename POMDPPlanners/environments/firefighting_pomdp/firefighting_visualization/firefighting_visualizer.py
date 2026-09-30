@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Visualization for the multi-agent firefighting POMDP.
+"""Visualization for the firefighting POMDP.
 
 Renders an episode as an animated GIF with three panels, Pillow and numpy only,
 in the style the other renderers here use. The three panels exist because a
@@ -37,7 +37,7 @@ same history twice produces byte-identical files, which is what the golden test
 depends on.
 
 Classes:
-    MultiAgentFirefightingVisualizer: Renders firefighting episodes.
+    FirefightingVisualizer: Renders firefighting episodes.
 """
 
 from pathlib import Path
@@ -48,7 +48,7 @@ from PIL import Image, ImageDraw, ImageFont
 from PIL import __version__ as PIL_VERSION
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_world import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     NUM_WIND_VALUES,
     FireCategory,
     FirefightingAction,
@@ -57,8 +57,8 @@ from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefig
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checkers
-    from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (  # noqa: E501
-        MultiAgentFirefightingPOMDP,
+    from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (  # noqa: E501
+        FirefightingPOMDP,
     )
 
 #: Milliseconds per frame, and for the last frame, which is held so a reader
@@ -150,12 +150,12 @@ def get_font(size: int) -> ImageFont.FreeTypeFont:
         font = ImageFont.load_default(size=size)
     except TypeError as exc:  # pragma: no cover - only on Pillow < 10.1
         raise RuntimeError(
-            "The multi-agent firefighting renderer needs Pillow >= 10.1 for "
+            "The firefighting renderer needs Pillow >= 10.1 for "
             f"scalable default fonts; this environment has Pillow {PIL_VERSION}."
         ) from exc
     if not isinstance(font, ImageFont.FreeTypeFont):  # pragma: no cover
         raise RuntimeError(
-            "The multi-agent firefighting renderer needs a FreeType-enabled Pillow; "
+            "The firefighting renderer needs a FreeType-enabled Pillow; "
             f"this one ({PIL_VERSION}) returns only its fixed bitmap face."
         )
     return font
@@ -243,8 +243,8 @@ def _build_master_palette() -> Image.Image:
     return master
 
 
-class MultiAgentFirefightingVisualizer:
-    """Renders a multi-agent firefighting episode as an animated GIF.
+class FirefightingVisualizer:
+    """Renders a firefighting episode as an animated GIF.
 
     Attributes:
         env: The environment the episode was run in, read for grid geometry,
@@ -253,7 +253,7 @@ class MultiAgentFirefightingVisualizer:
         num_cols: Grid columns, copied from the environment.
     """
 
-    def __init__(self, env: "MultiAgentFirefightingPOMDP"):
+    def __init__(self, env: "FirefightingPOMDP"):
         """Initialize the visualizer.
 
         Args:
@@ -448,7 +448,7 @@ class MultiAgentFirefightingVisualizer:
         draw = ImageDraw.Draw(canvas)
         draw.text(
             (TRUTH_LEFT, 18),
-            "Multi-Agent Firefighting POMDP",
+            "Firefighting POMDP",
             font=self._title_font,
             fill=COLOR_TEXT,
         )

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Vectorized particle belief for the multi-agent firefighting POMDP.
+"""Vectorized particle belief for the firefighting POMDP.
 
 The robots see the exact poses, tanks and healths of all of them, plus a noisy
 category for every cell within sensing range of a live robot. What they never
@@ -50,10 +50,10 @@ from POMDPPlanners.core.belief.vectorized_particle_belief_updater import (
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
     UNKNOWN_CATEGORY,
 )
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_world import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
     NUM_CATEGORIES,
@@ -69,8 +69,8 @@ from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief.base_belief import Belief
-    from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
-        MultiAgentFirefightingPOMDP,
+    from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
+        FirefightingPOMDP,
     )
 
 
@@ -87,7 +87,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     # pylint: disable=too-many-instance-attributes  # one world's rules, spelled out
 
-    def __init__(self, env: "MultiAgentFirefightingPOMDP") -> None:
+    def __init__(self, env: "FirefightingPOMDP") -> None:
         """Initialize the updater from an environment.
 
         Built from the environment rather than from a parameter list: the model
@@ -129,10 +129,8 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self._heat_damage = np.asarray(HEAT_DAMAGE, dtype=np.int64)
 
     @classmethod
-    def from_environment(
-        cls, env: "MultiAgentFirefightingPOMDP"
-    ) -> "FirefightingVectorizedUpdater":
-        """Construct an updater from a :class:`MultiAgentFirefightingPOMDP`."""
+    def from_environment(cls, env: "FirefightingPOMDP") -> "FirefightingVectorizedUpdater":
+        """Construct an updater from a :class:`FirefightingPOMDP`."""
         return cls(env)
 
     # ------------------------------------------------------------------
@@ -556,12 +554,12 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
 
 
 def create_firefighting_belief(
-    env: "MultiAgentFirefightingPOMDP",
+    env: "FirefightingPOMDP",
     belief_type: BeliefType = BeliefType.VECTORIZED_PARTICLE,
     n_particles: int = 200,
     **kwargs: Any,
 ) -> "Belief":
-    """Create a belief for the multi-agent firefighting POMDP.
+    """Create a belief for the firefighting POMDP.
 
     Args:
         env: The environment.
@@ -579,9 +577,7 @@ def create_firefighting_belief(
     if belief_type == BeliefType.PARTICLE:
         return get_initial_belief(env, n_particles)
     if belief_type != BeliefType.VECTORIZED_PARTICLE:
-        raise ValueError(
-            f"MultiAgentFirefightingPOMDP does not support belief type {belief_type!r}"
-        )
+        raise ValueError(f"FirefightingPOMDP does not support belief type {belief_type!r}")
 
     particles = np.stack(env.initial_state_dist().sample(n_samples=n_particles))
     log_weights = np.full(n_particles, -float(np.log(n_particles)), dtype=np.float64)

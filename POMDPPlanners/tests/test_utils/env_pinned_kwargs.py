@@ -403,8 +403,8 @@ def mountain_car_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     return pinned
 
 
-def multiagent_firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
-    """Pinned optional defaults for ``MultiAgentFirefightingPOMDP``.
+def firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
+    """Pinned optional defaults for ``FirefightingPOMDP``.
 
     ``obstacle_cells``, ``depot_cell`` and ``robot_start_cells`` default to
     ``None`` in the constructor and are substituted with a concrete layout, so

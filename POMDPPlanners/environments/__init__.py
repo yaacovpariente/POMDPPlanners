@@ -23,7 +23,7 @@ Available Environments:
     TMazePOMDP: Compatibility class for the original T-shaped layout
     OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
     ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
-    MultiAgentFirefightingPOMDP: Several robots fighting a wind-driven grid fire
+    FirefightingPOMDP: Several robots fighting a wind-driven grid fire
     CaptureTheFlagPOMDP: Two teams racing to carry the other side's flag home
 
 Factory Functions:
@@ -50,8 +50,8 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
     DiscreteLightDarkPOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.environments.multiagent_firefighting_pomdp.multiagent_firefighting_pomdp import (
-    MultiAgentFirefightingPOMDP,
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
+    FirefightingPOMDP,
 )
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
@@ -83,7 +83,7 @@ __all__ = [
     "DiscreteMazePOMDP",
     "LaserTagPOMDP",
     "MountainCarPOMDP",
-    "MultiAgentFirefightingPOMDP",
+    "FirefightingPOMDP",
     "OccupancyGridMappingPOMDP",
     "PacManPOMDP",
     "PushPOMDP",
@@ -108,7 +108,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "DiscreteMazePOMDP": DiscreteMazePOMDP,
     "LaserTagPOMDP": LaserTagPOMDP,
     "MountainCarPOMDP": MountainCarPOMDP,
-    "MultiAgentFirefightingPOMDP": MultiAgentFirefightingPOMDP,
+    "FirefightingPOMDP": FirefightingPOMDP,
     "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
     "PacManPOMDP": PacManPOMDP,
     "PushPOMDP": PushPOMDP,
