@@ -1958,6 +1958,26 @@
       unitLabels.push(sprite);
     });
 
+    /* A ring on the ground under each firefighter, in its crew colour, as
+       capture the flag draws under its players. From the board camera a
+       figure is a few pixels among trees, smoke and flame; the ring is what
+       finds it. A child of the unit, so it follows every move. */
+    var crewRings = units.map(function (unit, k) {
+      var ring = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.41, 40),
+        new THREE.MeshBasicMaterial({
+          // The lighter tag colour pushed above 1.0, as the water jet is: the
+          // exposure this camera adopts for the fire turns a plain crew colour
+          // into a dim brown line under the smoke.
+          color: new THREE.Color(CREW_COLORS[k % CREW_COLORS.length].tag).multiplyScalar(2.2),
+          transparent: true, opacity: 0.9,
+          side: THREE.DoubleSide, depthWrite: false
+        }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.y = 0.03;
+      unit.add(ring);
+      return ring;
+    });
+
     /* ------------------------------------------------------------ water */
     var JET_PER_ROBOT = 210;
     var JET_N = JET_PER_ROBOT * ROBOTS;
@@ -2591,6 +2611,8 @@
         // A disabled robot sees nothing, which is the model's own rule, so its
         // window is not drawn.
         footprints[r].visible = senseOn && fields[3] > 0;
+        // Its ring goes with it: the ring marks the crew still working.
+        crewRings[r].visible = fields[3] > 0;
         footprints[r].position.set(wx(cell.col), y + 0.040, wz(cell.row));
 
         if (fields[3] > 0) {
