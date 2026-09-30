@@ -9,9 +9,10 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
 <p align="center">
   <img src="docs/images/carla_chase_camera.png" alt="CARLA autonomous driving environment rendered by CarlaPOMDP's chase camera" width="49%">
   <img src="docs/images/isaac_lab_franka_reach.png" alt="Isaac Sim Franka reach task rendered by IsaacLabPOMDP's viewport camera" width="49%">
+  <img src="docs/images/classic_environments.jpg" alt="3D episode replays of the Firefighting, Capture the Flag, Light-Dark and Push environments" width="98.5%">
 </p>
 <p align="center">
-  <em>Rendered by the package itself: the <a href="POMDPPlanners/environments/carla_pomdp">CARLA</a> driving environment (left) and the <a href="POMDPPlanners/environments/isaac_lab_pomdp">Isaac Sim / IsaacLab</a> Franka reach environment (right). Realistic environments are integrated from the open-source simulators <a href="https://github.com/carla-simulator/carla">CARLA</a> and <a href="https://github.com/isaac-sim/IsaacLab">NVIDIA Isaac Lab</a> — credit to their authors.</em>
+  <em>Rendered by the package itself. First row: the <a href="POMDPPlanners/environments/carla_pomdp">CARLA</a> driving environment (left) and the <a href="POMDPPlanners/environments/isaac_lab_pomdp">Isaac Sim / IsaacLab</a> Franka reach environment (right). Realistic environments are integrated from the open-source simulators <a href="https://github.com/carla-simulator/carla">CARLA</a> and <a href="https://github.com/isaac-sim/IsaacLab">NVIDIA Isaac Lab</a> — credit to their authors. Below: environments implemented by the package: <a href="POMDPPlanners/environments/multiagent_firefighting_pomdp">Firefighting</a> and <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a> (second row), <a href="POMDPPlanners/environments/light_dark_pomdp">Light-Dark</a> and <a href="POMDPPlanners/environments/push_pomdp">Push</a> (third row).</em>
 </p>
 
 ## Main Features
