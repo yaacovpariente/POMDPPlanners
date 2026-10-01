@@ -50,14 +50,17 @@ For development or if you want the latest features:
    # Install in development mode
    pip install -e .
 
-PyPI Installation (Future)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+PyPI Installation
+~~~~~~~~~~~~~~~~~
 
-Once published to PyPI, you can install with:
+Install the latest release from PyPI:
 
 .. code-block:: bash
 
-   pip install pomdpplanners
+   pip install POMDPPlanners
+
+The release is a source distribution, so pip compiles the package's C++ modules
+and needs a C++ compiler.
 
 Virtual Environment Setup
 -------------------------

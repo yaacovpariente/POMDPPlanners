@@ -66,6 +66,16 @@ Documentation is available online: https://yaacovpariente.github.io/POMDPPlanner
 
 **Note:** POMDPPlanners requires Python 3.10+.
 
+Install the latest release from PyPI:
+
+```bash
+pip install POMDPPlanners
+```
+
+The release is a source distribution, so pip compiles the package's C++ modules and needs a C++ compiler.
+
+Or install from source, for the latest development version:
+
 ```bash
 # Clone the repository
 git clone https://github.com/yaacovpariente/POMDPPlanners.git
