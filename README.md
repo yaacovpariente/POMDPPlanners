@@ -125,8 +125,16 @@ The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
 which runs parallel episodes, applies persistent caching, and returns aggregated
 statistics (mean return, CVaR, VaR, confidence intervals).
 
+The example below compares POMCPOW and PFT-DPW on the T-Maze: the agent must
+walk to a noisy cue to learn which arm holds the goal. Each planner gets 2
+seconds per decision, and the episodes (30 per planner) run in parallel on
+every CPU core.
+Save it as `compare_planners.py` and run `python compare_planners.py`.
+
 ```python
-from POMDPPlanners.environments import ContinuousLightDarkPOMDPDiscreteActions
+from pathlib import Path
+
+from POMDPPlanners.environments import TMazePOMDP
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
@@ -134,15 +142,15 @@ from POMDPPlanners.utils.belief_factory import create_environment_belief
 from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
 from POMDPPlanners.core.simulation import EnvironmentRunParams
 
-env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+env = TMazePOMDP(discount_factor=0.95)
 sampler = DiscreteActionSampler(env.get_actions())
 
 pomcpow = POMCPOW(environment=env, discount_factor=0.95, depth=10,
                   exploration_constant=10.0, k_o=2.0, k_a=2.0,
-                  alpha_o=0.5, alpha_a=0.5, n_simulations=500,
+                  alpha_o=0.5, alpha_a=0.5, time_out_in_seconds=2,
                   action_sampler=sampler, name="POMCPOW")
 pft_dpw = PFT_DPW(environment=env, discount_factor=0.95, depth=10,
-                  exploration_constant=10.0, n_simulations=500,
+                  exploration_constant=10.0, time_out_in_seconds=2,
                   action_sampler=sampler, name="PFT_DPW")
 belief = create_environment_belief(env, n_particles=200)
 
@@ -150,11 +158,27 @@ api = LocalSimulationsAPI()
 _, stats = api.run_multiple_environments_and_policies(
     environment_run_params=[EnvironmentRunParams(
         environment=env, belief=belief,
-        policies=[pomcpow, pft_dpw], num_episodes=100, num_steps=30)],
+        policies=[pomcpow, pft_dpw], num_episodes=30, num_steps=30)],
     alpha=0.1, confidence_interval_level=0.95,
-    experiment_name="LightDark_Evaluation",
+    experiment_name="TMaze_Evaluation",
+    n_jobs=-1,  # run episodes in parallel, one per CPU core
+    cache_dir_path=Path("results"),
 )
+print(stats[["policy", "average_return", "task_completion_rate"]])
 ```
+
+### Viewing the results
+
+The run writes its results under `results/`. Open them in the local results
+site:
+
+```bash
+pomdp-report serve results
+```
+
+Then browse to http://127.0.0.1:8765. Open the `TMaze_Evaluation` experiment
+to compare the two planners side by side on expected return and task
+completion rate, and replay any episode in 3D.
 
 For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
 accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
