@@ -473,10 +473,12 @@ OBSERVATION_HANDLING_DISAGREEMENTS: Dict[str, Disagreement] = {
 TRANSITION_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {}
 TRANSITION_SHARED_SEED_DISAGREEMENTS: Dict[str, Disagreement] = {}
 BELIEF_UPDATE_DISAGREEMENTS: Dict[str, Disagreement] = {}
-# Same root cause as above: the pinned seed draws a "None" reading here.
-POSTERIOR_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {
-    "DiscreteLightDarkPOMDP[no_obs_in_dark]": _LIGHT_DARK_NONE_READING,
-}
+# No static entry for the light-dark "None" crash: whether the posterior
+# test's seeded draw lands in the dark depends on the platform's RNG stream
+# (it does on Linux for the continuous variants and not on macOS). The test
+# confirms the crash on a "None" reading and xfails at runtime instead; see
+# OBSERVATION_HANDLING_DISAGREEMENTS.
+POSTERIOR_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {}
 
 
 # ---------------------------------------------------------------------------

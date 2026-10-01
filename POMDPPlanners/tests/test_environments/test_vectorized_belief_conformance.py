@@ -454,6 +454,11 @@ def test_vectorized_belief_update_matches_weighted_particle_belief(spec: BeliefS
         )
 
 
+def _is_none_reading(observation: Any) -> bool:
+    """Whether ``observation`` is the light-dark models' "None" (no reading) label."""
+    return isinstance(observation, str) and observation == "None"
+
+
 def _bayes_filter_posterior(
     env: Environment, particles: np.ndarray, log_weights: np.ndarray, action: Any, observation: Any
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -524,6 +529,16 @@ def test_vectorized_belief_posterior_matches_scalar_bayes_filter(spec: BeliefSpe
     _seed_all(44)
     true_next = env.sample_next_state(state=true_state, action=action)
     observation = env.sample_observation(next_state=true_next, action=action)
+
+    if spec.env_id in OBSERVATION_HANDLING_DISAGREEMENTS and _is_none_reading(observation):
+        # Known crash; it is pinned by the strict xfail on the observation
+        # handling test. The draw is platform-dependent, so it cannot be a
+        # static strict xfail here. Assert the crash still happens, so a fix
+        # turns this into a failure rather than a silent xfail.
+        reason, raises = OBSERVATION_HANDLING_DISAGREEMENTS[spec.env_id]
+        with pytest.raises(raises):
+            prior.update(action=action, observation=observation, pomdp=env)
+        pytest.xfail(reason)
 
     _seed_all(45)
     vectorized_posterior = prior.update(action=action, observation=observation, pomdp=env)
