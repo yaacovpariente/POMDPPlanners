@@ -85,7 +85,7 @@ pip install POMDPPlanners
 
 The release is a source distribution, so pip compiles the package's C++ modules and needs a C++ compiler.
 
-Or install from source, for the latest development version:
+Or install from source:
 
 ```bash
 # Clone the repository
@@ -174,12 +174,12 @@ The run writes its results under `results/`. Open them in the local results
 site:
 
 ```bash
-pomdp-report serve results
+pomdp-report serve results --port 8765
 ```
 
-Then browse to http://127.0.0.1:8765. Open the `LightDark_Evaluation` experiment
-to compare the two planners side by side on expected return and task
-completion rate, and replay any episode in 3D.
+Then browse to http://127.0.0.1:8765, using the port you passed to `--port`.
+Open the `LightDark_Evaluation` experiment to compare the two planners side by
+side on expected return and task completion rate, and replay any episode in 3D.
 
 The video below walks through the whole example: copying the code from this
 README, running it, and comparing the planners in the results site. It also
