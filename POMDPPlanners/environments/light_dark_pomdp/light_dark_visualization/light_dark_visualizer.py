@@ -104,6 +104,7 @@ class LightDarkVisualizer(TraceVisualizer):
         that only a hazard hit sets; reaching the goal leaves it at 0. With the
         flag off, the discrete world still ends on an obstacle cell, so standing
         exactly on one at the end, away from the goal, is a hazard ending too.
+        The continuous world with the flag off ends only at the goal.
 
         Args:
             history: The episode's ``StepData`` records, in order.
@@ -117,6 +118,13 @@ class LightDarkVisualizer(TraceVisualizer):
         final = np.asarray(history[-1].state, dtype=float).reshape(-1)
         if environment.is_obstacle_hit_terminal:
             return final.shape[0] > 2 and float(final[2]) > 0.5
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+            DiscreteLightDarkPOMDP,
+        )
+
+        if not isinstance(environment, DiscreteLightDarkPOMDP):
+            return False
         obstacles = np.asarray(environment.obstacles, dtype=float)
         if not obstacles.size:
             return False

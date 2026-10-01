@@ -24,6 +24,7 @@ from POMDPPlanners.environments import (
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
 )
+from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import RewardModelType
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import ContinuousPushPOMDP
 
 
@@ -69,6 +70,15 @@ def test_light_dark_goal_is_not_a_danger_zone_ending():
     assert _ended(env, _history(states, [np.array([1.0, 0.0])])) is False
 
 
+def test_continuous_light_dark_without_the_flag_never_ends_in_a_danger_zone():
+    # Without the flag the continuous world ends only at the goal, even on an
+    # obstacle centre.
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=False)
+    obstacle = np.asarray(env.obstacles, dtype=float).T[0]
+    states = [obstacle - np.array([1.0, 0.0]), obstacle]
+    assert _ended(env, _history(states, [np.array([1.0, 0.0])])) is False
+
+
 def test_discrete_light_dark_obstacle_cell_ends_in_a_danger_zone_without_the_flag():
     env = DiscreteLightDarkPOMDP(discount_factor=0.95, is_obstacle_hit_terminal=False)
     obstacle = np.asarray(env.obstacles, dtype=float).T[0]
@@ -91,12 +101,15 @@ def _pacman(**overrides: Any) -> PacManPOMDP:
     return PacManPOMDP(**kwargs)
 
 
-def _pacman_history(env: PacManPOMDP, ghost_after: tuple) -> List[StepData]:
+def _pacman_history(
+    env: PacManPOMDP, ghost_after: tuple, pacman_after: tuple = (0, 3)
+) -> List[StepData]:
     pellets = tuple(env.initial_pellets)
+    before = (pacman_after[0], pacman_after[1] - 1)
     states = [
-        env.make_state(pacman_pos=(0, 2), ghost_positions=((6, 6),), pellets=pellets),
+        env.make_state(pacman_pos=before, ghost_positions=((6, 6),), pellets=pellets),
         env.make_state(
-            pacman_pos=(0, 3), ghost_positions=(ghost_after,), pellets=pellets, terminal=True
+            pacman_pos=pacman_after, ghost_positions=(ghost_after,), pellets=pellets, terminal=True
         ),
     ]
     return _history(states, [1], observation=((6, 6),))
@@ -105,6 +118,12 @@ def _pacman_history(env: PacManPOMDP, ghost_after: tuple) -> List[StepData]:
 def test_pacman_entering_a_zone_is_a_danger_zone_ending():
     env = _pacman()
     assert _ended(env, _pacman_history(env, ghost_after=(6, 5))) is True
+
+
+def test_pacman_decayed_hazard_outside_every_zone_is_a_danger_zone_ending():
+    # The distance-decayed variant can end the episode with PacMan in no zone.
+    env = _pacman(reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY)
+    assert _ended(env, _pacman_history(env, (6, 5), (5, 2))) is True
 
 
 def test_pacman_ghost_collision_in_a_zone_is_not_a_danger_zone_ending():
@@ -147,13 +166,13 @@ def test_continuous_laser_tag_successful_tag_is_not_a_danger_zone_ending():
 # ---------------------------------------------------------- Continuous Push
 
 
-def _push() -> ContinuousPushPOMDP:
+def _push(obstacle_terminal: bool = True) -> ContinuousPushPOMDP:
     return ContinuousPushPOMDP(
         discount_factor=0.95,
         dangerous_areas=[(5.0, 5.0)],
         dangerous_area_radius=1.0,
         is_dangerous_area_hit_terminal=True,
-        is_obstacle_hit_terminal=True,
+        is_obstacle_hit_terminal=obstacle_terminal,
     )
 
 
@@ -172,6 +191,17 @@ def test_push_terminal_slot_outside_every_zone_is_not_a_danger_zone_ending():
         np.array([1.0, 9.0, 2.0, 2.0, 9.0, 9.0, 1.0]),
     ]
     assert _ended(_push(), _history(states, [np.array([0.0, 1.0])])) is False
+
+
+def test_push_terminal_slot_outside_every_zone_is_a_hazard_without_obstacle_endings():
+    # With only the dangerous-area flag on, the slot is the hazard's wherever
+    # the rover is: the distance-decayed variant fires outside every zone.
+    states = [
+        np.array([1.0, 8.0, 2.0, 2.0, 9.0, 9.0, 0.0]),
+        np.array([1.0, 9.0, 2.0, 2.0, 9.0, 9.0, 1.0]),
+    ]
+    push = _push(obstacle_terminal=False)
+    assert _ended(push, _history(states, [np.array([0.0, 1.0])])) is True
 
 
 # --------------------------------------------------------------- RockSample

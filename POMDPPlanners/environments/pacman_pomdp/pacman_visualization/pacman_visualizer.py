@@ -169,8 +169,9 @@ class PacManVisualizer(TraceVisualizer):
         The terminal slot is shared by three endings, so this mirrors the
         native transition's own test: a ghost collision (same cell, or PacMan
         and a ghost swapping cells) or an empty board ends the episode on its
-        own, and only an ending with neither, on a cell inside a zone, is the
-        hazard's.
+        own, and any ending with neither is the hazard's. Zone membership is
+        not checked: the distance-decayed variant can end the episode with
+        PacMan outside every zone.
 
         Args:
             pacman_positions: PacMan's cell at every recorded step.
@@ -190,8 +191,4 @@ class PacManVisualizer(TraceVisualizer):
         for was, now in zip(ghost_positions[-2], ghost_positions[-1]):
             if now == after or (was == after and now == before):
                 return False
-        radius_sq = float(environment.dangerous_area_radius) ** 2
-        return any(
-            (after[0] - row) ** 2 + (after[1] - col) ** 2 <= radius_sq
-            for row, col in environment.dangerous_areas
-        )
+        return True
