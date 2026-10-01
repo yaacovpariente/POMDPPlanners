@@ -186,7 +186,7 @@ README, running it, and comparing the planners in the results site. It also
 shows the List and Table views, editing a chart's title and axes, exporting
 the chart as an image, and playing every episode at once with Live.
 
-https://github.com/user-attachments/assets/3bf8f49a-1cb1-4cef-bb14-6b03ceab9e53
+https://github.com/user-attachments/assets/3b305863-5180-454d-bb47-0a9dd13d76cf
 
 For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
 accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
