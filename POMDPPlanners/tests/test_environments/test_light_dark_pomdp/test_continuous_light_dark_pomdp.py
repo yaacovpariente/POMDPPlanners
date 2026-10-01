@@ -479,7 +479,7 @@ def test_compute_metrics_empty_histories_is_rejected():
     """Test that scoring an empty batch of episodes raises.
 
     Purpose: Validates that an empty batch is rejected rather than scored. A
-        zero goal_reaching_rate over no episodes is indistinguishable from a run
+        zero task_completion_rate over no episodes is indistinguishable from a run
         in which the agent never reached the goal
 
     Given: A ContinuousLightDarkPOMDPDiscreteActions environment and an empty
@@ -585,14 +585,14 @@ def test_compute_metrics():
     metrics_dict = {metric.name: metric for metric in metrics}
 
     # Test goal reaching rate
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 0.5  # 1 out of 2 histories reach goal
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
     # Test obstacle hit rate
-    assert "obstacle_hit_rate" in metrics_dict
-    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert "collision_rate" in metrics_dict
+    obstacle_rate = metrics_dict["collision_rate"]
     assert obstacle_rate.value == 0.5  # 1 out of 2 histories hits obstacle
     assert (
         obstacle_rate.lower_confidence_bound
@@ -867,12 +867,12 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
     )
     metrics = env.compute_metrics([history1, history2])
     metrics_dict = {metric.name: metric for metric in metrics}
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 0.5
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
-    assert "obstacle_hit_rate" in metrics_dict
-    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert "collision_rate" in metrics_dict
+    obstacle_rate = metrics_dict["collision_rate"]
     assert obstacle_rate.value == 0.5
     assert (
         obstacle_rate.lower_confidence_bound

@@ -1369,11 +1369,11 @@ class TestAverageReturnParameterToOptimizeMapper:
         Test type: unit
         """
         expected_metrics = {
-            TigerPOMDP: "success_rate",
-            CartPolePOMDP: "goal_reaching_rate",
-            RockSamplePOMDP: "exit_success_rate",
+            TigerPOMDP: "task_completion_rate",
+            CartPolePOMDP: "task_completion_rate",
+            RockSamplePOMDP: "task_completion_rate",
             LaserTagPOMDP: "tag_success_rate",
-            PacManPOMDP: "win_rate",
+            PacManPOMDP: "task_completion_rate",
         }
 
         for env, _belief in self._get_all_standard_environments():
@@ -1532,7 +1532,7 @@ class TestRiskAverseParameterToOptimizeMapper:
         Given: Directly constructed ContinuousLaserTagPOMDP and
             ContinuousLaserTagPOMDPDiscreteActions instances
         When: RiskAverseParameterToOptimizeMapper.generate() is called
-        Then: Returns average_all_dangerous_encounters (MINIMIZE) and
+        Then: Returns average_dangerous_encounters (MINIMIZE) and
             tag_success_rate (MAXIMIZE)
 
         Test type: unit
@@ -1550,13 +1550,13 @@ class TestRiskAverseParameterToOptimizeMapper:
         for env in envs:
             result = self.mapper.generate(env)
             metric_dict = {name: direction for name, direction in result}
-            assert "average_all_dangerous_encounters" in metric_dict, (
-                f"{env.name} should have 'average_all_dangerous_encounters' but got "
+            assert "average_dangerous_encounters" in metric_dict, (
+                f"{env.name} should have 'average_dangerous_encounters' but got "
                 f"{list(metric_dict.keys())}"
             )
-            assert metric_dict["average_all_dangerous_encounters"] == (
+            assert metric_dict["average_dangerous_encounters"] == (
                 HyperParameterOptimizationDirection.MINIMIZE
-            ), f"{env.name}: average_all_dangerous_encounters should be MINIMIZE"
+            ), f"{env.name}: average_dangerous_encounters should be MINIMIZE"
             assert "tag_success_rate" in metric_dict, (
                 f"{env.name} should have 'tag_success_rate' but got " f"{list(metric_dict.keys())}"
             )

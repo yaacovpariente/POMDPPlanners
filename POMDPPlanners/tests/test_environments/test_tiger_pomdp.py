@@ -450,7 +450,7 @@ class TestTigerPOMDPMetrics:
         metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 100% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 1.0
 
         # Should have average of 3 listens
@@ -510,7 +510,7 @@ class TestTigerPOMDPMetrics:
         metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 0% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 0.0
 
         # Should have average of 2 listens
@@ -569,7 +569,7 @@ class TestTigerPOMDPMetrics:
         metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 50% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 0.5
 
         # Should have average of 1.9 listens (1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
@@ -619,7 +619,7 @@ class TestTigerPOMDPMetrics:
         )
         metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, [empty_history]))
 
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         listens_metric = next(m for m in metrics if m.name == "average_listens")
         assert success_metric.value == 0.0
         assert listens_metric.value == 0.0

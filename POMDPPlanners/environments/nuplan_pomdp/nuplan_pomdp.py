@@ -77,6 +77,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, MetricValue
@@ -211,11 +212,11 @@ _EGO_VELOCITY_SLICE = slice(3, 5)  # (vx, vy) map velocity in m/s
 class NuPlanPOMDPMetrics(Enum):
     """Metric names for the nuPlan POMDP environment."""
 
-    COLLISION_RATE = "collision_rate"
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
     AVERAGE_PROGRESS = "average_progress"
-    AVERAGE_SPEED = "average_speed"
-    NEAR_MISS_COUNT = "near_miss_count"
-    MIN_VEHICLE_DISTANCE = "min_vehicle_distance"
+    AVERAGE_SPEED_MPS = CommonMetricName.AVERAGE_SPEED_MPS.value
+    AVERAGE_NEAR_MISSES = CommonMetricName.AVERAGE_NEAR_MISSES.value
+    MIN_VEHICLE_DISTANCE_M = "min_vehicle_distance_m"
 
 
 def _driven_steps(history: History) -> List[Any]:
@@ -809,8 +810,8 @@ class NuPlanPOMDP(Environment):
 
         Returns:
             The metric name strings produced by :meth:`compute_metrics`: ``collision_rate``,
-            ``average_progress``, ``average_speed``, ``near_miss_count`` and
-            ``min_vehicle_distance``.
+            ``average_progress``, ``average_speed_mps``, ``average_near_misses`` and
+            ``min_vehicle_distance_m``.
         """
         return [metric.value for metric in NuPlanPOMDPMetrics]
 
@@ -825,9 +826,9 @@ class NuPlanPOMDP(Environment):
 
             - ``collision_rate``: fraction of episodes that ended in a collision.
             - ``average_progress``: mean per-episode ground distance travelled (m).
-            - ``average_speed``: mean ego speed over the driven trajectory (m/s).
-            - ``near_miss_count``: mean number of near-miss events per episode.
-            - ``min_vehicle_distance``: mean over episodes of the closest the ego came to any
+            - ``average_speed_mps``: mean ego speed over the driven trajectory (m/s).
+            - ``average_near_misses``: mean number of near-miss events per episode.
+            - ``min_vehicle_distance_m``: mean over episodes of the closest the ego came to any
               agent (m); episodes that saw no agent are excluded.
         """
         require_non_empty_histories(histories, type(self).__name__)
@@ -840,9 +841,11 @@ class NuPlanPOMDP(Environment):
         return [
             self._metric_from_samples(NuPlanPOMDPMetrics.COLLISION_RATE.value, collisions),
             self._metric_from_samples(NuPlanPOMDPMetrics.AVERAGE_PROGRESS.value, path_lengths),
-            self._metric_from_samples(NuPlanPOMDPMetrics.AVERAGE_SPEED.value, mean_speeds),
-            self._metric_from_samples(NuPlanPOMDPMetrics.NEAR_MISS_COUNT.value, near_counts),
-            self._metric_from_samples(NuPlanPOMDPMetrics.MIN_VEHICLE_DISTANCE.value, min_distances),
+            self._metric_from_samples(NuPlanPOMDPMetrics.AVERAGE_SPEED_MPS.value, mean_speeds),
+            self._metric_from_samples(NuPlanPOMDPMetrics.AVERAGE_NEAR_MISSES.value, near_counts),
+            self._metric_from_samples(
+                NuPlanPOMDPMetrics.MIN_VEHICLE_DISTANCE_M.value, min_distances
+            ),
         ]
 
     def _episode_near_misses(self, history: History) -> Tuple[int, float]:

@@ -434,7 +434,7 @@ class TestHyperParameterTuningSimulationTaskSerialization:
             num_steps=10,
             parameters_to_optimize=[
                 ("avg_discounted_return", HyperParameterOptimizationDirection.MAXIMIZE),
-                ("avg_episode_length", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_episode_length", HyperParameterOptimizationDirection.MINIMIZE),
             ],
             experiment_name="test_multi_objective",
             n_trials=10,
@@ -448,7 +448,7 @@ class TestHyperParameterTuningSimulationTaskSerialization:
 
         assert len(unpickled_task.parameters_to_optimize) == 2
         assert unpickled_task.parameters_to_optimize[0][0] == "avg_discounted_return"
-        assert unpickled_task.parameters_to_optimize[1][0] == "avg_episode_length"
+        assert unpickled_task.parameters_to_optimize[1][0] == "average_episode_length"
 
 
 class TestTaskSerializationRoundTrip:
@@ -738,7 +738,7 @@ class TestComplexHyperparameterTuningTaskSerialization:
         Test type: integration
 
         Note: This matches the two-objective configuration from the failure report:
-        - avg_obstacle_hit_counter (minimize)
+        - average_collisions (minimize)
         - average_return (maximize)
         """
         hyper_parameters = [
@@ -767,7 +767,7 @@ class TestComplexHyperparameterTuningTaskSerialization:
             num_steps=20,
             parameters_to_optimize=[
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
-                ("avg_episode_length", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_episode_length", HyperParameterOptimizationDirection.MINIMIZE),
             ],
             experiment_name="test_multi_objective",
             n_trials=10,
@@ -782,7 +782,7 @@ class TestComplexHyperparameterTuningTaskSerialization:
         # Verify multi-objective configuration
         assert len(unpickled_task.parameters_to_optimize) == 2
         assert unpickled_task.parameters_to_optimize[0][0] == "average_return"
-        assert unpickled_task.parameters_to_optimize[1][0] == "avg_episode_length"
+        assert unpickled_task.parameters_to_optimize[1][0] == "average_episode_length"
 
     def test_pomcpow_task_with_cache_dir_serialization(self, tmp_path: Path):
         """Test HyperParameterTuningSimulationTask with cache directory.

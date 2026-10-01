@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -104,12 +105,12 @@ class LaserTagPOMDPMetrics(Enum):
     """Metric names for LaserTag POMDP environment."""
 
     TAG_SUCCESS_RATE = "tag_success_rate"
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
-    AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
-    AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class RewardModelType(Enum):
@@ -1476,7 +1477,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         """
         return [
             StepInfoMetric(
-                name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=LaserTagPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=LaserTagStepChannel.TAGGED.value,
                 per_episode=EpisodeReduction.ANY,
             ),
@@ -1486,7 +1487,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
+                name=LaserTagPOMDPMetrics.AVERAGE_COLLISIONS.value,
                 channel=LaserTagStepChannel.OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
@@ -1496,7 +1497,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
+                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
                 channel=LaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
                 per_episode=EpisodeReduction.SUM,
             ),

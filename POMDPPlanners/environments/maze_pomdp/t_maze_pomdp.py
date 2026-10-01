@@ -87,6 +87,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -160,13 +161,13 @@ class TMazeStepChannel(Enum):
 class TMazeMetric(Enum):
     """Episode-level metric names reported by ``compute_metrics``."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
     WRONG_ENDPOINT_RATE = "wrong_endpoint_rate"
-    ENDED_BY_GOAL_RATE = "ended_by_goal_rate"
-    ENDED_BY_FAILURE_RATE = "ended_by_failure_rate"
-    ENDED_BY_TIMEOUT_RATE = "ended_by_timeout_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
-    AVERAGE_WALL_COLLISIONS = "average_wall_collisions"
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
 
 
 def create_t_maze_state(
@@ -700,7 +701,7 @@ class TMazePOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=TMazeMetric.AVERAGE_WALL_COLLISIONS.value,
+                name=TMazeMetric.AVERAGE_COLLISIONS.value,
                 channel=TMazeStepChannel.WALL_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),

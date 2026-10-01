@@ -1767,7 +1767,7 @@ class TestLaserTagPOMDP:
         # Find wall collision metric
         collision_metric = None
         for metric in metrics:
-            if metric.name == "average_obstacle_collisions":
+            if metric.name == "average_collisions":
                 collision_metric = metric
                 break
 
@@ -1980,7 +1980,7 @@ class TestLaserTagPOMDP:
             "tag_success_rate",
             "average_episode_length",
             "average_failed_tag_attempts",
-            "average_obstacle_collisions",
+            "average_collisions",
             "average_dangerous_area_steps",
         }
 
@@ -2133,7 +2133,7 @@ class TestLaserTagPOMDP:
                 "tag_success_rate",
                 "average_episode_length",
                 "average_failed_tag_attempts",
-                "average_obstacle_collisions",
+                "average_collisions",
                 "average_dangerous_area_steps",
             }
 

@@ -132,7 +132,7 @@ def test_a_cleared_episode_reports_a_goal_ending_and_its_kills():
 
     Given: Two chickens stacked in the ship's column, so two shots clear them.
     When: The episode runs to its terminal state.
-    Then: Completion is 1, ``ended_by_goal`` is 1, the other two endings are 0,
+    Then: Completion is 1, ``ended_by_goal_rate`` is 1, the other two endings are 0,
         and two kills are counted.
 
     Test type: integration
@@ -144,9 +144,9 @@ def test_a_cleared_episode_reports_a_goal_ending_and_its_kills():
     )
     metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.FIRE)] * 5, state)])
     assert metric(metrics, ChicheckInvadersMetrics.TASK_COMPLETION_RATE.value) == 1.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value) == 1.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value) == 0.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL_RATE.value) == 1.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE_RATE.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT_RATE.value) == 0.0
     assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_CHICKENS_KILLED.value) == 2.0
 
 
@@ -166,9 +166,9 @@ def test_a_lost_episode_reports_a_failure_ending_and_a_hit_taken():
     )
     metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.STAY)] * 5, state)])
     assert metric(metrics, ChicheckInvadersMetrics.TASK_COMPLETION_RATE.value) == 0.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value) == 1.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value) == 0.0
-    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE_RATE.value) == 1.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL_RATE.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT_RATE.value) == 0.0
     assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_HITS_TAKEN.value) == 1.0
 
 
@@ -185,9 +185,9 @@ def test_an_episode_that_runs_out_of_steps_reports_a_timeout():
         [run_episode(env, [int(ChicheckInvadersAction.STAY)] * 10, state)]
     )
     endings = [
-        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL.value),
-        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE.value),
-        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_GOAL_RATE.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_FAILURE_RATE.value),
+        metric(metrics, ChicheckInvadersMetrics.ENDED_BY_TIMEOUT_RATE.value),
     ]
     assert endings == [0.0, 0.0, 1.0]
     assert sum(endings) == pytest.approx(1.0)
@@ -206,7 +206,7 @@ def test_shot_accuracy_is_kills_per_shot_over_the_episode():
     Given: An episode that fires repeatedly at a column holding one chicken:
         the first shot connects, the rest hit nothing.
     When: The metrics are computed.
-    Then: ``shot_accuracy`` is the episode's kills-over-shots ratio, it is
+    Then: ``average_shot_accuracy`` is the episode's kills-over-shots ratio, it is
         strictly below one, and it agrees with the two counts.
 
     Test type: integration
@@ -220,7 +220,7 @@ def test_shot_accuracy_is_kills_per_shot_over_the_episode():
     metrics = env.compute_metrics([history])
     shots = metric(metrics, ChicheckInvadersMetrics.AVERAGE_SHOTS_FIRED.value)
     kills = metric(metrics, ChicheckInvadersMetrics.AVERAGE_CHICKENS_KILLED.value)
-    accuracy = metric(metrics, ChicheckInvadersMetrics.SHOT_ACCURACY.value)
+    accuracy = metric(metrics, ChicheckInvadersMetrics.AVERAGE_SHOT_ACCURACY.value)
     assert shots > kills > 0
     assert accuracy == pytest.approx(kills / shots)
     assert accuracy < 1.0
@@ -239,7 +239,7 @@ def test_shot_accuracy_is_reported_even_when_no_episode_fired():
         env, chickens=[[0, 3, 1, MODE_PATROL, 1], [4, 3, -1, MODE_PATROL, 1]]
     )
     metrics = env.compute_metrics([run_episode(env, [int(ChicheckInvadersAction.STAY)] * 3, state)])
-    assert metric(metrics, ChicheckInvadersMetrics.SHOT_ACCURACY.value) == 0.0
+    assert metric(metrics, ChicheckInvadersMetrics.AVERAGE_SHOT_ACCURACY.value) == 0.0
     assert set(env.get_metric_names()) <= {value.name for value in metrics}
 
 

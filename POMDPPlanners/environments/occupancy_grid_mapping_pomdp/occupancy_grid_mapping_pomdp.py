@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -129,14 +130,14 @@ class OccupancyGridStepChannel(Enum):
 class OccupancyGridMappingMetrics(Enum):
     """Metric names for the occupancy-grid mapping environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL = "ended_by_goal"
-    ENDED_BY_FAILURE = "ended_by_failure"
-    ENDED_BY_TIMEOUT = "ended_by_timeout"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     FINAL_RESIDUAL_ENTROPY_BITS = "final_residual_entropy_bits"
     MAX_RESOLVED_CELL_FRACTION = "max_resolved_cell_fraction"
-    AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
     AVERAGE_SUCCESSFUL_TRANSLATIONS = "average_successful_translations"
 
 
@@ -949,17 +950,17 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=OccupancyGridMappingMetrics.ENDED_BY_GOAL.value,
+                name=OccupancyGridMappingMetrics.ENDED_BY_GOAL_RATE.value,
                 channel=OccupancyGridStepChannel.MAP_RESOLVED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=OccupancyGridMappingMetrics.ENDED_BY_FAILURE.value,
+                name=OccupancyGridMappingMetrics.ENDED_BY_FAILURE_RATE.value,
                 channel=OccupancyGridStepChannel.EPISODE_FAILURE.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=OccupancyGridMappingMetrics.ENDED_BY_TIMEOUT.value,
+                name=OccupancyGridMappingMetrics.ENDED_BY_TIMEOUT_RATE.value,
                 channel=OccupancyGridStepChannel.MAP_UNRESOLVED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
@@ -979,7 +980,7 @@ class OccupancyGridMappingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=OccupancyGridMappingMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
+                name=OccupancyGridMappingMetrics.AVERAGE_COLLISIONS.value,
                 channel=OccupancyGridStepChannel.OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),

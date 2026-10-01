@@ -126,7 +126,7 @@ episode ends at the goal.
 Metrics
 -------
 
-It reports a ``goal_reaching_rate`` metric.
+It reports a ``task_completion_rate`` metric.
 
 Minimal example
 ---------------

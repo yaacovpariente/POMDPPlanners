@@ -1107,7 +1107,9 @@ def test_collision_speed_metric_reduces_with_max_over_the_episode(
     Test type: unit
     """
     spec = next(
-        s for s in world.get_metric_specs() if s.name == RacetrackMetric.COLLISION_SPEED_MPS.value
+        s
+        for s in world.get_metric_specs()
+        if s.name == RacetrackMetric.MAX_COLLISION_SPEED_MPS.value
     )
 
     assert spec.channel == RacetrackStepChannel.COLLISION_SPEED_MPS.value

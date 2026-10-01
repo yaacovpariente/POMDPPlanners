@@ -555,8 +555,8 @@ class TestContinuousPushPOMDP:
         )
         metrics = self.env.compute_metrics(attach_step_info(self.env, [history]))
         metric_names = {m.name for m in metrics}
-        assert "goal_reaching_rate" in metric_names
-        assert "robot_obstacle_collision_rate" in metric_names
+        assert "task_completion_rate" in metric_names
+        assert "robot_collision_rate" in metric_names
 
     def test_compute_metrics_values_within_confidence_intervals(self):
         """Test full-metric CI containment + structural invariants.
@@ -1054,7 +1054,7 @@ class TestContinuousPushDangerousAreas:
         """compute_metrics reports dangerous-area step counts.
 
         Purpose: Validates the ``dangerous_area_rate`` and
-            ``total_dangerous_area_steps`` metrics on the continuous
+            ``average_dangerous_area_steps`` metrics on the continuous
             variant.
 
         Given: A ContinuousPushPOMDP with one zone and a hand-built
@@ -1107,8 +1107,8 @@ class TestContinuousPushDangerousAreas:
         )
         metrics = {m.name: m for m in env.compute_metrics(attach_step_info(env, [history]))}
         assert "dangerous_area_rate" in metrics
-        assert "total_dangerous_area_steps" in metrics
-        assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
+        assert "average_dangerous_area_steps" in metrics
+        assert metrics["average_dangerous_area_steps"].value == pytest.approx(2.0)
         assert metrics["dangerous_area_rate"].value == pytest.approx(2.0 / 3.0)
 
     def test_native_rollout_used_when_hit_probability_lt_one(self, monkeypatch):

@@ -483,7 +483,7 @@ class TestStepInfoChannels:
         assert info[BattleshipStepChannel.FLEET_HIT_FRACTION.value] == pytest.approx(3.0 / 7.0)
 
     def test_sunk_and_not_sunk_are_complementary(self, env: BattleshipPOMDP) -> None:
-        """Purpose: ended_by_goal and ended_by_timeout are built on this pair.
+        """Purpose: ended_by_goal_rate and ended_by_timeout_rate are built on this pair.
 
         Given: an unfinished board and a sunk one
         When: step_info scores both

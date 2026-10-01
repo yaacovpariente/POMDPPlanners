@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
@@ -84,7 +85,7 @@ class IsaacLabMetric(Enum):
     #: Fraction of episodes in which the configured success predicate held,
     #: under the configured per-episode reduction (``ANY`` for "goal reached at
     #: some point", ``ALL`` for "never failed").
-    SUCCESS_RATE = "success_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
     #: Mean over episodes of the episode's largest per-step contact impulse (N*s).
     MAX_CONTACT_IMPULSE_NS = "max_contact_impulse_ns"
     #: Mean over episodes of the episode's largest instantaneous contact force (N).
@@ -822,7 +823,7 @@ class IsaacLabPOMDP(Environment):
         if self.success_termination_term is not None or self._success_extractor is not None:
             specs.append(
                 StepInfoMetric(
-                    name=IsaacLabMetric.SUCCESS_RATE.value,
+                    name=IsaacLabMetric.TASK_COMPLETION_RATE.value,
                     channel=IsaacLabStepChannel.SUCCESS.value,
                     per_episode=self.success_reduction,
                 )

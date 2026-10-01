@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -61,7 +62,7 @@ class TigerStepChannel(Enum):
 class TigerPOMDPMetrics(Enum):
     """Metric names for Tiger POMDP environment."""
 
-    SUCCESS_RATE = "success_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
     AVERAGE_LISTENS = "average_listens"
 
 
@@ -348,12 +349,12 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         """Declare the Tiger metrics derived from the per-step channels.
 
         Returns:
-            Specs for ``success_rate`` (the last step's door choice) and
+            Specs for ``task_completion_rate`` (the last step's door choice) and
             ``average_listens`` (how often the agent listened per episode).
         """
         return [
             StepInfoMetric(
-                name=TigerPOMDPMetrics.SUCCESS_RATE.value,
+                name=TigerPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=TigerStepChannel.CORRECT_DOOR_OPENED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
