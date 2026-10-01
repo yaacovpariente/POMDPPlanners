@@ -146,9 +146,31 @@ class RockSampleVisualizer(TraceVisualizer):
                 "action_names": [str(name) for name in environment.action_names],
                 "first_check_action": FIRST_CHECK_ACTION,
             },
+            "ended_in_danger_zone": self._ended_in_danger_zone(history),
             "states": states,
             "rock_truth": rock_truth,
             "observations": observations,
             "checks": checks,
             "beliefs": beliefs,
         }
+
+    def _ended_in_danger_zone(self, history: List[StepData]) -> bool:
+        """Whether the episode ended because the rover was hit in a hazard.
+
+        With the hazard-terminal flag on, the state carries a trailing terminal
+        slot that only a hazard hit sets. Exiting east ends the episode through
+        the ``(-1, -1)`` sentinel instead and leaves the slot at 0.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            ``True`` only for an episode a hazard ended.
+        """
+        environment: Any = self.environment
+        if not environment.is_dangerous_area_hit_terminal:
+            return False
+        final = np.asarray(history[-1].state, dtype=float).reshape(-1)
+        if final.shape[0] != 2 + len(environment.rock_positions) + 1:
+            return False
+        return int(final[0]) != -1 and float(final[-1]) > 0.5

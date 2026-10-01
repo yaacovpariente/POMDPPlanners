@@ -857,6 +857,128 @@
     return player;
   }
 
+  /* A lumpy puff: overlapping soft blobs, so a sprite reads as smoke rather
+     than as a disc. Seeded, so every page draws the same puff. */
+  function smokeTexture() {
+    var s = 128;
+    var cv = document.createElement("canvas");
+    cv.width = cv.height = s;
+    var g = cv.getContext("2d");
+    var rnd = mulberry(4093);
+    for (var i = 0; i < 9; i++) {
+      var a = rnd() * Math.PI * 2, d = rnd() * s * 0.16;
+      var x = s / 2 + Math.cos(a) * d, y = s / 2 + Math.sin(a) * d;
+      var r = s * (0.20 + rnd() * 0.16);
+      var grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(255,255,255,0.42)");
+      grad.addColorStop(0.55, "rgba(255,255,255,0.16)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, s, s);
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+
+  /**
+   * Smoke pouring off a wrecked body: soft puffs that rise, swell and thin
+   * out, and a few embers flickering where it comes from.
+   *
+   * Every puff is a pure function of the wall clock, so the plume needs no
+   * per-frame state, looks the same however the replay is scrubbed, and keeps
+   * rising after the player stops on the final frame — which is exactly when
+   * it is on screen.
+   *
+   * The composite multiplies the whole frame by the scene's exposure, and a
+   * sprite is unlit, so its colour is given in display terms and divided by
+   * the exposure here; the same grey then reads the same in every scene.
+   *
+   * @param {Object} options
+   * @param {number} options.exposure   The scene's composite exposure.
+   * @param {number} [options.scale]    World size of the plume, 1 at a ~0.6 m body.
+   * @param {number} [options.base]     Height the smoke leaves the body at.
+   * @param {number} [options.tone]     Smoke brightness, 1 for a night scene;
+   *   lower it on a bright floor, where pale smoke would vanish into the ground.
+   * @param {number} [options.seed]
+   * @returns {{group: THREE.Group, update: function(number, number)}}
+   *   Add `group` to the scene and move it onto the body each frame; call
+   *   `update(elapsed, intensity)` with intensity 0 (no smoke) to 1 (full plume).
+   */
+  function createSmoke(options) {
+    var exposure = options.exposure;
+    var scale = options.scale || 1;
+    var base = options.base === undefined ? 0.4 : options.base;
+    var COUNT = 34, EMBERS = 7, LIFE = 3.4;
+    var rnd = mulberry(options.seed || 9071);
+    var group = new THREE.Group();
+    group.visible = false;
+
+    var puffTex = smokeTexture();
+    var tone = options.tone || 1;
+    var soot = new THREE.Color(0.10, 0.095, 0.09).multiplyScalar(tone / exposure);
+    var ash = new THREE.Color(0.42, 0.41, 0.40).multiplyScalar(tone / exposure);
+    var puffs = [];
+    for (var i = 0; i < COUNT; i++) {
+      var mat = new THREE.SpriteMaterial({
+        map: puffTex, color: soot.clone(), transparent: true, opacity: 0,
+        depthWrite: false, fog: false
+      });
+      var sprite = new THREE.Sprite(mat);
+      sprite.renderOrder = 5;
+      group.add(sprite);
+      puffs.push({
+        sprite: sprite, phase: i / COUNT + rnd() * 0.03, angle: rnd() * Math.PI * 2,
+        swirl: 0.6 + rnd() * 1.2, spin: (rnd() - 0.5) * 0.8, size: 0.75 + rnd() * 0.5
+      });
+    }
+
+    var emberTex = radialTexture(1, 0.3);
+    var embers = [];
+    for (var e = 0; e < EMBERS; e++) {
+      var em = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: emberTex, color: new THREE.Color(1.0, 0.36, 0.08).multiplyScalar(1.6 / exposure),
+        transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false
+      }));
+      em.scale.setScalar(0.07 * scale);
+      group.add(em);
+      embers.push({
+        sprite: em, x: (rnd() - 0.5) * 0.36, z: (rnd() - 0.5) * 0.30,
+        y: 0.12 + rnd() * 0.22, rate: 7 + rnd() * 9, phase: rnd() * 6.3
+      });
+    }
+
+    function update(elapsed, intensity) {
+      if (!(intensity > 0.001)) { group.visible = false; return; }
+      group.visible = true;
+      for (var i = 0; i < puffs.length; i++) {
+        var p = puffs[i];
+        var age = (elapsed / LIFE + p.phase) % 1;
+        // Rises fast off the body and slows as it cools; swirls and leans downwind.
+        var rise = 1 - (1 - age) * (1 - age);
+        var radius = (0.06 + 0.42 * age) * scale;
+        var a = p.angle + age * p.swirl * 2.4;
+        p.sprite.position.set(
+          Math.cos(a) * radius + 0.55 * age * age * scale,
+          base + 2.1 * rise * scale,
+          Math.sin(a) * radius * 0.8 + 0.2 * age * age * scale
+        );
+        p.sprite.scale.setScalar((0.22 + 1.05 * age) * p.size * scale);
+        // Thick and sooty at the source, thinning to pale ash as it spreads.
+        var fadeIn = Math.min(1, age / 0.08);
+        p.sprite.material.opacity = intensity * 0.85 * fadeIn * Math.pow(1 - age, 1.25);
+        p.sprite.material.color.copy(soot).lerp(ash, Math.min(1, age * 1.6));
+        p.sprite.material.rotation = p.phase * 6.28 + elapsed * p.spin;
+      }
+      for (var k = 0; k < embers.length; k++) {
+        var m = embers[k];
+        var flick = 0.5 + 0.5 * Math.sin(elapsed * m.rate + m.phase);
+        m.sprite.position.set(m.x * scale, m.y * scale, m.z * scale);
+        m.sprite.material.opacity = intensity * flick * flick;
+      }
+    }
+
+    return { group: group, update: update };
+  }
+
   global.POMDPViewer = {
     clamp: clamp,
     lerp: lerp,
@@ -867,6 +989,7 @@
     createCore: createCore,
     createCameraRig: createCameraRig,
     createPlayer: createPlayer,
+    createSmoke: createSmoke,
     scenes: {}
   };
 })(window);

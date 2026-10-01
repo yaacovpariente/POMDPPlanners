@@ -56,6 +56,9 @@
   var MAX_DRAWN_POINTS = 1200;
 
   var PAC_R = 0.40;
+  // The composite's exposure (see the registration at the bottom). The smoke
+  // needs it too, to come out the same grey as in every other scene.
+  var EXPOSURE = 0.175;
   var WALL_H = 1.02;
 
   function groundCanvas(seed) {
@@ -389,6 +392,13 @@
        almost edge-on from the raised camera and reads as a plain sphere. */
     var pacman = new THREE.Group();
     scene.add(pacman);
+
+    /* Smoke, only when a hazard zone ended the episode. A separate group, not
+       part of PacMan, so it rises straight up however the body is tipped. */
+    var smoke = payload.ended_in_danger_zone
+      ? V.createSmoke({ exposure: EXPOSURE, base: PAC_R * 1.6, seed: 1303 })
+      : null;
+    if (smoke) scene.add(smoke.group);
     var pacSkin = new THREE.MeshStandardMaterial({
       color: COLORS.pac, roughness: 0.28, metalness: 0.15,
       emissive: 0x6A4A00, emissiveIntensity: 0.55, envMapIntensity: 0.8
@@ -832,7 +842,15 @@
            is all on the body: the tilt sways the sphere a little off centre,
            but the shadow, the light and the recorded cell stay put. Paused,
            it eases to a tremble rather than shaking at full strength. */
-        var rough = sample.rough * (0.4 + (sample.moving && playing ? 0.6 : 0));
+        /* A hazard that ends the episode finishes PacMan: through the last
+           step the smoke builds and the struggle dies away, so it comes to
+           rest smoking rather than still straining. */
+        var wreck = smoke ? clamp((t - (steps - 1.6)) / 0.6, 0, 1) : 0;
+        if (smoke) {
+          smoke.group.position.set(px, 0, pz);
+          smoke.update(reduceMotion ? 1.7 : elapsed, wreck);
+        }
+        var rough = sample.rough * (0.4 + (sample.moving && playing ? 0.6 : 0)) * (1 - wreck);
         var shudder = rough * (Math.sin(elapsed * 31.0) * 0.6 + Math.sin(elapsed * 47.0 + 1.3) * 0.4);
         pacBody.rotation.z = Math.sin(elapsed * 11.0 + 0.7) * rough * 0.30 + shudder * 0.08;
         pacBody.rotation.x = Math.sin(elapsed * 8.3) * rough * 0.22;
@@ -924,6 +942,6 @@
     build: build,
     // Real lumens blow out instantly, so the camera stops down. Tuned for
     // this scene's lamp power; it is not a knob to remove.
-    exposure: 0.175
+    exposure: EXPOSURE
   };
 })(window);

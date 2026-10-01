@@ -176,8 +176,32 @@ class PushVisualizer(TraceVisualizer):
         # agree with.
         return {
             "world": _world(environment, _target(history[0].state)),
+            "ended_in_danger_zone": self._ended_in_danger_zone(history),
             "states": states,
             "next_states": next_states,
             "observations": observations,
             "beliefs": beliefs,
         }
+
+    def _ended_in_danger_zone(self, history: List[StepData]) -> bool:
+        """Whether the episode ended because the rover was hit in a hazard.
+
+        Only the continuous world can end on a hazard. Its terminal slot is
+        shared by a dangerous-area hit and an obstacle hit, so the slot alone
+        does not say which; the rover finishing inside a dangerous area does.
+        Reaching the target ends the episode without setting the slot.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            ``True`` only for an episode a hazard ended.
+        """
+        environment: Any = self.environment
+        if not getattr(environment, "is_dangerous_area_hit_terminal", False):
+            return False
+        final = np.asarray(history[-1].state, dtype=float).reshape(-1)
+        if final.shape[0] <= 6 or float(final[6]) <= 0.5:
+            return False
+        # pylint: disable-next=protected-access
+        return bool(environment._is_robot_in_dangerous_area(final[:2]))

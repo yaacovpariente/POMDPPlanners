@@ -150,6 +150,48 @@ class PacManVisualizer(TraceVisualizer):
             "pellets": pellets,
             "scores": scores,
             "terminals": terminals,
+            "ended_in_danger_zone": self._ended_in_danger_zone(
+                pacman_positions, ghost_positions, pellets, terminals
+            ),
             "observations": observations,
             "beliefs": beliefs,
         }
+
+    def _ended_in_danger_zone(
+        self,
+        pacman_positions: List[List[int]],
+        ghost_positions: List[List[List[int]]],
+        pellets: List[List[List[int]]],
+        terminals: List[bool],
+    ) -> bool:
+        """Whether the episode ended because PacMan entered a hazard zone.
+
+        The terminal slot is shared by three endings, so this mirrors the
+        native transition's own test: a ghost collision (same cell, or PacMan
+        and a ghost swapping cells) or an empty board ends the episode on its
+        own, and only an ending with neither, on a cell inside a zone, is the
+        hazard's.
+
+        Args:
+            pacman_positions: PacMan's cell at every recorded step.
+            ghost_positions: Every ghost's cell at every recorded step.
+            pellets: The pellets left at every recorded step.
+            terminals: The terminal slot at every recorded step.
+
+        Returns:
+            ``True`` only for an episode a hazard zone ended.
+        """
+        environment: Any = self.environment
+        if not environment.is_dangerous_area_hit_terminal or not terminals[-1]:
+            return False
+        if len(pacman_positions) < 2 or not pellets[-1]:
+            return False
+        before, after = pacman_positions[-2], pacman_positions[-1]
+        for was, now in zip(ghost_positions[-2], ghost_positions[-1]):
+            if now == after or (was == after and now == before):
+                return False
+        radius_sq = float(environment.dangerous_area_radius) ** 2
+        return any(
+            (after[0] - row) ** 2 + (after[1] - col) ** 2 <= radius_sq
+            for row, col in environment.dangerous_areas
+        )

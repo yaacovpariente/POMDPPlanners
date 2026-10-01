@@ -51,6 +51,9 @@
   // Lumens on the gantry. Real inverse-square falloff is what lets the corners
   // between lamps go dark on their own instead of being painted dark.
   var LAMP_LUMENS = 2500;
+  // The composite's exposure (see the registration at the bottom). The smoke
+  // needs it too, to come out the same grey as in every other scene.
+  var EXPOSURE = 0.112;
 
   // Height of the sensor drum's apertures, shared by the lenses and the beams.
   var BEAM_Y = 0.50;
@@ -669,6 +672,13 @@
        environment casts. */
     var robot = new THREE.Group();
     scene.add(robot);
+
+    /* Smoke, only when a hazard ended the episode. A separate group, not part
+       of the robot, so it rises straight up however the hull is tipped. */
+    var smoke = payload.ended_in_danger_zone
+      ? V.createSmoke({ exposure: EXPOSURE, base: 0.62, seed: 1307 })
+      : null;
+    if (smoke) scene.add(smoke.group);
     var hull = new THREE.Group();
     robot.add(hull);
 
@@ -1222,7 +1232,15 @@
            the rubble and the wheels spin ahead of the ground and catch. The
            lens ring and the beams hang off the robot, not the hull, so the
            scan stays on the recorded rays however the body is thrown about. */
-        var rough = sample.rough;
+        /* A hazard that ends the episode wrecks the robot: through the last
+           step the smoke builds and the struggle dies away, so it comes to
+           rest smoking rather than still fighting the rubble. */
+        var wreck = smoke ? clamp((t - (steps - 1.6)) / 0.6, 0, 1) : 0;
+        if (smoke) {
+          smoke.group.position.set(px, 0, pz);
+          smoke.update(reduceMotion ? 1.7 : elapsed, wreck);
+        }
+        var rough = sample.rough * (1 - wreck);
         var moving = playing ? 1 : 0;
         var judder = rough * (Math.sin(elapsed * 23.0) * 0.6 + Math.sin(elapsed * 37.0 + 1.7) * 0.4);
         var snap = clamp(dt * (8 + rough * 26), 0, 1);      // stiffer, so it jolts
@@ -1315,6 +1333,6 @@
     build: build,
     // Real lumens blow out instantly, so the camera stops down. Tuned for this
     // arena's six 2500 lm lamps; it is not a knob to remove.
-    exposure: 0.112
+    exposure: EXPOSURE
   };
 })(window);
