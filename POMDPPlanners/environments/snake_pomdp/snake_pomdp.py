@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -141,11 +142,11 @@ class SnakeStepChannel(Enum):
 class SnakePOMDPMetrics(Enum):
     """Metric names for the Snake POMDP environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL = "ended_by_goal"
-    ENDED_BY_FAILURE = "ended_by_failure"
-    ENDED_BY_TIMEOUT = "ended_by_timeout"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_FOOD_EATEN = "average_food_eaten"
     MAX_SNAKE_LENGTH = "max_snake_length"
     WALL_DEATH_RATE = "wall_death_rate"
@@ -1207,17 +1208,17 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=SnakePOMDPMetrics.ENDED_BY_GOAL.value,
+                name=SnakePOMDPMetrics.ENDED_BY_GOAL_RATE.value,
                 channel=SnakeStepChannel.TARGET_LENGTH_REACHED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=SnakePOMDPMetrics.ENDED_BY_FAILURE.value,
+                name=SnakePOMDPMetrics.ENDED_BY_FAILURE_RATE.value,
                 channel=SnakeStepChannel.EPISODE_FAILURE.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=SnakePOMDPMetrics.ENDED_BY_TIMEOUT.value,
+                name=SnakePOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value,
                 channel=SnakeStepChannel.EPISODE_UNFINISHED.value,
                 per_episode=EpisodeReduction.LAST,
             ),

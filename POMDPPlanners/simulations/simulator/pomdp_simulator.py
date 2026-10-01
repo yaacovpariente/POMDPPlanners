@@ -314,7 +314,7 @@ class POMDPSimulator(BaseSimulator):
             True
             >>>
             >>> # Check for environment-specific metrics
-            >>> 'success_rate' in pomcp_metrics
+            >>> 'task_completion_rate' in pomcp_metrics
             True
             >>>
             >>> # POMCP has policy info metrics, SparseSampling does not

@@ -596,9 +596,9 @@ class TestWorkflowValidation:
     def test_validate_configs_valid_environment_specific_metric(self, temp_cache_dir):
         """Test that valid environment-specific metric passes validation at workflow level.
 
-        Purpose: Validates that environment-specific metrics (like TigerPOMDP's success_rate) are accepted
+        Purpose: Validates that environment-specific metrics (like TigerPOMDP's task_completion_rate) are accepted
 
-        Given: TigerPOMDP environment and config with "success_rate" metric
+        Given: TigerPOMDP environment and config with "task_completion_rate" metric
         When: _validate_configs is called
         Then: No exception is raised
 
@@ -633,7 +633,7 @@ class TestWorkflowValidation:
             n_trials=5,
             parameters_to_optimize=[
                 (
-                    "success_rate",
+                    "task_completion_rate",
                     HyperParameterOptimizationDirection.MAXIMIZE,
                 )  # TigerPOMDP-specific
             ],

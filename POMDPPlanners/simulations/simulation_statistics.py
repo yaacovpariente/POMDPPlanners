@@ -541,7 +541,7 @@ def get_metric_names_from_environment_policy_pair(
         >>> metric_names = get_metric_names_from_environment_policy_pair(env, POMCP)
         >>>
         >>> # Check for environment-specific metrics (first in order)
-        >>> "success_rate" in metric_names
+        >>> "task_completion_rate" in metric_names
         True
         >>>
         >>> # Check for policy-specific metrics (second, with prefix)
@@ -606,7 +606,7 @@ def get_available_optimization_metrics(
         True
         >>>
         >>> # Check for environment-specific metrics
-        >>> "success_rate" in available_metrics
+        >>> "task_completion_rate" in available_metrics
         True
         >>>
         >>> # Check for policy-specific metrics (with prefix)

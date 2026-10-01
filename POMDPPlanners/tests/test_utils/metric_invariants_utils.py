@@ -21,6 +21,7 @@ from POMDPPlanners.core.simulation import History, MetricValue
 
 _RATE_SUFFIX = "_rate"
 _TOTAL_PREFIX = "total_"
+_AVERAGE_PREFIX = "average_"
 _COUNT_PREFIXES = ("total_", "count_", "num_")
 # Per-step-bound metrics: a sum-over-episodes of per-step booleans/counts. Each
 # such metric is bounded above by the sum of episode lengths (one count per
@@ -39,12 +40,14 @@ def verify_metric_sanity(
     Applies four checks driven by metric-name conventions used in this codebase:
 
     - any metric whose name ends with ``_rate`` has value in [0, 1]
-    - any metric whose name starts with ``total_`` / ``count_`` / ``num_`` has
-      value >= 0
+    - any metric whose name starts with ``total_`` / ``count_`` / ``num_``, or
+      is a per-step count (below), has value >= 0
     - both CI bounds are finite when n_episodes >= 2
     - any "per-step-count over episodes" metric (name starts with ``total_``
-      and contains a per-step keyword like ``collision``/``violation``/``hit``,
-      and is NOT itself a rate) has value <= sum(episode lengths)
+      or ``average_`` and contains a per-step keyword like
+      ``collision``/``violation``/``hit``, and is NOT itself a rate) has value
+      <= sum(episode lengths). A per-episode average of such a count is at
+      most its sum over episodes, so the same bound holds for ``average_``.
 
     Args:
         metrics: The MetricValue list returned by ``env.compute_metrics``.
@@ -230,8 +233,17 @@ def _check_rate_in_unit_interval(metric: MetricValue) -> None:
     )
 
 
+def _is_per_step_count(name: str) -> bool:
+    # Per-episode counts were renamed from ``total_*`` to ``average_*``; both
+    # prefixes must stay covered or the rename silently switches these checks off.
+    if not name.startswith((_TOTAL_PREFIX, _AVERAGE_PREFIX)) or name.endswith(_RATE_SUFFIX):
+        return False
+    return any(keyword in name for keyword in _PER_STEP_BOUND_KEYWORDS)
+
+
 def _check_count_non_negative(metric: MetricValue) -> None:
-    if not metric.name.startswith(_COUNT_PREFIXES) or metric.name.endswith(_RATE_SUFFIX):
+    is_count = metric.name.startswith(_COUNT_PREFIXES) or _is_per_step_count(metric.name)
+    if not is_count or metric.name.endswith(_RATE_SUFFIX):
         return
     assert metric.value >= 0.0, (
         f"{metric.name}: value {metric.value} < 0 " f"(count / total metrics must be non-negative)"
@@ -252,11 +264,7 @@ def _check_ci_finite_for_multi_episode(metric: MetricValue, n_episodes: int) -> 
 
 
 def _check_per_step_count_bounded(metric: MetricValue, total_steps: int) -> None:
-    if not metric.name.startswith(_TOTAL_PREFIX):
-        return
-    if metric.name.endswith(_RATE_SUFFIX):
-        return
-    if not any(keyword in metric.name for keyword in _PER_STEP_BOUND_KEYWORDS):
+    if not _is_per_step_count(metric.name):
         return
     assert metric.value <= total_steps + 1e-9, (
         f"{metric.name}: value {metric.value} > total_steps {total_steps} "

@@ -385,10 +385,10 @@ uses the environment and the whole-map filters shown above.
 Metrics
 -------
 
-``task_completion_rate`` reports threshold crossing. ``ended_by_goal``,
-``ended_by_failure`` and ``ended_by_timeout`` report episode endings; failure
+``task_completion_rate`` reports threshold crossing. ``ended_by_goal_rate``,
+``ended_by_failure_rate`` and ``ended_by_timeout_rate`` report episode endings; failure
 is always zero. Progress metrics include residual entropy and resolved-cell
-fraction. ``average_obstacle_collisions`` counts blocked moves;
+fraction. ``average_collisions`` counts blocked moves;
 ``average_successful_translations`` counts successful moves, including revisits.
 It is not a unique-cell count.
 

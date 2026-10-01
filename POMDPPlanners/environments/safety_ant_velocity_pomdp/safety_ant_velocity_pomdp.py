@@ -56,8 +56,8 @@ class SafeAntVelocityPOMDPMetrics(Enum):
 
     SAFETY_VIOLATION_RATE = "safety_violation_rate"
     CRITICAL_VIOLATION_RATE = "critical_violation_rate"
-    TOTAL_SAFETY_VIOLATIONS = "total_safety_violations"
-    TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
+    AVERAGE_SAFETY_VIOLATIONS = "average_safety_violations"
+    AVERAGE_CRITICAL_VIOLATIONS = "average_critical_violations"
 
 
 def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float) -> np.ndarray:
@@ -301,7 +301,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         Returns:
             List containing metric names: safety_violation_rate, critical_violation_rate,
-            total_safety_violations, and total_critical_violations
+            average_safety_violations, and average_critical_violations
         """
         return [metric.value for metric in SafeAntVelocityPOMDPMetrics]
 
@@ -371,13 +371,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 upper_confidence_bound=critical_violations_ci[1],
             ),
             MetricValue(
-                name=SafeAntVelocityPOMDPMetrics.TOTAL_SAFETY_VIOLATIONS.value,
+                name=SafeAntVelocityPOMDPMetrics.AVERAGE_SAFETY_VIOLATIONS.value,
                 value=float(np.mean(safety_violations)) if safety_violations else 0.0,
                 lower_confidence_bound=total_safety_violations_ci[0],
                 upper_confidence_bound=total_safety_violations_ci[1],
             ),
             MetricValue(
-                name=SafeAntVelocityPOMDPMetrics.TOTAL_CRITICAL_VIOLATIONS.value,
+                name=SafeAntVelocityPOMDPMetrics.AVERAGE_CRITICAL_VIOLATIONS.value,
                 value=float(np.mean(critical_violations)) if critical_violations else 0.0,
                 lower_confidence_bound=total_critical_violations_ci[0],
                 upper_confidence_bound=total_critical_violations_ci[1],

@@ -101,7 +101,7 @@ Run multiple episodes and compute statistics:
    print(f"Episodes run: {results['num_episodes']}")
    print(f"Average reward: {results['average_reward']:.3f}")
    print(f"Standard deviation: {results['std_reward']:.3f}")
-   print(f"Success rate: {results.get('success_rate', 'N/A')}")
+   print(f"Task completion rate: {results.get('task_completion_rate', 'N/A')}")
 
 Working with Different Environments
 -----------------------------------

@@ -47,6 +47,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -110,17 +111,17 @@ class FirefightingStepChannel(Enum):
 class FirefightingMetrics(Enum):
     """Metric names for the firefighting environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL = "ended_by_goal"
-    ENDED_BY_FAILURE = "ended_by_failure"
-    ENDED_BY_TIMEOUT = "ended_by_timeout"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
-    ROBOT_STEPS_IN_FIRE = "robot_steps_in_fire"
-    ROBOT_HEALTH_LOST = "robot_health_lost"
-    SUPPRESSANT_UNITS_USED = "suppressant_units_used"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
+    AVERAGE_ROBOT_STEPS_IN_FIRE = "average_robot_steps_in_fire"
+    AVERAGE_ROBOT_HEALTH_LOST = "average_robot_health_lost"
+    AVERAGE_SUPPRESSANT_UNITS_USED = "average_suppressant_units_used"
     MAX_SIMULTANEOUS_ALIGHT_CELLS = "max_simultaneous_alight_cells"
     MAX_BURNT_CELL_FRACTION = "max_burnt_cell_fraction"
-    ROBOTS_DISABLED_AT_END = "robots_disabled_at_end"
+    FINAL_ROBOTS_DISABLED = "final_robots_disabled"
 
 
 # pylint: disable-next=too-many-public-methods,too-many-instance-attributes
@@ -1435,17 +1436,17 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ENDED_BY_GOAL.value,
+                name=FirefightingMetrics.ENDED_BY_GOAL_RATE.value,
                 channel=channel.FIRE_EXTINGUISHED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ENDED_BY_FAILURE.value,
+                name=FirefightingMetrics.ENDED_BY_FAILURE_RATE.value,
                 channel=channel.ALL_ROBOTS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ENDED_BY_TIMEOUT.value,
+                name=FirefightingMetrics.ENDED_BY_TIMEOUT_RATE.value,
                 channel=channel.TIMED_OUT_WITH_FIRE.value,
                 per_episode=EpisodeReduction.LAST,
             ),
@@ -1455,17 +1456,17 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ROBOT_STEPS_IN_FIRE.value,
+                name=FirefightingMetrics.AVERAGE_ROBOT_STEPS_IN_FIRE.value,
                 channel=channel.ROBOT_IN_ALIGHT_CELL.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ROBOT_HEALTH_LOST.value,
+                name=FirefightingMetrics.AVERAGE_ROBOT_HEALTH_LOST.value,
                 channel=channel.HEALTH_LOST.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.SUPPRESSANT_UNITS_USED.value,
+                name=FirefightingMetrics.AVERAGE_SUPPRESSANT_UNITS_USED.value,
                 channel=channel.SUPPRESS_ACTIONS.value,
                 per_episode=EpisodeReduction.SUM,
             ),
@@ -1480,7 +1481,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.ROBOTS_DISABLED_AT_END.value,
+                name=FirefightingMetrics.FINAL_ROBOTS_DISABLED.value,
                 channel=channel.ROBOTS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),

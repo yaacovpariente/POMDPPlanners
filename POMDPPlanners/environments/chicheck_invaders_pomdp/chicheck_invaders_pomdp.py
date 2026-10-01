@@ -63,6 +63,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -183,16 +184,16 @@ class ChicheckInvadersStepChannel(Enum):
 class ChicheckInvadersMetrics(Enum):
     """Metric names for the Chicheck Invaders environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL = "ended_by_goal"
-    ENDED_BY_FAILURE = "ended_by_failure"
-    ENDED_BY_TIMEOUT = "ended_by_timeout"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_CHICKENS_KILLED = "average_chickens_killed"
     AVERAGE_SHOTS_FIRED = "average_shots_fired"
     AVERAGE_HITS_TAKEN = "average_hits_taken"
     MAX_CHICKEN_ENCROACHMENT_CELLS = "max_chicken_encroachment_cells"
-    SHOT_ACCURACY = "shot_accuracy"
+    AVERAGE_SHOT_ACCURACY = "average_shot_accuracy"
 
 
 #: Type alias for a Chicheck Invaders state.
@@ -1279,7 +1280,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
 
         Returns:
             One spec per metric that a channel reduction can produce.
-            ``shot_accuracy`` is not among them; see :meth:`compute_metrics`.
+            ``average_shot_accuracy`` is not among them; see :meth:`compute_metrics`.
         """
         return [
             StepInfoMetric(
@@ -1288,17 +1289,17 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=ChicheckInvadersMetrics.ENDED_BY_GOAL.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_GOAL_RATE.value,
                 channel=ChicheckInvadersStepChannel.FLOCK_CLEARED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=ChicheckInvadersMetrics.ENDED_BY_FAILURE.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_FAILURE_RATE.value,
                 channel=ChicheckInvadersStepChannel.SHIP_DESTROYED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=ChicheckInvadersMetrics.ENDED_BY_TIMEOUT.value,
+                name=ChicheckInvadersMetrics.ENDED_BY_TIMEOUT_RATE.value,
                 channel=ChicheckInvadersStepChannel.STILL_RUNNING.value,
                 per_episode=EpisodeReduction.LAST,
             ),
@@ -1330,15 +1331,15 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         ]
 
     def get_metric_names(self) -> List[str]:
-        """Every metric this environment produces, including ``shot_accuracy``."""
+        """Every metric this environment produces, including ``average_shot_accuracy``."""
         return [spec.name for spec in self.get_metric_specs()] + [
-            ChicheckInvadersMetrics.SHOT_ACCURACY.value
+            ChicheckInvadersMetrics.AVERAGE_SHOT_ACCURACY.value
         ]
 
     def compute_metrics(self, histories: "List[History]") -> List[MetricValue]:
         """Aggregate the declared channels, then add the one ratio among them.
 
-        ``shot_accuracy`` is kills per shot, and a ratio of two per-episode sums
+        ``average_shot_accuracy`` is kills per shot, and a ratio of two per-episode sums
         is the one shape :class:`StepInfoMetric` cannot express: a reduction
         collapses a single channel, and a mean of per-step ratios is not the
         episode's ratio. It is therefore computed here, from the same two
@@ -1355,7 +1356,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             histories: Episode histories to analyse.
 
         Returns:
-            The channel-derived metrics followed by ``shot_accuracy``.
+            The channel-derived metrics followed by ``average_shot_accuracy``.
         """
         require_non_empty_histories(histories, type(self).__name__)
         metrics = list(super().compute_metrics(histories))
@@ -1374,7 +1375,9 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             ratios.append(kills / shots)
         if not ratios:
             metrics.append(
-                MetricValue(ChicheckInvadersMetrics.SHOT_ACCURACY.value, 0.0, -np.inf, np.inf)
+                MetricValue(
+                    ChicheckInvadersMetrics.AVERAGE_SHOT_ACCURACY.value, 0.0, -np.inf, np.inf
+                )
             )
             return metrics
         lower, upper = (
@@ -1384,7 +1387,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         )
         metrics.append(
             MetricValue(
-                ChicheckInvadersMetrics.SHOT_ACCURACY.value,
+                ChicheckInvadersMetrics.AVERAGE_SHOT_ACCURACY.value,
                 float(np.mean(ratios)),
                 float(lower),
                 float(upper),

@@ -106,6 +106,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tupl
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
@@ -198,12 +199,12 @@ class RacetrackStepChannel(Enum):
 class RacetrackMetric(Enum):
     """Episode-level metric names reported by ``compute_metrics``."""
 
-    COLLISION_RATE = "collision_rate"
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
     OFF_ROAD_RATE = "off_road_rate"
-    TIME_LIMIT_RATE = "time_limit_rate"
-    MEAN_ABS_LANE_OFFSET_M = "mean_abs_lane_offset_m"
-    MEAN_SPEED_MPS = "mean_speed_mps"
-    COLLISION_SPEED_MPS = "collision_speed_mps"
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_ABS_LANE_OFFSET_M = "average_abs_lane_offset_m"
+    AVERAGE_SPEED_MPS = CommonMetricName.AVERAGE_SPEED_MPS.value
+    MAX_COLLISION_SPEED_MPS = "max_collision_speed_mps"
     NEAR_MISS_RATE = "near_miss_rate"
 
 
@@ -860,17 +861,17 @@ class RacetrackPOMDP(Environment):
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=RacetrackMetric.TIME_LIMIT_RATE.value,
+                name=RacetrackMetric.ENDED_BY_TIMEOUT_RATE.value,
                 channel=RacetrackStepChannel.TIME_LIMIT.value,
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=RacetrackMetric.MEAN_ABS_LANE_OFFSET_M.value,
+                name=RacetrackMetric.AVERAGE_ABS_LANE_OFFSET_M.value,
                 channel=RacetrackStepChannel.ABS_LANE_OFFSET_M.value,
                 per_episode=EpisodeReduction.MEAN,
             ),
             StepInfoMetric(
-                name=RacetrackMetric.MEAN_SPEED_MPS.value,
+                name=RacetrackMetric.AVERAGE_SPEED_MPS.value,
                 channel=RacetrackStepChannel.SPEED_MPS.value,
                 per_episode=EpisodeReduction.MEAN,
             ),
@@ -879,7 +880,7 @@ class RacetrackPOMDP(Environment):
             # number no collision ever happened at. Episodes that never crash
             # contribute 0.0, so read this alongside collision_rate.
             StepInfoMetric(
-                name=RacetrackMetric.COLLISION_SPEED_MPS.value,
+                name=RacetrackMetric.MAX_COLLISION_SPEED_MPS.value,
                 channel=RacetrackStepChannel.COLLISION_SPEED_MPS.value,
                 per_episode=EpisodeReduction.MAX,
             ),

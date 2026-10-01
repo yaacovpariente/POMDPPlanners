@@ -17,6 +17,7 @@ from html import escape
 from typing import Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.simulation.traces import ArtifactKind
 from POMDPPlanners.reporting import charts
 from POMDPPlanners.reporting.artifacts import EpisodeArtifact, preferred
@@ -454,7 +455,7 @@ def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> st
     # Headline metrics first: these are the ones a comparison is usually about.
     preferred_order = [
         "average_return",
-        "goal_reaching_rate",
+        CommonMetricName.TASK_COMPLETION_RATE.value,
         "return_cvar",
         "average_actual_num_steps",
     ]
@@ -502,7 +503,7 @@ def _policy_cards(run: RunView, env: EnvironmentView) -> str:
     # module happens to know.
     headline = [
         ("average_return", "Avg. return", "{:.3g}"),
-        ("goal_reaching_rate", "Goal rate", "{:.0%}"),
+        (CommonMetricName.TASK_COMPLETION_RATE.value, "Task completion", "{:.0%}"),
         ("average_actual_num_steps", "Avg. steps", "{:.3g}"),
     ]
 
