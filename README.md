@@ -40,6 +40,17 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
   <em>Row by row: <a href="POMDPPlanners/environments/tiger_pomdp">Tiger</a> and <a href="POMDPPlanners/environments/rock_sample_pomdp">RockSample</a>; <a href="POMDPPlanners/environments/laser_tag_pomdp">LaserTag</a> and <a href="POMDPPlanners/environments/pacman_pomdp">PacMan</a>; <a href="POMDPPlanners/environments/battleship_pomdp">Battleship</a> and <a href="POMDPPlanners/environments/maze_pomdp">Maze</a>; <a href="POMDPPlanners/environments/t_maze_pomdp">T-Maze</a> and <a href="POMDPPlanners/environments/snake_pomdp">Snake</a>; <a href="POMDPPlanners/environments/chicheck_invaders_pomdp">Chicheck Invaders</a> and <a href="POMDPPlanners/environments/occupancy_grid_mapping_pomdp">Occupancy Grid Mapping</a>; <a href="POMDPPlanners/environments/cartpole_pomdp">CartPole</a> and <a href="POMDPPlanners/environments/mountain_car_pomdp">Mountain Car</a>; <a href="POMDPPlanners/environments/safety_ant_velocity_pomdp">Safety Ant Velocity</a> and <a href="POMDPPlanners/environments/racetrack_pomdp">Racetrack</a>.</em>
 </p>
 </details>
+<details>
+<summary>Show planner episode videos</summary>
+<br>
+<p align="center">
+  <img src="docs/images/pft_dpw_firefighting.webp" alt="3D replay of a Firefighting episode planned by PFT-DPW, ending with the fire out" width="49%">
+  <img src="docs/images/pft_dpw_capture_the_flag.webp" alt="3D replay of part of a Capture the Flag episode planned by PFT-DPW" width="49%">
+</p>
+<p align="center">
+  <em>Episodes planned online by PFT-DPW and replayed in the package's 3D viewer. Left: <a href="POMDPPlanners/environments/firefighting_pomdp">Firefighting</a>, where the two robots put the fire out. Right: <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a>, where the blue team defends its half and tags a red attacker; it does not capture the flag in this episode.</em>
+</p>
+</details>
 
 ## Main Features
 
