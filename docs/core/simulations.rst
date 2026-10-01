@@ -87,7 +87,7 @@ Basic Simulation Usage
    results = simulator.run()
 
    print(f"Average reward: {results['average_reward']:.2f}")
-   print(f"Success rate: {results['success_rate']:.2f}")
+   print(f"Task completion rate: {results['task_completion_rate']:.2f}")
 
 Configuration-Based Experiments
 -------------------------------
@@ -261,7 +261,7 @@ Statistical Analysis
 
    print(f"Mean reward: {stats['mean_total_reward']:.3f}")
    print(f"95% CI: [{stats['ci_lower']:.3f}, {stats['ci_upper']:.3f}]")
-   print(f"Success rate: {stats['success_rate']:.3f}")
+   print(f"Task completion rate: {stats['task_completion_rate']:.3f}")
 
 **Result Comparison**
 

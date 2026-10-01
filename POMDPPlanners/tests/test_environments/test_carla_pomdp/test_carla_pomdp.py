@@ -1319,15 +1319,15 @@ def test_get_metric_names_lists_the_full_carla_metric_set() -> None:
 
     assert env.get_metric_names() == [
         "collision_rate",
-        "success_rate",
-        "route_completion",
+        "task_completion_rate",
+        "average_route_completion",
         "average_progress",
-        "average_speed",
-        "red_light_violation_rate",
-        "red_light_violation_count",
-        "traffic_light_malfunction_count",
-        "near_miss_count",
-        "min_vehicle_distance",
+        "average_speed_mps",
+        "average_red_light_violation_fraction",
+        "average_red_light_violations",
+        "average_traffic_light_malfunctions",
+        "average_near_misses",
+        "min_vehicle_distance_m",
     ]
 
 
@@ -1422,11 +1422,11 @@ def test_average_progress_sums_euclidean_path_length() -> None:
 def test_average_speed_averages_ego_velocity_magnitude() -> None:
     """Speed is the mean magnitude of the ego velocity over the trajectory.
 
-    Purpose: Validates average_speed averages sqrt(vx**2 + vy**2) over steps
+    Purpose: Validates average_speed_mps averages sqrt(vx**2 + vy**2) over steps
 
     Given: One episode whose next-state velocities are (3,4) then (6,8)
     When: compute_metrics is called
-    Then: average_speed is 7.5 m/s (mean of 5 and 10)
+    Then: average_speed_mps is 7.5 m/s (mean of 5 and 10)
 
     Test type: unit
     """
@@ -1441,7 +1441,7 @@ def test_average_speed_averages_ego_velocity_magnitude() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "average_speed").value == pytest.approx(7.5)
+    assert _metric_by_name(metrics, "average_speed_mps").value == pytest.approx(7.5)
 
 
 def test_metric_confidence_bounds_bracket_value_across_episodes() -> None:
@@ -1475,7 +1475,7 @@ def test_red_light_crossing_counts_as_a_violation() -> None:
     Given: One episode where the ego is affiliated to a RED light and moving, then crosses
         (the light slot's present flag goes 1 -> 0)
     When: compute_metrics is called
-    Then: red_light_violation_count is 1, its rate is 1.0, and malfunction count is 0
+    Then: average_red_light_violations is 1, its rate is 1.0, and malfunction count is 0
 
     Test type: unit
     """
@@ -1492,9 +1492,13 @@ def test_red_light_crossing_counts_as_a_violation() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(1.0)
-    assert _metric_by_name(metrics, "red_light_violation_rate").value == pytest.approx(1.0)
-    assert _metric_by_name(metrics, "traffic_light_malfunction_count").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "average_red_light_violations").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "average_red_light_violation_fraction").value == pytest.approx(
+        1.0
+    )
+    assert _metric_by_name(metrics, "average_traffic_light_malfunctions").value == pytest.approx(
+        0.0
+    )
 
 
 def test_green_crossing_is_not_a_violation() -> None:
@@ -1504,7 +1508,7 @@ def test_green_crossing_is_not_a_violation() -> None:
 
     Given: One episode where the ego crosses while the light is GREEN
     When: compute_metrics is called
-    Then: red_light_violation_count and rate are both 0
+    Then: average_red_light_violations and rate are both 0
 
     Test type: unit
     """
@@ -1521,8 +1525,10 @@ def test_green_crossing_is_not_a_violation() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
-    assert _metric_by_name(metrics, "red_light_violation_rate").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "average_red_light_violations").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "average_red_light_violation_fraction").value == pytest.approx(
+        0.0
+    )
 
 
 def test_malfunctioning_light_crossing_recorded_separately() -> None:
@@ -1532,7 +1538,7 @@ def test_malfunctioning_light_crossing_recorded_separately() -> None:
 
     Given: One episode where the ego crosses while the light is OFF
     When: compute_metrics is called
-    Then: traffic_light_malfunction_count is 1 and red_light_violation_count is 0
+    Then: average_traffic_light_malfunctions is 1 and average_red_light_violations is 0
 
     Test type: unit
     """
@@ -1549,8 +1555,10 @@ def test_malfunctioning_light_crossing_recorded_separately() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "traffic_light_malfunction_count").value == pytest.approx(1.0)
-    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "average_traffic_light_malfunctions").value == pytest.approx(
+        1.0
+    )
+    assert _metric_by_name(metrics, "average_red_light_violations").value == pytest.approx(0.0)
 
 
 def test_stopping_at_a_red_light_is_not_a_violation() -> None:
@@ -1577,7 +1585,7 @@ def test_stopping_at_a_red_light_is_not_a_violation() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "red_light_violation_count").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "average_red_light_violations").value == pytest.approx(0.0)
 
 
 def _agent_state(rel_x: float, rel_y: float = 0.0) -> np.ndarray:
@@ -1598,7 +1606,7 @@ def test_near_miss_counted_when_a_vehicle_comes_within_threshold() -> None:
 
     Given: One episode where the nearest vehicle is 1 m from the ego (no collision)
     When: compute_metrics is called
-    Then: near_miss_count is 1 and min_vehicle_distance is 1 m
+    Then: average_near_misses is 1 and min_vehicle_distance_m is 1 m
 
     Test type: unit
     """
@@ -1607,8 +1615,8 @@ def test_near_miss_counted_when_a_vehicle_comes_within_threshold() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "near_miss_count").value == pytest.approx(1.0)
-    assert _metric_by_name(metrics, "min_vehicle_distance").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "average_near_misses").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "min_vehicle_distance_m").value == pytest.approx(1.0)
 
 
 def test_no_near_miss_when_vehicles_stay_far() -> None:
@@ -1618,7 +1626,7 @@ def test_no_near_miss_when_vehicles_stay_far() -> None:
 
     Given: One episode whose nearest vehicle stays 10 m away
     When: compute_metrics is called
-    Then: near_miss_count is 0 and min_vehicle_distance is 10 m
+    Then: average_near_misses is 0 and min_vehicle_distance_m is 10 m
 
     Test type: unit
     """
@@ -1627,8 +1635,8 @@ def test_no_near_miss_when_vehicles_stay_far() -> None:
 
     metrics = env.compute_metrics([history])
 
-    assert _metric_by_name(metrics, "near_miss_count").value == pytest.approx(0.0)
-    assert _metric_by_name(metrics, "min_vehicle_distance").value == pytest.approx(10.0)
+    assert _metric_by_name(metrics, "average_near_misses").value == pytest.approx(0.0)
+    assert _metric_by_name(metrics, "min_vehicle_distance_m").value == pytest.approx(10.0)
 
 
 def _lidar_vehicle_blob(center_x: float) -> np.ndarray:
@@ -2037,14 +2045,14 @@ def _goal_state(x: float, y: float, goal_x: float, goal_y: float, frac: float) -
 
 
 def test_success_rate_and_route_completion_read_the_goal_slot() -> None:
-    """success_rate and route_completion come from the final state's goal slot.
+    """task_completion_rate and average_route_completion come from the final state's goal slot.
 
     Purpose: Validates the goal-slot-driven metrics
 
     Given: One episode ending 2 m from its goal at 90% completion and one ending
         50 m away at 40% completion, with goal_radius 5
     When: compute_metrics is called
-    Then: success_rate is 0.5 and route_completion is 0.65
+    Then: task_completion_rate is 0.5 and average_route_completion is 0.65
 
     Test type: unit
     """
@@ -2060,8 +2068,8 @@ def test_success_rate_and_route_completion_read_the_goal_slot() -> None:
 
     metrics = env.compute_metrics([reached, missed])
 
-    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(0.5)
-    assert _metric_by_name(metrics, "route_completion").value == pytest.approx(0.65)
+    assert _metric_by_name(metrics, "task_completion_rate").value == pytest.approx(0.5)
+    assert _metric_by_name(metrics, "average_route_completion").value == pytest.approx(0.65)
 
 
 def test_collision_rate_excludes_goal_reaching_terminals() -> None:
@@ -2072,7 +2080,7 @@ def test_collision_rate_excludes_goal_reaching_terminals() -> None:
 
     Given: Two terminal episodes: one ending at its goal, one ending far from it
     When: compute_metrics is called
-    Then: collision_rate is 0.5 and success_rate is 0.5
+    Then: collision_rate is 0.5 and task_completion_rate is 0.5
 
     Test type: unit
     """
@@ -2089,7 +2097,7 @@ def test_collision_rate_excludes_goal_reaching_terminals() -> None:
     metrics = env.compute_metrics([success, crash])
 
     assert _metric_by_name(metrics, "collision_rate").value == pytest.approx(0.5)
-    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(0.5)
+    assert _metric_by_name(metrics, "task_completion_rate").value == pytest.approx(0.5)
 
 
 def test_compute_metrics_handles_terminal_step_without_next_state() -> None:
@@ -2101,7 +2109,7 @@ def test_compute_metrics_handles_terminal_step_without_next_state() -> None:
     Given: One episode driving (0,0)->(3,0) at 2 m/s, closed by the terminal marker
     When: compute_metrics is called
     Then: The full metric set is returned, progress is 3 m, speed is 2 m/s, and the goal
-        slot of the last driven transition still drives success_rate
+        slot of the last driven transition still drives task_completion_rate
 
     Test type: unit
     """
@@ -2115,9 +2123,9 @@ def test_compute_metrics_handles_terminal_step_without_next_state() -> None:
 
     assert {metric.name for metric in metrics} == set(env.get_metric_names())
     assert _metric_by_name(metrics, "average_progress").value == pytest.approx(3.0)
-    assert _metric_by_name(metrics, "average_speed").value == pytest.approx(2.0)
-    assert _metric_by_name(metrics, "success_rate").value == pytest.approx(1.0)
-    assert _metric_by_name(metrics, "route_completion").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "average_speed_mps").value == pytest.approx(2.0)
+    assert _metric_by_name(metrics, "task_completion_rate").value == pytest.approx(1.0)
+    assert _metric_by_name(metrics, "average_route_completion").value == pytest.approx(1.0)
 
 
 def test_plan_route_handles_destination_at_spawn() -> None:

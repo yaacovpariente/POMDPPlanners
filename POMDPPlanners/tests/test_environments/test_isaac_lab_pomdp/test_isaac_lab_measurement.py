@@ -345,7 +345,7 @@ class TestMetricSpecs:
         impact_only = _measuring_world(success_termination_term=None)
         neither = _measuring_world(success_termination_term=None, contact_sensor_key=None)
 
-        assert both.get_metric_names() == ["success_rate", "max_contact_impulse_ns"]
+        assert both.get_metric_names() == ["task_completion_rate", "max_contact_impulse_ns"]
         assert impact_only.get_metric_names() == ["max_contact_impulse_ns"]
         assert not neither.get_metric_names()
 
@@ -399,7 +399,7 @@ class TestMetricSpecs:
 
         metrics = {metric.name: metric.value for metric in world.compute_metrics(histories)}
 
-        assert metrics["success_rate"] == pytest.approx(0.5)
+        assert metrics["task_completion_rate"] == pytest.approx(0.5)
         assert metrics["max_contact_impulse_ns"] == pytest.approx(4.0)
 
 

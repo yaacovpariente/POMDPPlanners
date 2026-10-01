@@ -28,6 +28,7 @@ _INTEGRATOR_CODES: dict[str, int] = {"euler": 0, "semi-implicit euler": 1}
 import numpy as np
 from numpy.typing import NDArray
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -58,7 +59,7 @@ class CartPoleStepChannel(Enum):
 class CartPolePOMDPMetrics(Enum):
     """Metric names for CartPole POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -484,7 +485,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
         The shared aggregator omits a metric no episode reported, which happens
         for an episode with no recorded steps. This environment has always
-        reported a zero-valued goal_reaching_rate in that case, so the declared
+        reported a zero-valued task_completion_rate in that case, so the declared
         names are filled rather than dropped.
 
         Args:
@@ -504,14 +505,14 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         """Declare the CartPole metric derived from the per-step channel.
 
         Returns:
-            A spec for ``goal_reaching_rate``, which succeeds only if the pole
+            A spec for ``task_completion_rate``, which succeeds only if the pole
             stayed upright for the whole episode. ``ALL`` rather than ``ANY`` is
             what encodes that: a single crashed state fails the episode, and the
             crash is normally the *last* state, recorded on the terminal step.
         """
         return [
             StepInfoMetric(
-                name=CartPolePOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=CartPolePOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=CartPoleStepChannel.UPRIGHT.value,
                 per_episode=EpisodeReduction.ALL,
             )

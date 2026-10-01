@@ -300,8 +300,8 @@ Metrics
 -------
 
 ``task_completion_rate`` is the fraction of episodes that reached
-``target_length``. ``ended_by_goal``, ``ended_by_failure`` and
-``ended_by_timeout`` partition the episodes between winning, dying and running
+``target_length``. ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
+``ended_by_timeout_rate`` partition the episodes between winning, dying and running
 out of the runner's steps. ``wall_death_rate``, ``self_death_rate`` and
 ``starvation_death_rate`` say which death it was, which matters because they
 call for opposite fixes — a planner that walks into walls is searching badly,

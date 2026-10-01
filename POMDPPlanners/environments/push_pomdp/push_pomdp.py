@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -75,15 +76,15 @@ class PushStepChannel(Enum):
 class PushPOMDPMetrics(Enum):
     """Metric names for Push POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    ROBOT_OBSTACLE_COLLISION_RATE = "robot_obstacle_collision_rate"
-    OBJECT_OBSTACLE_COLLISION_RATE = "object_obstacle_collision_rate"
-    TOTAL_OBSTACLE_COLLISION_RATE = "total_obstacle_collision_rate"
-    TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
-    TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
-    TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ROBOT_COLLISION_RATE = "robot_collision_rate"
+    OBJECT_COLLISION_RATE = "object_collision_rate"
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
+    AVERAGE_ROBOT_COLLISIONS = "average_robot_collisions"
+    AVERAGE_OBJECT_COLLISIONS = "average_object_collisions"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
     DANGEROUS_AREA_RATE = "dangerous_area_rate"
-    TOTAL_DANGEROUS_AREA_STEPS = "total_dangerous_area_steps"
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
 
 
 class FixedStateDistribution(Distribution):
@@ -998,27 +999,27 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
         """
         return [
             StepInfoMetric(
-                name=PushPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=PushPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=PushStepChannel.GOAL_REACHED.value,
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=PushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
+                name=PushPOMDPMetrics.AVERAGE_ROBOT_COLLISIONS.value,
                 channel=PushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=PushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
+                name=PushPOMDPMetrics.AVERAGE_OBJECT_COLLISIONS.value,
                 channel=PushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=PushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
+                name=PushPOMDPMetrics.AVERAGE_COLLISIONS.value,
                 channel=PushStepChannel.ANY_OBSTACLE_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=PushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
+                name=PushPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                 channel=PushStepChannel.IN_DANGEROUS_AREA.value,
                 per_episode=EpisodeReduction.SUM,
             ),
@@ -1054,9 +1055,9 @@ class PushPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-
 
         metrics: List[MetricValue] = []
         for name, key in (
-            (PushPOMDPMetrics.ROBOT_OBSTACLE_COLLISION_RATE.value, "robot"),
-            (PushPOMDPMetrics.OBJECT_OBSTACLE_COLLISION_RATE.value, "object"),
-            (PushPOMDPMetrics.TOTAL_OBSTACLE_COLLISION_RATE.value, "total"),
+            (PushPOMDPMetrics.ROBOT_COLLISION_RATE.value, "robot"),
+            (PushPOMDPMetrics.OBJECT_COLLISION_RATE.value, "object"),
+            (PushPOMDPMetrics.COLLISION_RATE.value, "total"),
             (PushPOMDPMetrics.DANGEROUS_AREA_RATE.value, "dangerous"),
         ):
             episode_counts = counts[key]

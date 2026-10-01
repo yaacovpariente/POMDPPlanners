@@ -417,16 +417,16 @@ Metrics
 
 ``task_completion_rate`` reports a fire-free map, reduced with ``ANY``: wet and
 burnt are absorbing, so a fire-free map cannot be undone and ``ANY`` and
-``LAST`` agree. ``ended_by_goal``, ``ended_by_failure`` and ``ended_by_timeout``
+``LAST`` agree. ``ended_by_goal_rate``, ``ended_by_failure_rate`` and ``ended_by_timeout_rate``
 report how each episode ended and sum to one. ``average_episode_length`` is a
 constant channel summed.
 
-The danger is reported both as a count -- ``robot_steps_in_fire``,
-``robot_health_lost`` -- and as a severity --
+The danger is reported both as a count -- ``average_robot_steps_in_fire``,
+``average_robot_health_lost`` -- and as a severity --
 ``max_simultaneous_alight_cells``, ``max_burnt_cell_fraction``. A planner that
 lets the fire reach forty cells and then beats it out is not the same as one
 that never let it past five, and the totals alone would not distinguish them.
-``suppressant_units_used`` and ``robots_disabled_at_end`` round out the picture.
+``average_suppressant_units_used`` and ``final_robots_disabled`` round out the picture.
 
 Visualization
 -------------

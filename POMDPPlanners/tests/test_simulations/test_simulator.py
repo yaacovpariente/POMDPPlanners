@@ -3242,7 +3242,7 @@ def test_get_output_metric_names_basic(tmp_path):
         assert len(pomcp_metrics) > 0
 
         # Verify environment-specific metrics
-        assert "success_rate" in pomcp_metrics
+        assert "task_completion_rate" in pomcp_metrics
         assert "average_listens" in pomcp_metrics
 
         # Verify standard metrics
@@ -3292,8 +3292,8 @@ def test_get_output_metric_names_multiple_policies(tmp_path):
         pft_metrics = metric_names["TigerPOMDP"]["PFT_DPW"]
 
         # Verify both have environment-specific metrics
-        assert "success_rate" in pomcp_metrics
-        assert "success_rate" in pft_metrics
+        assert "task_completion_rate" in pomcp_metrics
+        assert "task_completion_rate" in pft_metrics
 
         # Verify both have standard metrics
         assert "average_return" in pomcp_metrics
@@ -3355,15 +3355,14 @@ def test_get_output_metric_names_multiple_environments(tmp_path):
         assert "average_return" in light_dark_metrics
 
         # TigerPOMDP specific metrics
-        assert "success_rate" in tiger_metrics
+        assert "task_completion_rate" in tiger_metrics
         assert "average_listens" in tiger_metrics
 
         # LightDark specific metrics
-        assert "goal_reaching_rate" in light_dark_metrics
-        assert "obstacle_hit_rate" in light_dark_metrics
+        assert "task_completion_rate" in light_dark_metrics
+        assert "collision_rate" in light_dark_metrics
 
         # Tiger metrics should not be in LightDark
-        assert "success_rate" not in light_dark_metrics
         assert "average_listens" not in light_dark_metrics
 
     finally:

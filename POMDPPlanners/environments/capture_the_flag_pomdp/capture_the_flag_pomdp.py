@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Sequence,
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -97,11 +98,11 @@ class CaptureTheFlagStepChannel(Enum):
 class CaptureTheFlagMetrics(Enum):
     """Metric names for the CaptureTheFlag POMDP environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL_RATE = "ended_by_goal_rate"
-    ENDED_BY_FAILURE_RATE = "ended_by_failure_rate"
-    ENDED_BY_TIMEOUT_RATE = "ended_by_timeout_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_TAGS_SUFFERED = "average_tags_suffered"
     AVERAGE_TAGS_INFLICTED = "average_tags_inflicted"
     AVERAGE_STEPS_HOLDING_ENEMY_FLAG = "average_steps_holding_enemy_flag"

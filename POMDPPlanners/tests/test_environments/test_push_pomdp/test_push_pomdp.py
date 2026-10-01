@@ -1694,12 +1694,12 @@ class TestPushDangerousAreas:
         """compute_metrics reports dangerous-area step counts.
 
         Purpose: Validates that the new ``dangerous_area_rate`` and
-            ``total_dangerous_area_steps`` metrics are emitted.
+            ``average_dangerous_area_steps`` metrics are emitted.
 
         Given: A PushPOMDP with one dangerous area and a hand-built
             history with two steps inside the zone and one outside.
         When: ``compute_metrics`` is called on a single-history list.
-        Then: Both metrics are present and ``total_dangerous_area_steps``
+        Then: Both metrics are present and ``average_dangerous_area_steps``
             equals 2.
 
         Test type: unit
@@ -1748,8 +1748,8 @@ class TestPushDangerousAreas:
         )
         metrics = {m.name: m for m in env.compute_metrics(attach_step_info(env, [history]))}
         assert "dangerous_area_rate" in metrics
-        assert "total_dangerous_area_steps" in metrics
-        assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
+        assert "average_dangerous_area_steps" in metrics
+        assert metrics["average_dangerous_area_steps"].value == pytest.approx(2.0)
         assert metrics["dangerous_area_rate"].value == pytest.approx(2.0 / 3.0)
 
     @pytest.mark.parametrize("bad_value", [-0.1, 1.1, float("nan")])
