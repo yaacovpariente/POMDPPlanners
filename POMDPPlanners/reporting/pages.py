@@ -1107,7 +1107,7 @@ def episode_page(
 _RUN_KIND_LABELS = {
     run_layout.RUN_KIND_STUDY: "Tuning study",
     run_layout.RUN_KIND_CONFIG: "Tuned planner",
-    run_layout.RUN_KIND_EVALUATION: "Fresh evaluation of the tuned planners",
+    run_layout.RUN_KIND_EVALUATION: "Evaluation of the tuned planners",
 }
 
 
@@ -1205,7 +1205,8 @@ def _objective_comparison(
 
     The two are shown side by side because they differ for a reason: the best
     trial was chosen as the best of several noisy scores, so its own score is
-    biased upward, and the fresh evaluation is what the planner actually does.
+    biased upward, and the evaluation run is what the planner does on its own
+    episode count.
     """
     eval_metrics: Dict[str, float] = {}
     eval_episodes = ""
@@ -1242,14 +1243,44 @@ def _objective_comparison(
             "Direction",
             f"Best trial{trial_episodes}",
             "Interval",
-            f"Fresh evaluation{eval_episodes}",
+            f"Evaluation{eval_episodes}",
             "Interval",
         ],
         rows,
     ) + (
         '<p class="note">The best trial was picked as the best of several noisy scores, so '
-        "its own score runs high. The fresh evaluation reruns the chosen parameters on new "
-        "episodes and is the figure to report.</p>"
+        "its own score runs high. The evaluation reruns the chosen parameters in a run of its "
+        "own, with its own episode count, and is the figure to report.</p>"
+        + _seed_overlap_note(study, evaluation)
+    )
+
+
+def _seed_overlap_note(
+    study: tuning.TuningStudy,
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+) -> str:
+    """Warn when evaluation episodes reuse the seeds the tuning episodes ran on.
+
+    Episode seeds come from the environment name, the planner name and the
+    episode index alone. A tuned planner keeps its name into the evaluation,
+    so evaluation episode ``i`` replays the seed of every trial's episode
+    ``i``. For a planner whose decisions do not depend on the clock, those
+    episodes repeat the best trial's own episodes rather than draw new ones.
+    """
+    if evaluation is None or not study.episodes_per_trial:
+        return ""
+    _, _, eval_policy = evaluation
+    if study.policy_name is not None and study.policy_name != eval_policy.name:
+        return ""
+    evaluated = len(eval_policy.episodes)
+    shared = min(study.episodes_per_trial, evaluated) if evaluated else study.episodes_per_trial
+    if shared <= 0:
+        return ""
+    return (
+        f'<p class="note">Evaluation episodes 0–{shared - 1} use the same seeds as each '
+        f"trial's episodes, because both runs name the planner {html(eval_policy.name)}. "
+        "For a planner whose choices do not depend on wall-clock time they repeat the best "
+        "trial's episodes; only the episodes after them are new draws.</p>"
     )
 
 
@@ -1358,7 +1389,7 @@ def _evaluation_section(
                 "or does not hold this planner.</p>"
             )
         return (
-            '<p class="empty">No fresh evaluation is linked to this study. '
+            '<p class="empty">No evaluation run is linked to this study. '
             "<code>run_optimize_and_evaluate</code> runs one and links it here.</p>"
         )
     eval_run, eval_env, eval_policy = evaluation
@@ -1462,7 +1493,7 @@ def tuning_page(
         f"{html(study.environment)} · started {html(_timestamp(run.start_time))}{study_note}</p>"
         + thin
         + _study_stats(study)
-        + "<h2>Best trial against a fresh evaluation</h2>"
+        + "<h2>Best trial against the evaluation</h2>"
         + _objective_comparison(study, evaluation)
         + "<h2>Chosen parameters</h2>"
         + _parameter_table(study)
@@ -1470,7 +1501,7 @@ def tuning_page(
         + _trial_table(study)
         + "<h2>Diagnostic plots</h2>"
         + _plot_gallery(run, study)
-        + "<h2>Fresh evaluation</h2>"
+        + "<h2>Evaluation</h2>"
         + _evaluation_section(study, evaluation)
         + f"<details><summary>Run parameters</summary>{params}</details>",
     )

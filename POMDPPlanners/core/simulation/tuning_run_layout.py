@@ -13,7 +13,8 @@ experiment:
 - one **config** run per tuned planner and environment, holding the best
   parameters, the best trial's own scores, and the files under
   :data:`TUNING_ARTIFACT_DIR`;
-- the **evaluation** run, fresh episodes of every chosen planner. Each config
+- the **evaluation** run, every chosen planner run again on the
+  evaluation episode count. Each config
   run names it in the tag :data:`EVALUATION_RUN_ID_TAG`.
 """
 

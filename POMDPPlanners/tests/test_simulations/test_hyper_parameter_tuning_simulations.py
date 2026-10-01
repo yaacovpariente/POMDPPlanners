@@ -478,12 +478,18 @@ class TestHyperParameterOptimizerHelperMethods:
             n_trials=1,
         )
 
-        with mlflow.start_run():
+        with mlflow.start_run() as active:
             optimizer._log_optimization_results(real_optimized_policy_result, task)
 
             # Verify metrics were logged
             run = mlflow.active_run()
             assert run is not None
+
+        # The task never ran here and the result carries no metadata, as for a
+        # result cached before the metadata travelled with it: the objective
+        # value it does carry is still logged as the best trial's score.
+        logged = MlflowClient().get_run(active.info.run_id).data.metrics
+        assert logged["best_trial_average_return"] == 10.5
 
     def test_log_optimization_results_failure(self, temp_cache_dir, real_environment):
         """Test logging optimization results for failed optimization."""

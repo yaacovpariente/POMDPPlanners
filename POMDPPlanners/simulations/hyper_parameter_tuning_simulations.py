@@ -844,6 +844,12 @@ class HyperParameterOptimizer:
                 if task_metadata["best_trial_number"] is not None:
                     mlflow.log_metric("best_trial_number", task_metadata["best_trial_number"])
                 self._log_best_trial_metrics(task_metadata)
+            else:
+                # A result cached before the metadata travelled with it, whose
+                # task did not run here: its objective values are all there is.
+                self._log_best_trial_metrics(
+                    {"best_trial_metrics": optimization_result.optimized_metric_values}
+                )
 
             mlflow.log_metric("optimization_success", 1.0)
         else:
@@ -983,7 +989,9 @@ class HyperParameterOptimizer:
             "best_parameters": optimization_result.chosen_hyper_parameters,
             "best_trial_number": metadata.get("best_trial_number"),
             "best_pareto_score": metadata.get("best_pareto_score"),
-            "best_trial_metrics": metadata.get("best_trial_metrics"),
+            "best_trial_metrics": metadata.get(
+                "best_trial_metrics", optimization_result.optimized_metric_values
+            ),
             "pareto_trial_numbers": metadata.get("pareto_trial_numbers"),
             "pareto_scores": metadata.get("all_pareto_scores"),
             "n_trials_budget": config.n_trials,

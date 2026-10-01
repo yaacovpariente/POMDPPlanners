@@ -225,8 +225,10 @@ def test_the_tuning_view_shows_the_study_and_its_fresh_evaluation(router: Router
     assert f"/artifact/0/{router.index.experiments[0].experiment_id}/" in page
     assert "tuning/pareto_front.png" in page
     # Tuning score beside the fresh evaluation, each with its interval.
-    assert "Best trial (5 episodes)" in page and "Fresh evaluation (1 episodes)" in page
+    assert "Best trial (5 episodes)" in page and "Evaluation (1 episodes)" in page
     assert "9.5" in page and "6.25" in page and "5 – 7.5" in page
+    # Its one episode shares its seed with every trial's episode 0, and says so.
+    assert "Evaluation episodes 0–0 use the same seeds" in page
     # The evaluation's episode, with its replay one click away.
     assert f"/env/{ENV}/policy/{POLICY}/episode/0" in page
     assert 'class="thumb thumb-scene"' in page
@@ -246,7 +248,7 @@ def test_a_study_run_lists_its_tuned_planners_and_evaluation(router: Router, stu
     assert "Runs in this study" in page
     assert "config_1_ContinuousLightDarkPOMDP_PFT_DPW" in page
     assert "Tuned planner" in page
-    assert "Fresh evaluation of the tuned planners" in page
+    assert "Evaluation of the tuned planners" in page
 
 
 def test_the_evaluation_run_links_back_to_its_study(router: Router, study_dir):
@@ -292,4 +294,4 @@ def test_a_config_run_without_a_summary_still_gets_a_tuning_view(tmp_path: Path)
     assert "predates the study summary" in page
     assert "1-5" in page and "3.5" in page and "budget 10" in page
     assert "carries no trial records" in page
-    assert "No fresh evaluation is linked" in page
+    assert "No evaluation run is linked" in page
