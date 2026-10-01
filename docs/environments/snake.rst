@@ -311,22 +311,8 @@ close an episode came to starving even when it did not.
 Visualization
 -------------
 
-Runs also write a GIF of each episode through ``cache_visualization``. Its
-board carries four layers. The snake is drawn head first with a colour gradient
-down its body and eyes pointing along the heading; the agent observes it
-exactly, so it is drawn at full strength everywhere. The cyan outline is the
-vision window, and the cells outside it are fogged — the fog is about the
-*food*, not the body. The amber glow is the belief: the posterior probability
-that the food is in that cell, scaled to the brightest cell of that frame,
-because the posterior starts spread over the whole grid and collapses onto one
-cell the moment the window fires. The apple is drawn only so a reviewer can
-check the other layers against the truth, and is labelled as hidden from the
-agent.
-
-Each frame shows the state the step was taken *from*, and the panel reports the
-reading the agent chose on — the previous step's observation — rather than the
-one its action is about to produce. A death is marked with a red cross over the
-head and a starvation with an amber hourglass.
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
 
 No vectorized model
 -------------------

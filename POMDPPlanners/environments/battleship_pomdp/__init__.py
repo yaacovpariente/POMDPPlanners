@@ -7,7 +7,7 @@ Exports:
     BattleshipBelief: The exact belief over legal fleet layouts.
     BattleshipVectorizedWeightedParticleBelief: Its batched twin, and the
         environment's default belief.
-    BattleshipVisualizer: Episode renderer.
+    BattleshipVisualizer: Writes episodes as traces for the 3D viewer.
     FleetLayoutTable: The enumerated legal layouts.
 """
 

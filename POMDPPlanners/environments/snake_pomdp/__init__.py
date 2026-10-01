@@ -7,7 +7,7 @@ Exports:
     SnakeBelief: The exact belief over the hidden food cell.
     SnakeVectorizedWeightedParticleBelief: Its batched twin, and the
         environment's default belief.
-    SnakeVisualizer: Episode renderer.
+    SnakeVisualizer: Writes episodes as traces for the 3D viewer.
 """
 
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (

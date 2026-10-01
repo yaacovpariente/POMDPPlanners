@@ -18,7 +18,6 @@ from POMDPPlanners.core.environment.environment import Environment
 from POMDPPlanners.environments.maze_pomdp import (
     ContinuousMazePOMDP,
     DiscreteMazePOMDP,
-    MazeVisualizer,
     TMazePOMDP,
 )
 
@@ -31,15 +30,9 @@ LEGACY_PACKAGE = "POMDPPlanners.environments.t_maze_pomdp"
         (LEGACY_PACKAGE, "TMazePOMDP", TMazePOMDP),
         (LEGACY_PACKAGE, "DiscreteMazePOMDP", DiscreteMazePOMDP),
         (LEGACY_PACKAGE, "ContinuousMazePOMDP", ContinuousMazePOMDP),
-        (LEGACY_PACKAGE, "MazeVisualizer", MazeVisualizer),
         (f"{LEGACY_PACKAGE}.maze_pomdp", "DiscreteMazePOMDP", DiscreteMazePOMDP),
         (f"{LEGACY_PACKAGE}.maze_pomdp", "ContinuousMazePOMDP", ContinuousMazePOMDP),
         (f"{LEGACY_PACKAGE}.t_maze_pomdp", "TMazePOMDP", TMazePOMDP),
-        (f"{LEGACY_PACKAGE}.maze_visualizer", "MazeVisualizer", MazeVisualizer),
-        (f"{LEGACY_PACKAGE}.t_maze_visualizer", "MazeVisualizer", MazeVisualizer),
-        # TMazeVisualizer was the renderer's name before the move. It is the same
-        # class, not a T-only subclass.
-        (f"{LEGACY_PACKAGE}.t_maze_visualizer", "TMazeVisualizer", MazeVisualizer),
     ],
 )
 def test_legacy_path_resolves_to_the_same_object(legacy_module, name, expected):
@@ -87,7 +80,7 @@ def test_new_configs_record_the_maze_module_path(env_class):
 
 @pytest.mark.parametrize(
     "submodule",
-    ["maze_geometry", "maze_pomdp", "maze_visualizer", "t_maze_pomdp", "t_maze_visualizer"],
+    ["maze_geometry", "maze_pomdp", "t_maze_pomdp"],
 )
 def test_legacy_submodules_are_reachable_by_attribute(submodule):
     """``import t_maze_pomdp`` then ``t_maze_pomdp.maze_pomdp`` worked before the move.
@@ -98,6 +91,20 @@ def test_legacy_submodules_are_reachable_by_attribute(submodule):
     """
     package = importlib.import_module(LEGACY_PACKAGE)
     assert hasattr(package, submodule)
+
+
+@pytest.mark.parametrize("submodule", ["maze_visualizer", "t_maze_visualizer"])
+def test_legacy_gif_renderer_modules_are_gone(submodule):
+    """The old GIF renderer paths fail loudly rather than resolving to something else.
+
+    No saved configuration names a renderer module, so nothing needs them to
+    load. The trace visualizers that replaced the renderer are new classes that
+    happen to reuse its name; an alias here would hand old code an object with
+    a different interface instead of an import error that says what changed.
+    """
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(f"{LEGACY_PACKAGE}.{submodule}")
+    assert not hasattr(importlib.import_module(LEGACY_PACKAGE), "MazeVisualizer")
 
 
 def test_legacy_maze_pomdp_still_exposes_the_geometry_names():

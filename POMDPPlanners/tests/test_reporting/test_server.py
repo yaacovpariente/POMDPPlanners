@@ -59,9 +59,10 @@ def _episode(length: int = 3):
 def run_dir_fixture(tmp_path: Path) -> Path:
     """A run directory shaped exactly as a simulation leaves one.
 
-    Two environments on purpose: one that writes a trace and a GIF, and one
-    that writes only an MP4. The second is the CARLA / Isaac Lab / nuPlan case
-    the artifact-kind dispatch exists for.
+    Two environments on purpose: one that writes a trace, and one that writes
+    only an MP4. The second is the CARLA / Isaac Lab case the artifact-kind
+    dispatch exists for. The trace environment also holds a GIF left over from
+    a run made before GIFs were removed; the site must ignore it.
     """
     # pylint: disable-next=import-outside-toplevel
     import mlflow
@@ -79,13 +80,13 @@ def run_dir_fixture(tmp_path: Path) -> Path:
     trace_viz = staging / TRACE_ENV / "PFT_DPW" / "visualizations"
     trace_viz.mkdir(parents=True)
     for index in range(2):
-        env.cache_trace(
+        env.episode_visualizer().write(
             history=_episode(3),
             output_dir=trace_viz,
             episode_index=index,
             policy_name="PFT_DPW",
         )
-        (trace_viz / f"agent_path_{index}.gif").write_bytes(b"GIF89a-stand-in")
+    (trace_viz / "agent_path_0.gif").write_bytes(b"GIF89a-stand-in")
     trace_plots = staging / TRACE_ENV / "PFT_DPW" / "plots"
     trace_plots.mkdir(parents=True)
     (trace_plots / "discounted_returns_histogram.png").write_bytes(b"\x89PNG-stand-in")
@@ -169,7 +170,7 @@ def test_index_builds_the_environment_and_planner_hierarchy(router: Router):
     trace_env = run.environment(TRACE_ENV)
     policy = trace_env.policy("PFT_DPW")
     assert list(policy.episodes) == [0, 1]
-    assert {a.kind.value for a in policy.episodes[0]} == {"trace", "gif"}
+    assert {a.kind.value for a in policy.episodes[0]} == {"trace"}
 
     video_policy = run.environment(VIDEO_ENV).policy("POMCPOW")
     assert list(video_policy.episodes) == [0]
@@ -256,7 +257,7 @@ def test_a_trace_episode_gets_the_viewer_and_a_video_episode_gets_a_video(router
     _, _, trace_page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW/episode/0")
     assert 'id="viewer"' in trace_page
     assert "/static/viewer/renderer-core.js" in trace_page
-    assert "/static/viewer/scenes/light-dark.js" in trace_page
+    assert "/static/scenes/light_dark.js" in trace_page
     assert "<video" not in trace_page
 
     _, _, video_page = _get(router, f"{base}/env/{VIDEO_ENV}/policy/POMCPOW/episode/0")
@@ -392,40 +393,37 @@ def test_confidence_intervals_get_their_own_column(router: Router):
     assert '<td class="num ci">-18 – -7</td>' in body
 
 
-def test_an_episode_offers_every_recording_of_itself(router: Router):
-    """Both records of one episode are reachable, not just the richest.
+def test_an_old_gif_is_not_offered(router: Router):
+    """A GIF left in a run directory is ignored; the trace is the only recording.
 
-    Purpose: An episode leaves a trace and the path the environment drew while
-    it ran. Playing only the trace hides the recorded path behind a download
-    link, and the path is what most readers want to see first.
+    Purpose: Environments show their episodes in exactly one way. Runs made
+    before GIFs were removed still hold them, and the site must not bring the
+    second stream back by playing them.
 
-    Given: The fixture episode, which wrote a trace and a path GIF.
+    Given: The fixture episode, which has a trace and an old path GIF.
     When: Its page renders.
-    Then: It carries a tab per recording, the 3D replay open, and the path
-        image is on the page rather than only linked.
+    Then: The 3D replay is shown and the GIF appears nowhere on the page.
     """
     _, run = _run(router)
     base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
 
     _, _, page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW/episode/0")
 
-    assert ">3D replay<" in page and ">Recorded path<" in page
-    assert 'class="tab" data-view="0" aria-pressed="true"' in page
     assert 'id="viewer"' in page
-    assert '<img class="player"' in page and "agent_path_0.gif" in page
-    assert "/static/viewer/views.js" in page
+    assert ">Recorded path<" not in page
+    assert "agent_path_0.gif" not in page
 
 
-def test_a_planner_page_shows_each_episode_and_its_recorded_path(router: Router):
-    """The episode list is a grid of paths, with each episode's outcome on it.
+def test_a_planner_page_shows_each_episode_and_its_outcome(router: Router):
+    """The episode list is a grid of 3D thumbnails, with each episode's outcome on it.
 
     Purpose: Which episode is worth opening is a question about the episodes,
-    not about their file names: the path shows where the planner went and the
-    trace's own numbers say how it did.
+    not about their file names: the thumbnail shows where the planner went and
+    the trace's own numbers say how it did.
 
     Given: The fixture planner, with two episodes.
     When: Its page renders.
-    Then: Each episode links out, shows its recorded path as the thumbnail, and
+    Then: Each episode links out, carries a 3D thumbnail of its trace, and
         carries the return the trace recorded.
     """
     _, run = _run(router)
@@ -434,14 +432,13 @@ def test_a_planner_page_shows_each_episode_and_its_recorded_path(router: Router)
     _, _, page = _get(router, f"{base}/env/{TRACE_ENV}/policy/PFT_DPW")
 
     assert "Episode 0" in page and "Episode 1" in page
-    assert 'class="thumb thumb-recorded"' in page and "agent_path_0.gif" in page
     assert ">Return<" in page
+    assert "agent_path_0.gif" not in page
 
-    # An episode with a trace also carries the canvas the 3D thumbnail is
-    # drawn into, and the recording stays in the page underneath it.
+    # An episode with a trace carries the canvas its 3D thumbnail is drawn into.
     assert 'class="thumb thumb-scene"' in page and "trace_0.json" in page
     assert "/static/viewer/scene-cards.js" in page
-    assert "/static/viewer/scenes/light-dark.js" in page
+    assert "/static/scenes/light_dark.js" in page
 
     # And the switch that plays them all at once, off until it is asked for.
     assert 'data-live aria-pressed="false"' in page
@@ -493,6 +490,32 @@ def test_static_route_serves_the_vendored_viewer(router: Router):
 
     status, _, _ = router.resolve("/static/../server.py")
     assert status == HTTPStatus.NOT_FOUND
+
+
+def test_static_route_serves_scene_scripts_from_the_environments(router: Router):
+    """A scene script is served from its environment's folder, by scene name.
+
+    Purpose: Scene scripts live next to the visualizer that writes their
+    traces, not under the static root, so the site has to find them there.
+
+    Given: The light-dark scene, which ships as ``light_dark.scene.js``.
+    When: Its URL and some malformed scene URLs are requested.
+    Then: The scene is served as JavaScript; unknown names and paths that try
+        to leave the lookup are refused.
+    """
+    status, media_type, body = router.resolve("/static/scenes/light_dark.js")
+    assert status == HTTPStatus.OK
+    assert media_type.startswith("text/javascript")
+    assert b'"light_dark.v1"' in body
+
+    for path in (
+        "/static/scenes/no_such_world.js",
+        "/static/scenes/light_dark",
+        "/static/scenes/../light_dark.js",
+        "/static/scenes/x/light_dark.js",
+    ):
+        status, _, _ = router.resolve(path)
+        assert status == HTTPStatus.NOT_FOUND, path
 
 
 @pytest.mark.parametrize(

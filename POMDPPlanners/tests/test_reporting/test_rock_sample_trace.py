@@ -1,20 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the RockSample episode trace exporter and its visualizer package.
+"""Tests for the RockSample episode trace.
 
-Two things are checked here, and they pull in opposite directions on purpose.
-
-The exporter is new, so its payload is checked field by field: a trace is the
-whole interface between a finished episode and the browser viewer, and a field
-that does not survive the round trip is a field the viewer silently never sees.
-
-The GIF is *not* new. Moving the renderer into a ``visualizer`` package must
-not change a byte of it, so the pinned episode is rendered through the new
-import path and compared against the golden file that was pinned before the
-move.
+The payload is checked field by field: a trace is the whole interface between
+a finished episode and the browser viewer, and a field that does not survive
+the round trip is a field the viewer silently never sees.
 """
 
-import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -31,27 +23,13 @@ from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     create_rock_sample_state,
 )
-from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization import (
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (
     ROCK_SAMPLE_PAYLOAD_KIND,
     RockSampleVisualizer,
-    build_rock_sample_trace,
 )
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    GOLDEN_DIR,
-    create_deterministic_rock_sample_episode,
-)
-from POMDPPlanners.tests.test_utils.env_pinned_kwargs import rock_sample_pinned_kwargs
 
 # 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i.
 SAMPLE, EAST, CHECK_ROCK_0, CHECK_ROCK_1 = 0, 2, 5, 6
-
-# The board the golden RockSample GIF is rendered for.
-PINNED_BOARD = {
-    "map_size": (5, 5),
-    "rock_positions": [(1, 1), (2, 3), (4, 2)],
-    "dangerous_areas": [(2, 2)],
-    "dangerous_area_radius": 1.0,
-}
 
 
 @pytest.fixture(name="env")
@@ -124,7 +102,9 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
 
     Test type: unit
     """
-    trace = build_rock_sample_trace(env, _episode(), episode_index=3, policy_name="PFT_DPW")
+    trace = RockSampleVisualizer(env).build_trace(
+        _episode(), episode_index=3, policy_name="PFT_DPW"
+    )
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_3.json"))
 
     assert restored.payload_kind == ROCK_SAMPLE_PAYLOAD_KIND
@@ -144,7 +124,7 @@ def test_trace_takes_the_world_from_the_instance(env):
 
     Test type: unit
     """
-    world = build_rock_sample_trace(env, _episode(), 0).payload["world"]
+    world = RockSampleVisualizer(env).build_trace(_episode(), 0).payload["world"]
 
     assert world["map_size"] == [5, 5]
     assert world["rock_positions"] == [[1, 1], [2, 3], [4, 2]]
@@ -166,7 +146,7 @@ def test_world_names_the_sensor_contract_it_was_run_under(env):
 
     Test type: unit
     """
-    world = build_rock_sample_trace(env, _episode(), 0).payload["world"]
+    world = RockSampleVisualizer(env).build_trace(_episode(), 0).payload["world"]
 
     assert world["sensor_contract_version"] == env.sensor_contract_version
     assert world["sensor_efficiency"] == pytest.approx(env.sensor_efficiency)
@@ -182,7 +162,7 @@ def test_trace_records_which_rock_each_check_hit(env):
 
     Test type: unit
     """
-    checks = build_rock_sample_trace(env, _episode(), 0).payload["checks"]
+    checks = RockSampleVisualizer(env).build_trace(_episode(), 0).payload["checks"]
 
     assert checks == [
         {"rock": 1, "observation": "bad"},
@@ -204,7 +184,7 @@ def test_check_lookup_ignores_actions_past_the_check_block(env):
     history = _episode()
     history[0] = _step(history[0].state, 99, "good", 0.0, history[0].belief)
 
-    assert build_rock_sample_trace(env, history, 0).payload["checks"][0] is None
+    assert RockSampleVisualizer(env).build_trace(history, 0).payload["checks"][0] is None
 
 
 def test_trace_keeps_the_exit_sentinel(env):
@@ -217,7 +197,7 @@ def test_trace_keeps_the_exit_sentinel(env):
 
     Test type: unit
     """
-    payload = build_rock_sample_trace(env, _episode(), 0).payload
+    payload = RockSampleVisualizer(env).build_trace(_episode(), 0).payload
 
     assert payload["states"][0] == [0, 0]
     assert payload["states"][-1] == [-1, -1]
@@ -233,7 +213,7 @@ def test_rock_truth_comes_from_the_state(env):
 
     Test type: unit
     """
-    payload = build_rock_sample_trace(env, _episode(), 0).payload
+    payload = RockSampleVisualizer(env).build_trace(_episode(), 0).payload
 
     assert payload["rock_truth"][0] == [True, True, False]
     assert payload["rock_truth"][-1] == [False, True, False]
@@ -250,7 +230,7 @@ def test_trace_delegates_belief_serialization_to_core(env):
     Test type: unit
     """
     history = _episode()
-    trace = build_rock_sample_trace(env, history, 0)
+    trace = RockSampleVisualizer(env).build_trace(history, 0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -265,7 +245,7 @@ def test_belief_particles_carry_the_rock_bits_the_viewer_marginalises(env):
 
     Test type: unit
     """
-    belief = build_rock_sample_trace(env, _episode(), 0).payload["beliefs"][0]
+    belief = RockSampleVisualizer(env).build_trace(_episode(), 0).payload["beliefs"][0]
 
     assert belief["kind"] == "particles"
     assert [particle[2:] for particle in belief["particles"]] == [
@@ -290,21 +270,21 @@ def test_trace_inherits_the_subsampling_cap(env):
         _step(create_rock_sample_state((0, 0), (True, True, False)), EAST, "none", 0.0, belief)
     ]
 
-    written = build_rock_sample_trace(env, history, 0).payload["beliefs"][0]
+    written = RockSampleVisualizer(env).build_trace(history, 0).payload["beliefs"][0]
 
     assert written["num_particles"] == count
     assert written["num_written"] == MAX_PAYLOAD_PARTICLES
 
 
 def test_environment_writes_a_trace_file(env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index.
+    """The environment's visualizer writes a readable file under the episode's index.
 
     Purpose: This is the path the simulator actually calls, so it is the one
     that decides whether a run produces traces at all.
 
     Test type: integration
     """
-    written = env.cache_trace(
+    written = env.episode_visualizer().write(
         history=_episode(), output_dir=tmp_path, episode_index=2, policy_name="POMCPOW"
     )
 
@@ -320,66 +300,4 @@ def test_trace_rejects_an_empty_history(env):
     Test type: unit
     """
     with pytest.raises(ValueError, match="empty history"):
-        build_rock_sample_trace(env, [], 0)
-
-
-def test_the_visualizer_package_renders_the_pinned_episode_deterministically(tmp_path: Path):
-    """Two renders through the new import path are byte-for-byte identical.
-
-    Purpose: The golden-hash comparison below only runs inside the project's
-    Docker image, because the bytes are pinned to its PIL build. Determinism is
-    not — and it is the property the move could plausibly have broken, by
-    changing when a module-level cache is built.
-
-    Test type: unit
-    """
-    env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(**PINNED_BOARD))
-    history = create_deterministic_rock_sample_episode(seed=42)
-    first, second = tmp_path / "first.gif", tmp_path / "second.gif"
-
-    RockSampleVisualizer(env).create_visualization(history, first)
-    RockSampleVisualizer(env).create_visualization(history, second)
-
-    assert hashlib.sha256(first.read_bytes()).hexdigest() == (
-        hashlib.sha256(second.read_bytes()).hexdigest()
-    )
-
-
-@pytest.mark.skipif(
-    not Path("/.dockerenv").exists(),
-    reason=(
-        "Golden visualization hashes are pinned to the PIL version in the "
-        "project's Docker CI image, so the byte-identical check only runs there."
-    ),
-)
-def test_moving_the_visualizer_did_not_change_the_gif(tmp_path: Path):
-    """The pinned episode still renders to the pinned golden bytes.
-
-    Purpose: Adding the trace exporter meant putting the renderer in a
-    ``visualizer`` package. The renderer's output is pinned by a golden hash, so
-    the move has to be a move and nothing else. This renders the same
-    deterministic episode through the new import path and compares it with the
-    golden file that was pinned before the move.
-
-    Given: The golden registry's own RockSample episode and renderer.
-    When: It is rendered through ``visualizer.rock_sample_visualizer``.
-    Then: The bytes hash to the golden file's hash.
-
-    Test type: integration
-    """
-    golden = GOLDEN_DIR / "rock_sample_visualization.gif"
-    if not golden.exists():
-        pytest.skip("No golden RockSample GIF to compare against")
-
-    env = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(**PINNED_BOARD))
-    output = tmp_path / "rock_sample.gif"
-    RockSampleVisualizer(env).create_visualization(
-        create_deterministic_rock_sample_episode(seed=42), output
-    )
-
-    assert hashlib.sha256(output.read_bytes()).hexdigest() == (
-        hashlib.sha256(golden.read_bytes()).hexdigest()
-    ), (
-        "The RockSample GIF changed. Moving the renderer into its visualizer "
-        "package must not alter a byte of its output."
-    )
+        RockSampleVisualizer(env).build_trace([], 0)

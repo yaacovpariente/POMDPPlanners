@@ -451,20 +451,8 @@ rather than scored as zero.
 Visualization
 -------------
 
-Runs also write a GIF of each episode through ``cache_visualization``. Its left
-panel is the true world: the ship, the chickens with their mode shown by the
-sprite, the beam of a shot fired on that step, the edges of the camera cone and
-the radar's ring. The beam appears only on steps that discharged the gun and
-stops at the chicken it killed, which is ringed; a shot into an empty column
-runs the full height and rings nothing. There is no bolt to follow, because a
-shot never survives the step it was fired in. The right panel is the belief's
-weighted per-cell chance that a chicken is there. Drawing the particles
-themselves is this repository's usual choice for a low-dimensional state, and
-the belief here is a particle cloud -- but one particle is a whole flock, and a
-few hundred overlaid flocks are a smear rather than a picture. The per-cell
-marginal is the projection the task turns on and is still the belief rather
-than a fit to it. Each frame shows the state a step was taken from; the caption
-names the action about to be taken.
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
 
 Limits
 ------

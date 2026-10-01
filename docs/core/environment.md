@@ -70,7 +70,7 @@ The core abstract class that all POMDP environments must inherit from.
 
 **Methods:**
 - `sample_next_step(state, action)`: Sample next state, observation, and reward
-- `cache_visualization(history, cache_path)`: Cache visualization data (optional override)
+- `episode_visualizer()`: Return the visualizer that shows this environment's episodes, or `None` (optional override)
 - `compute_metrics(histories)`: Compute environment-specific metrics (optional override)
 
 **Special Methods:**

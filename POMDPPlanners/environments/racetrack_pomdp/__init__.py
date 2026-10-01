@@ -33,6 +33,7 @@ Classes:
     - ``ObservationMode``: Selects the fully-observed or partially-observed arm.
     - ``RacetrackMetric``: Episode-level metric names.
     - ``RacetrackStepChannel``: Per-step measurement channel names.
+    - ``RacetrackVisualizer``: Writes episodes as traces for the 3D viewer.
 """
 
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_belief import TrackedAgentsBelief
@@ -61,9 +62,9 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     build_racetrack_config,
     racetrack_reward,
 )
-from POMDPPlanners.environments.racetrack_pomdp.racetrack_trace_exporter import (
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualization import (
     RACETRACK_PAYLOAD_KIND,
-    build_racetrack_trace,
+    RacetrackVisualizer,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
     TrackGeometry,
@@ -93,13 +94,13 @@ __all__ = [
     "RacetrackPOMDP",
     "RacetrackStepChannel",
     "RacetrackVectorizedModel",
+    "RacetrackVisualizer",
     "SensorConfig",
     "SensorObservationModel",
     "TrackGeometry",
     "TrackedAgentsBelief",
     "WorldSensors",
     "build_racetrack_config",
-    "build_racetrack_trace",
     "build_track_geometry",
     "geometry_from_world",
     "racetrack_reward",

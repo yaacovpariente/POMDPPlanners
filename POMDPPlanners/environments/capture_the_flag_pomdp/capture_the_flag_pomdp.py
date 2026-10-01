@@ -39,7 +39,6 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
@@ -65,7 +64,9 @@ _TERMINAL_OBSERVATION_VALUE = -1.0
 _MAX_ENUMERATED_OBSERVATIONS = 8192
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization.capture_the_flag_visualizer import (  # noqa: E501
+        CaptureTheFlagVisualizer,
+    )
 
 DEFAULT_TREES: Tuple[Tuple[int, int], ...] = (
     (2, 1),
@@ -1384,55 +1385,16 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         """Return every metric name, in declaration order."""
         return [metric.value for metric in CaptureTheFlagMetrics]
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Render the episode as an animated GIF.
-
-        Args:
-            history: The episode's recorded steps.
-            output_dir: Directory the ``.gif`` is written into.
-            episode_index: Zero-based episode index, used to name the file.
-        """
-        # Imported here so the environment stays importable without Pillow's
-        # drawing stack, matching how the other environments defer visualizers.
-        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization import (  # pylint: disable=import-outside-toplevel
+    def episode_visualizer(self) -> "CaptureTheFlagVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization.capture_the_flag_visualizer import (  # noqa: E501
             CaptureTheFlagVisualizer,
         )
 
-        CaptureTheFlagVisualizer(self).render_episode(
-            history, output_dir / f"capture_the_flag_{episode_index}.gif"
-        )
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: The episode's recorded steps.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``capture_the_flag.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every run including the
-        # ones that never write anything. The module is imported directly
-        # rather than through the visualizer package, whose ``__init__`` also
-        # pulls in the GIF renderer and therefore Pillow.
-        # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization.trace_exporter import (
-            build_capture_the_flag_trace,
-        )
-
-        return build_capture_the_flag_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return CaptureTheFlagVisualizer(self)
 
 
 def _cartesian(

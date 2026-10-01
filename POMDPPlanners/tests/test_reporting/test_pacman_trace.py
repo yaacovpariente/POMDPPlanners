@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the PacMan trace exporter and the GIF its move must not change."""
+"""Tests for the PacMan episode trace."""
 
-import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -16,22 +15,11 @@ from POMDPPlanners.core.simulation.belief_payloads import (
 )
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualization import PacManVisualizer
-from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.trace_exporter import (
+from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
     PACMAN_PAYLOAD_KIND,
-    build_pacman_trace,
-)
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    create_deterministic_pacman_episode,
+    PacManVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import pacman_pinned_kwargs
-
-GOLDEN_GIF = (
-    Path(__file__).resolve().parents[1]
-    / "test_environments"
-    / "golden_visualizations"
-    / "pacman_visualization.gif"
-)
 
 
 def _env(**overrides) -> PacManPOMDP:
@@ -100,8 +88,8 @@ def test_pacman_trace_round_trips_through_json(pacman_env, tmp_path: Path):
     When: Its trace is written to disk and read back.
     Then: The envelope and every payload block match what was built.
     """
-    trace = build_pacman_trace(
-        pacman_env, _episode(pacman_env, 4), episode_index=3, policy_name="POMCPOW"
+    trace = PacManVisualizer(pacman_env).build_trace(
+        _episode(pacman_env, 4), episode_index=3, policy_name="POMCPOW"
     )
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_3.json"))
 
@@ -126,7 +114,7 @@ def test_pacman_trace_records_every_recorded_cell(pacman_env):
         recorded state.
     """
     history = _episode(pacman_env, 4)
-    payload = build_pacman_trace(pacman_env, history, episode_index=0).payload
+    payload = PacManVisualizer(pacman_env).build_trace(history, episode_index=0).payload
 
     assert len(payload["pacman_positions"]) == len(history)
     for step, pac, ghosts, pellets in zip(
@@ -149,7 +137,9 @@ def test_pacman_trace_publishes_the_state_layout_it_writes_particles_in(pacman_e
     When: The trace's layout block is used to slice that state.
     Then: The slices recover the cells the state was built with.
     """
-    layout = build_pacman_trace(pacman_env, _episode(pacman_env, 2), 0).payload["state_layout"]
+    layout = (
+        PacManVisualizer(pacman_env).build_trace(_episode(pacman_env, 2), 0).payload["state_layout"]
+    )
     state = pacman_env.make_state(pacman_pos=(2, 1), ghost_positions=((4, 5), (6, 0)))
 
     assert len(state) == layout["dim"]
@@ -176,7 +166,7 @@ def test_pacman_trace_delegates_belief_serialization_to_core(pacman_env):
         step's belief, field for field.
     """
     history = _episode(pacman_env, 3)
-    trace = build_pacman_trace(pacman_env, history, episode_index=0)
+    trace = PacManVisualizer(pacman_env).build_trace(history, episode_index=0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -202,7 +192,9 @@ def test_pacman_trace_inherits_the_subsampling_cap(pacman_env):
             belief=_belief(pacman_env, ghost_sets),
         )
     ]
-    belief = build_pacman_trace(pacman_env, history, episode_index=0).payload["beliefs"][0]
+    belief = (
+        PacManVisualizer(pacman_env).build_trace(history, episode_index=0).payload["beliefs"][0]
+    )
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
@@ -221,7 +213,7 @@ def test_pacman_trace_takes_the_world_from_the_instance():
     Then: The payload's world reports that instance's values.
     """
     env = _env(walls={(1, 2)}, dangerous_areas={(3, 3)}, dangerous_area_radius=1.5)
-    world = build_pacman_trace(env, _episode(env, 2), 0).payload["world"]
+    world = PacManVisualizer(env).build_trace(_episode(env, 2), 0).payload["world"]
 
     assert world["walls"] == [[1, 2]]
     assert world["dangerous_areas"] == [[3, 3]]
@@ -232,8 +224,8 @@ def test_pacman_trace_takes_the_world_from_the_instance():
 
 
 def test_pacman_environment_writes_a_trace_file(pacman_env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index."""
-    written = pacman_env.cache_trace(
+    """The environment's visualizer writes a readable file under the episode's index."""
+    written = pacman_env.episode_visualizer().write(
         history=_episode(pacman_env, 3), output_dir=tmp_path, episode_index=2, policy_name="POMCP"
     )
     assert written == tmp_path / "trace_2.json"
@@ -247,28 +239,4 @@ def test_pacman_environment_writes_a_trace_file(pacman_env, tmp_path: Path):
 def test_pacman_trace_rejects_an_empty_history(pacman_env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_pacman_trace(pacman_env, [], episode_index=0)
-
-
-def test_moving_the_renderer_left_the_gif_byte_identical(tmp_path: Path):
-    """The renderer's move into ``visualizer/`` changed no rendered byte.
-
-    Purpose: The PacMan GIF's bytes are pinned by a golden file, and this
-    migration is supposed to be a move plus an added exporter. Rendering the
-    pinned deterministic episode and comparing to the committed golden is the
-    only check that the move did not disturb a sprite path, a palette or a
-    frame.
-
-    Given: The pinned deterministic PacMan episode and environment.
-    When: The visualizer, now imported from the ``visualizer`` package,
-        renders it.
-    Then: The bytes equal the committed golden GIF's.
-    """
-    history = create_deterministic_pacman_episode(seed=42)
-    rendered = tmp_path / "agent_path_0.gif"
-    PacManVisualizer(_env()).cache_visualization(history, rendered)
-
-    assert (
-        hashlib.sha256(rendered.read_bytes()).hexdigest()
-        == hashlib.sha256(GOLDEN_GIF.read_bytes()).hexdigest()
-    )
+        PacManVisualizer(pacman_env).build_trace([], episode_index=0)

@@ -5,8 +5,8 @@
 Produces, per environment:
 - A discounted-returns histogram for each policy.
 - A multi-policy comparison histogram across all policies.
-- Optional per-episode environment-specific caches (e.g. agent trajectory
-  animations) when ``cache_visualizations=True``.
+- One visualization file per episode, written by the environment's own
+  episode visualizer, when ``cache_visualizations=True``.
 
 The visualizer is dispatched to worker processes via the simulator's task
 manager, so it must remain picklable and stateless. Module-level helpers
@@ -39,9 +39,8 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
     ``output_dir/<policy_name>/plots/discounted_returns_histogram.png``.
     A multi-policy comparison histogram is written to
     ``output_dir/policy_comparison_histogram.png``. When
-    ``cache_visualizations`` is True, the environment's own
-    ``cache_visualization`` hook is invoked once per episode to render
-    environment-specific artifacts (typically agent-path animations) under
+    ``cache_visualizations`` is True, the environment's episode visualizer
+    writes one file per episode (a trace or a simulator video) under
     ``output_dir/<policy_name>/visualizations/``.
 
     The class holds no instance state and is therefore picklable for dispatch
@@ -87,8 +86,8 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
                 of ``policy_results``.
             output_dir: Directory under which artifacts are written. Must
                 already exist.
-            cache_visualizations: When True, also produce per-episode
-                environment-specific caches via ``environment.cache_visualization``.
+            cache_visualizations: When True, also write one visualization file
+                per episode through ``environment.episode_visualizer()``.
 
         Returns:
             ``output_dir`` itself.
@@ -151,29 +150,21 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
         policy_dir: Path,
         policy_name: Optional[str] = None,
     ) -> None:
+        visualizer = environment.episode_visualizer()
+        if visualizer is None:
+            return
+
         viz_dir = policy_dir / "visualizations"
         viz_dir.mkdir(exist_ok=True)
 
         for episode_idx, history in enumerate(policy_histories):
+            # A failed episode loses its visualization, not the run.
             try:
-                environment.cache_visualization(
-                    history=history.history,
-                    output_dir=viz_dir,
-                    episode_index=episode_idx,
-                )
-            except Exception as exc:  # pylint: disable=broad-exception-caught
-                logger.warning("Visualization failed for episode %s: %s", episode_idx, str(exc))
-
-            # The trace is written from the same histories, in the same place
-            # and under the same failure rule as the GIF: an environment that
-            # writes no trace returns None here and nothing is written, and an
-            # environment whose exporter throws loses its trace, not the run.
-            try:
-                environment.cache_trace(
+                visualizer.write(
                     history=history.history,
                     output_dir=viz_dir,
                     episode_index=episode_idx,
                     policy_name=policy_name,
                 )
             except Exception as exc:  # pylint: disable=broad-exception-caught
-                logger.warning("Trace export failed for episode %s: %s", episode_idx, str(exc))
+                logger.warning("Visualization failed for episode %s: %s", episode_idx, str(exc))

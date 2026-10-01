@@ -2,11 +2,11 @@
 
 """Machine-readable episode traces.
 
-An environment already knows how to draw an episode: ``cache_visualization``
-writes a GIF. That GIF is the end of the line — nothing downstream can read a
-position, a reward or a belief back out of it. A *trace* is the same episode
-written so a program can replay it: a browser viewer, a plotting script, a
-regression check.
+A *trace* is an episode written so a program can replay it: a browser
+viewer, a plotting script, a regression check. A picture is the end of the
+line — nothing downstream can read a position, a reward or a belief back out
+of it — so environments implemented in this repo write traces, and a
+three.js scene draws them.
 
 The file has two halves, and the split is the whole point:
 
@@ -19,9 +19,9 @@ The file has two halves, and the split is the whole point:
   envelope names the payload's kind (``payload_kind``) so a reader can decide
   whether it knows how to draw it before it tries.
 
-Writing a trace is opt-in. :meth:`Environment.build_episode_trace` returns
-``None`` by default, and :meth:`Environment.cache_trace` then writes nothing,
-so adding this module changes no existing environment's behaviour.
+An environment writes traces by returning a
+:class:`~POMDPPlanners.core.simulation.episode_visualizers.TraceVisualizer`
+from :meth:`Environment.episode_visualizer`.
 
 Everything here is plain JSON-compatible data: these objects are built inside
 simulation worker processes, so they must pickle and must not hold live state.
@@ -46,13 +46,12 @@ class ArtifactKind(str, Enum):
     """What an episode artifact *is*, independent of how it was produced.
 
     The reporting site picks a player from this and nothing else, so an
-    environment that can only emit an MP4 (CARLA, Isaac Lab, nuPlan) is a
+    environment that can only emit an MP4 (CARLA, Isaac Lab) is a
     first-class episode without the site knowing anything about it.
     """
 
     TRACE = "trace"
     VIDEO = "video"
-    GIF = "gif"
     PLOT = "plot"
 
 

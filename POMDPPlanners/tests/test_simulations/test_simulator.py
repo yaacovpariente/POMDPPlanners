@@ -18,7 +18,6 @@ import random
 import shutil
 import tempfile
 import time
-from inspect import signature
 from pathlib import Path
 from typing import cast
 from unittest.mock import Mock, patch
@@ -32,7 +31,7 @@ import pytest
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.simulation import EnvironmentRunParams, History, StepData
+from POMDPPlanners.core.simulation import EnvironmentRunParams, EpisodeTrace, History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
@@ -1532,190 +1531,13 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
     assert not statistics_df.empty, "Statistics DataFrame should not be empty"
 
 
-def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
-    temp_cache_dir,
-):
-    """
-    Purpose: Validates simulator visualization caching integration with continuous light-dark POMDP environment
-
-    Given: POMDPSimulator and ContinuousLightDarkPOMDPDiscreteActions environment with test history
-    When: _cache_episode_visualizations is called with cache_visualizations parameter working
-    Then: Simulator successfully calls environment.cache_visualization() method and creates visualization directory
-
-    Test type: integration
-    """
-    # ARRANGE: Setup simulator and environment for integration testing
-    simulator = POMDPSimulator(
-        task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir,
-        experiment_name="LightDarkVisualizationIntegrationTest",
-        debug=True,
-    )
-
-    # Setup continuous light-dark environment with discrete actions
-    environment = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        name="IntegrationTestEnv",
-        **continuous_light_dark_discrete_actions_pinned_kwargs(
-            goal_state=np.array([3, 3]),
-            start_state=np.array([1, 1]),
-            beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
-            obstacles=[(2, 1)],  # Single obstacle as list of tuples
-            grid_size=4,
-        ),
-    )
-
-    # Create test policy directory to simulate the structure the simulator creates
-    test_policy_dir = temp_cache_dir / "policy_artifacts" / environment.name / "TestPolicy"
-    test_policy_dir.mkdir(parents=True, exist_ok=True)
-
-    # Create realistic test history that mimics what the simulator produces
-    # Create history data with realistic light-dark movements
-    history_data = []
-    current_pos = np.array([1.0, 1.0])  # Start position
-
-    for step in range(3):
-        # Move towards goal
-        next_pos = current_pos + np.array([0.5, 0.5])
-
-        # Create belief particles around current position
-        particles = [
-            current_pos,
-            current_pos + np.array([0.1, 0.1]),
-            current_pos + np.array([-0.1, 0.1]),
-        ]
-        belief = WeightedParticleBelief(
-            particles=particles, log_weights=np.array([0.5, -0.2, -0.3])
-        )
-
-        step_data = StepData(
-            state=current_pos.copy(),
-            action="right",  # Move right toward goal
-            next_state=next_pos.copy(),
-            observation=next_pos + np.random.normal(0, 0.1, 2),  # Noisy observation
-            reward=1.0,
-            belief=belief,
-        )
-        history_data.append(step_data)
-        current_pos = next_pos
-
-    # Create complete history
-    test_history = History(
-        history=history_data,
-        actual_num_steps=3,
-        reach_terminal_state=False,
-        discount_factor=0.95,
-        average_state_sampling_time=0.01,
-        average_action_time=0.02,
-        average_observation_time=0.01,
-        average_belief_update_time=0.03,
-        average_reward_time=0.001,
-        policy_run_data=[PolicyRunData(info_variables=[])],
-    )
-
-    # ACT: Test the integration by calling the visualizer's per-episode cache hook
-    # This tests the full integration: visualizer -> environment.cache_visualization -> visualize_path
-    integration_error = ""  # Initialize to avoid unbound variable error
-    try:
-        simulator.visualizer._cache_episodes(  # type: ignore[attr-defined]
-            environment=cast(DiscreteActionsEnvironment, environment),
-            policy_histories=[test_history],
-            policy_dir=test_policy_dir,
-        )
-        integration_successful = True
-    except Exception as e:
-        # If visualization fails, we still want to test that the integration was attempted
-        integration_successful = False
-        integration_error = str(e)
-
-    # ASSERT: Verify the integration was attempted and core functionality works
-
-    # 1. Verify visualizations directory is created (shows integration was attempted)
-    viz_dir = test_policy_dir / "visualizations"
-    assert (
-        viz_dir.exists()
-    ), f"Visualizations directory not created at {viz_dir} - integration failed"
-    assert viz_dir.is_dir(), "Visualizations path should be a directory"
-
-    # 2. Test that the specific Light-Dark environment has cache_visualization method
-    assert hasattr(
-        environment, "cache_visualization"
-    ), "ContinuousLightDarkPOMDPDiscreteActions should have cache_visualization method"
-    assert callable(
-        getattr(environment, "cache_visualization")
-    ), "cache_visualization should be callable"
-
-    # 3. Test that the method signature is compatible with simulator expectations
-    cache_viz_sig = signature(environment.cache_visualization)
-    param_names = list(cache_viz_sig.parameters.keys())
-
-    # The environment owns the output file name: the hook takes a destination
-    # directory and an episode index (plus 'history' and 'self').
-    assert (
-        "history" in param_names
-    ), f"cache_visualization missing 'history' parameter. Found: {param_names}"
-    assert (
-        "output_dir" in param_names
-    ), f"cache_visualization missing 'output_dir' parameter. Found: {param_names}"
-    assert (
-        "episode_index" in param_names
-    ), f"cache_visualization missing 'episode_index' parameter. Found: {param_names}"
-
-    # 4. If integration was successful, verify GIF files
-    if integration_successful:
-        # Look for GIF files
-        gif_files = list(viz_dir.glob("agent_path_*.gif"))
-        if len(gif_files) > 0:
-            # Verify files are properly formatted
-            for gif_file in gif_files:
-                assert gif_file.stat().st_size > 0, f"GIF file {gif_file.name} is empty"
-
-                # Basic GIF header verification
-                with open(gif_file, "rb") as f:
-                    header = f.read(6)
-                    assert header.startswith(
-                        b"GIF"
-                    ), f"File {gif_file.name} does not have valid GIF header"
-
-        print(f"Integration successful: Created {len(gif_files)} visualization files")
-    else:
-        # Even if visualization failed, the integration attempt should create the directory
-        print(f"Integration attempted but visualization failed: {integration_error}")
-
-    # 5. Verify that environment works with the simulator's expected interface
-    # Test that environment can handle the exact data structure the simulator provides
-    # This is the key integration test - can the environment handle simulator's data?
-    environment_compatible = False
-    environment_error = ""  # Initialize to avoid unbound variable error
-    try:
-        # Test the exact interface the simulator uses (List[StepData])
-        environment.cache_visualization(
-            history=test_history.history, output_dir=viz_dir, episode_index=0
-        )
-        environment_compatible = True
-    except Exception as e:
-        environment_error = str(e)
-        environment_compatible = False
-
-    # The environment should be able to handle the simulator's data structure
-    assert (
-        environment_compatible
-        or "visualize_path" in str(environment_error)
-        or "matplotlib" in str(environment_error)
-    ), f"Environment incompatible with simulator data structure: {environment_error}"
-
-    print(
-        "Integration test completed: Simulator and ContinuousLightDarkPOMDPDiscreteActions are compatible"
-    )
-
-
 def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
     """
     Purpose: Validates simulator does not create visualization files when cache_visualizations=False
 
     Given: POMDPSimulator with temp cache directory and ContinuousLightDarkPOMDPDiscreteActions environment
     When: Simulation is executed with cache_visualizations=False
-    Then: No GIF visualization files are created in policy directories
+    Then: No visualization files are created in policy directories
 
     Test type: integration
     """
@@ -1802,21 +1624,14 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
                                 not viz_dir.exists()
                             ), f"Visualization directory should not exist when cache_visualizations=False, but found {viz_dir}"
 
-                            # Even if viz_dir exists, it should not contain GIF files
-                            if viz_dir.exists():
-                                gif_files = list(viz_dir.glob("*.gif"))
-                                assert (
-                                    len(gif_files) == 0
-                                ), f"Found {len(gif_files)} GIF files when none should exist: {[f.name for f in gif_files]}"
-
 
 def test_simulator_cache_episode_visualizations_method_integration(temp_cache_dir):
     """
-    Purpose: Validates _cache_episode_visualizations method correctly integrates with environment.cache_visualization()
+    Purpose: Validates _cache_episodes writes each episode through the environment's visualizer
 
     Given: POMDPSimulator and ContinuousLightDarkPOMDPDiscreteActions environment with sample histories
     When: _cache_episode_visualizations is called directly with policy histories and directory
-    Then: Environment's cache_visualization method is called and GIF files are created with correct structure
+    Then: One trace file per episode is written, and nothing else
 
     Test type: unit
     """
@@ -1931,33 +1746,11 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
     assert viz_dir.exists(), f"Visualizations directory not created at {viz_dir}"
     assert viz_dir.is_dir(), "Visualizations path should be a directory"
 
-    # 2. Verify GIF files are created for each episode
-    expected_files = ["agent_path_0.gif", "agent_path_1.gif"]
-
-    for expected_file in expected_files:
-        gif_path = viz_dir / expected_file
-        assert gif_path.exists(), f"Expected GIF file not found: {gif_path}"
-        assert gif_path.is_file(), f"GIF path should be a file: {gif_path}"
-        assert gif_path.stat().st_size > 0, f"GIF file should not be empty: {gif_path}"
-
-    # 3. Verify only expected files exist (no extra files). Light-Dark also
-    # writes a machine-readable trace per episode beside its GIF, so both are
-    # expected here; an environment with no trace exporter writes only GIFs.
-    expected_traces = ["trace_0.json", "trace_1.json"]
-    actual_files = sorted([f.name for f in viz_dir.iterdir() if f.is_file()])
-    assert actual_files == sorted(
-        expected_files + expected_traces
-    ), f"Expected files {sorted(expected_files + expected_traces)}, got {actual_files}"
-
-    # 4. Verify file contents are valid GIF format (basic check)
-    for expected_file in expected_files:
-        gif_path = viz_dir / expected_file
-        with open(gif_path, "rb") as f:
-            # Check GIF file header (first 6 bytes should be GIF89a or GIF87a)
-            header = f.read(6)
-            assert header.startswith(
-                b"GIF"
-            ), f"File {expected_file} does not have valid GIF header: {header}"
+    # 2. Exactly one trace per episode, and no second visualization stream.
+    actual_files = sorted(f.name for f in viz_dir.iterdir() if f.is_file())
+    assert actual_files == ["trace_0.json", "trace_1.json"]
+    for name in actual_files:
+        assert EpisodeTrace.read(viz_dir / name).payload_kind == "light_dark.v1"
 
 
 def test_simulator_visualization_error_handling_with_continuous_light_dark(
@@ -2029,11 +1822,9 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     # ACT & ASSERT: Test error handling during visualization
     from POMDPPlanners.simulations.simulator import episode_returns_visualizer as _erv
 
-    with patch.object(
-        environment,
-        "cache_visualization",
-        side_effect=Exception("Test visualization error"),
-    ):
+    failing_visualizer = Mock()
+    failing_visualizer.write.side_effect = Exception("Test visualization error")
+    with patch.object(environment, "episode_visualizer", return_value=failing_visualizer):
         # This should not raise an exception, but should log a warning
         with patch.object(_erv.logger, "warning") as mock_warning:
             # Call the visualizer's per-episode cache hook - should handle error gracefully

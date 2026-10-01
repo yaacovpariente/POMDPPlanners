@@ -1,29 +1,17 @@
 # SPDX-License-Identifier: MIT
 
-"""Everything that turns a Light-Dark episode into something you can look at.
+"""How a Light-Dark episode is shown.
 
-Two outputs, from the same recorded episode:
-
-* ``light_dark_visualizer`` renders the GIF. Its bytes are pinned by a golden
-  hash, so this package is a move and nothing more — the renderer and its
-  sprites are unchanged.
-* ``trace_exporter`` writes the episode as data, for the browser viewer.
-
-They live together because they answer the same question about the same
-episode, and because an environment with more than one presentation file
-should keep them in one directory rather than scattered through its utils.
+``visualizer`` writes the episode as a trace, and ``light_dark.scene.js``
+replays it in the browser.
 """
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
-    LightDarkPOMDPVisualizer,
-)
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
     LIGHT_DARK_PAYLOAD_KIND,
-    build_light_dark_trace,
+    LightDarkVisualizer,
 )
 
 __all__ = [
     "LIGHT_DARK_PAYLOAD_KIND",
-    "LightDarkPOMDPVisualizer",
-    "build_light_dark_trace",
+    "LightDarkVisualizer",
 ]

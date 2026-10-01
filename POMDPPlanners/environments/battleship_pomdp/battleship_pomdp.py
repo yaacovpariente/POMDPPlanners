@@ -68,7 +68,9 @@ from POMDPPlanners.environments.battleship_pomdp.battleship_layouts import (
 )
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
+        BattleshipVisualizer,
+    )
 
 
 #: Observation emitted after probing an occupied cell.
@@ -642,49 +644,13 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
 
     # ── visualization ───────────────────────────────────────────────
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Write the episode's animated GIF into ``output_dir``.
-
-        Args:
-            history: Episode history.
-            output_dir: Directory to write into.
-            episode_index: Zero-based episode index, used to name the file.
-        """
-        # Imported lazily: matplotlib is heavy and every parallel worker imports
-        # this module, while almost none of them render anything.
-        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (  # pylint: disable=import-outside-toplevel
+    def episode_visualizer(self) -> "BattleshipVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
             BattleshipVisualizer,
         )
 
-        cache_path = output_dir / f"battleship_board_{episode_index}.gif"
-        BattleshipVisualizer(self).create_visualization(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``battleship.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every Battleship run
-        # including ones that never write anything.
-        # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_exporter import (
-            build_battleship_trace,
-        )
-
-        return build_battleship_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return BattleshipVisualizer(self)

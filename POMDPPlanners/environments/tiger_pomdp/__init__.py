@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: MIT
 
-"""Tiger POMDP family: the environment, its renderer, and its batched model.
+"""Tiger POMDP family: the environment, its visualizer, and its batched model.
 
 Classes:
     TigerPOMDP: The classic two-door tiger problem.
-    TigerVisualizer: Renderer for a Tiger episode.
+    TigerVisualizer: Writes Tiger episodes as traces for the 3D viewer.
     TigerVectorizedModel: Batched torch model of the same kernels.
 
 The family used to be three loose modules under ``environments``. It is a
-package now so the renderer and the batched model sit beside the environment
+package now so the visualizer and the batched model sit beside the environment
 they belong to, as every other family already does. The names below are
 re-exported because ``POMDPPlanners.environments.tiger_pomdp.TigerPOMDP`` is the
 module path recorded in saved configurations, and

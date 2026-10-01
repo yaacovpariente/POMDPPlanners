@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the episode trace schema and the Light-Dark exporter."""
+"""Tests for the episode trace schema and the Light-Dark visualizer."""
 
 from pathlib import Path
-from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -26,9 +25,9 @@ from POMDPPlanners.core.simulation.traces import (
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
     LIGHT_DARK_PAYLOAD_KIND,
-    build_light_dark_trace,
+    LightDarkVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_light_dark_pinned_kwargs,
@@ -177,8 +176,8 @@ def test_trace_refuses_an_incompatible_major_version():
         EpisodeTrace.from_dict(data)
 
 
-class _EnvironmentWithoutATraceExporter(Environment):
-    """The minimum an Environment can be: it implements no trace exporter.
+class _EnvironmentWithoutAVisualizer(Environment):
+    """The minimum an Environment can be: it implements no visualizer.
 
     Stands in for "any environment nobody has migrated yet", so this file does
     not have to be edited every time one is.
@@ -187,7 +186,7 @@ class _EnvironmentWithoutATraceExporter(Environment):
     def __init__(self, discount_factor: float = 0.95):
         super().__init__(
             discount_factor=discount_factor,
-            name="no-exporter",
+            name="no-visualizer",
             space_info=SpaceInfo(
                 action_space=SpaceType.DISCRETE,
                 observation_space=SpaceType.DISCRETE,
@@ -231,24 +230,24 @@ class _EnvironmentWithoutATraceExporter(Environment):
         return action
 
 
-def test_environment_writes_no_trace_by_default(tmp_path: Path):
-    """An environment that implements nothing writes nothing.
+def test_environment_has_no_visualizer_by_default():
+    """An environment that implements nothing shows nothing.
 
-    Purpose: Adding the trace path must not change any existing environment's
-    behaviour, which means the default has to be silence, not an empty file.
+    Purpose: Adding the visualization path must not change any existing
+    environment's behaviour, which means the default has to be no visualizer,
+    not one that writes an empty file.
 
-    Given: An environment that implements no trace exporter.
-    When: cache_trace is called.
-    Then: Nothing is returned and no file appears.
+    Given: An environment that implements no visualizer.
+    When: Its visualizer is asked for.
+    Then: There is none.
 
     Note: this deliberately uses a local stub rather than naming a real
     environment. It used to name Tiger, which made the test fail the day Tiger
-    gained an exporter — the test would then have been asserting something
-    about one environment's migration state instead of about the default.
+    gained a trace — the test would then have been asserting something about
+    one environment's migration state instead of about the default.
     """
-    env = _EnvironmentWithoutATraceExporter(discount_factor=0.95)
-    assert env.cache_trace(history=[], output_dir=tmp_path, episode_index=0) is None
-    assert list(tmp_path.iterdir()) == []
+    env = _EnvironmentWithoutAVisualizer(discount_factor=0.95)
+    assert env.episode_visualizer() is None
 
 
 def test_light_dark_trace_carries_the_real_belief(light_dark_env):
@@ -264,7 +263,9 @@ def test_light_dark_trace_carries_the_real_belief(light_dark_env):
         normalized weights, and the weights sum to one.
     """
     history = _episode(3)
-    trace = build_light_dark_trace(light_dark_env, history, episode_index=1, policy_name="PFT_DPW")
+    trace = LightDarkVisualizer(light_dark_env).build_trace(
+        history, episode_index=1, policy_name="PFT_DPW"
+    )
 
     beliefs = trace.payload["beliefs"]
     assert len(beliefs) == len(history)
@@ -276,7 +277,7 @@ def test_light_dark_trace_carries_the_real_belief(light_dark_env):
 
 
 def test_light_dark_trace_delegates_belief_serialization_to_core(light_dark_env):
-    """The exporter writes no belief format of its own.
+    """The visualizer writes no belief format of its own.
 
     Purpose: Belief is a core abstraction with a closed family of
     implementations. Serializing it per environment would mean fifteen copies
@@ -289,18 +290,18 @@ def test_light_dark_trace_delegates_belief_serialization_to_core(light_dark_env)
         step's belief, field for field.
     """
     history = _episode(3)
-    trace = build_light_dark_trace(light_dark_env, history, episode_index=0)
+    trace = LightDarkVisualizer(light_dark_env).build_trace(history, episode_index=0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
 
 
 def test_light_dark_trace_inherits_the_subsampling_cap(light_dark_env):
-    """A belief larger than core's cap is trimmed in the exporter's output too.
+    """A belief larger than core's cap is trimmed in the visualizer's output too.
 
     Purpose: A vectorized Light-Dark belief carries far more particles than a
     browser scene can draw, and the trace file would be enormous. This checks
-    the exporter inherits the cap rather than writing the whole cloud.
+    the visualizer inherits the cap rather than writing the whole cloud.
     """
     count = MAX_PAYLOAD_PARTICLES * 3
     positions = [[float(i) / count, 5.0] for i in range(count)]
@@ -314,7 +315,11 @@ def test_light_dark_trace_inherits_the_subsampling_cap(light_dark_env):
             belief=_belief(positions),
         )
     ]
-    belief = build_light_dark_trace(light_dark_env, history, episode_index=0).payload["beliefs"][0]
+    belief = (
+        LightDarkVisualizer(light_dark_env)
+        .build_trace(history, episode_index=0)
+        .payload["beliefs"][0]
+    )
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
@@ -333,14 +338,14 @@ def test_light_dark_trace_takes_the_world_from_the_instance(light_dark_env):
     Then: The payload's world reports the instance's values.
     """
     light_dark_env.goal_state = np.array([2.0, 3.0])
-    trace = build_light_dark_trace(light_dark_env, _episode(2), 0)
+    trace = LightDarkVisualizer(light_dark_env).build_trace(_episode(2), 0)
     assert trace.payload["world"]["goal_state"] == [2.0, 3.0]
     assert trace.payload["world"]["grid_size"] == light_dark_env.grid_size
 
 
 def test_light_dark_environment_writes_a_trace_file(light_dark_env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index."""
-    written = light_dark_env.cache_trace(
+    """The environment's visualizer writes a readable file under the episode's index."""
+    written = light_dark_env.episode_visualizer().write(
         history=_episode(3), output_dir=tmp_path, episode_index=2, policy_name="POMCPOW"
     )
     assert written == tmp_path / "trace_2.json"
@@ -354,4 +359,4 @@ def test_light_dark_environment_writes_a_trace_file(light_dark_env, tmp_path: Pa
 def test_light_dark_trace_rejects_an_empty_history(light_dark_env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_light_dark_trace(light_dark_env, [], 0)
+        LightDarkVisualizer(light_dark_env).build_trace([], 0)

@@ -20,6 +20,7 @@ from urllib.parse import quote
 from POMDPPlanners.core.simulation.traces import ArtifactKind
 from POMDPPlanners.reporting import charts
 from POMDPPlanners.reporting.artifacts import EpisodeArtifact, preferred
+from POMDPPlanners.reporting.scenes import scene_script_url
 from POMDPPlanners.reporting.store import (
     EnvironmentView,
     ExperimentView,
@@ -82,14 +83,10 @@ def artifact_url(run: RunView, relative_path: str) -> str:
 def _timestamp(value: Optional[int]) -> str:
     if not value:
         return "—"
-    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).strftime(
-        "%Y-%m-%d %H:%M UTC"
-    )
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
-def layout(
-    title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: str
-) -> str:
+def layout(title: str, breadcrumbs: Sequence[Tuple[str, Optional[str]]], body: str) -> str:
     """Wrap a page body in the shared shell.
 
     Args:
@@ -102,11 +99,7 @@ def layout(
         A complete HTML document.
     """
     crumbs = " / ".join(
-        (
-            f'<a href="{html(href)}">{html(label)}</a>'
-            if href
-            else f"<span>{html(label)}</span>"
-        )
+        (f'<a href="{html(href)}">{html(label)}</a>' if href else f"<span>{html(label)}</span>")
         for label, href in breadcrumbs
     )
     return (
@@ -166,9 +159,7 @@ def _chip(status: str) -> str:
     Returns:
         HTML for the chip.
     """
-    tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(
-        status.upper(), "flat"
-    )
+    tone = {"FINISHED": "ok", "FAILED": "bad", "RUNNING": "busy"}.get(status.upper(), "flat")
     return f'<span class="chip chip-{tone}">{html(status.title())}</span>'
 
 
@@ -280,11 +271,7 @@ def _listing(
                 if item.tags
                 else ""
             )
-            + (
-                f'<p class="path"><code>{html(item.footnote)}</code></p>'
-                if item.footnote
-                else ""
-            )
+            + (f'<p class="path"><code>{html(item.footnote)}</code></p>' if item.footnote else "")
             + "</a>"
         )
 
@@ -311,9 +298,7 @@ def _listing(
             f'<td><a href="{html(item.href)}">{html(item.title)}</a>'
             f'{" " + item.chip if item.chip else ""}</td>'
         ]
-        cells += [
-            f'<td class="num">{values.get(label) or "—"}</td>' for label in labels
-        ]
+        cells += [f'<td class="num">{values.get(label) or "—"}</td>' for label in labels]
         if has_tags:
             cells.append(f'<td>{", ".join(html(t) for t in item.tags) or "—"}</td>')
         if has_footnote:
@@ -350,9 +335,7 @@ def _stats(items: Sequence[Tuple[str, str]]) -> str:
 
 def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
     head = "".join(f"<th>{html(h)}</th>" for h in headers)
-    body = "".join(
-        "<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows
-    )
+    body = "".join("<tr>" + "".join(f"<td>{cell}</td>" for cell in row) + "</tr>" for row in rows)
     if not body:
         return '<p class="empty">Nothing here.</p>'
     return f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
@@ -367,9 +350,7 @@ def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -
         items.append(
             ListingItem(
                 title=experiment.name,
-                href=_url(
-                    "experiment", experiment.store_index, experiment.experiment_id
-                ),
+                href=_url("experiment", experiment.store_index, experiment.experiment_id),
                 fields=[
                     ("Runs", str(len(experiment.runs))),
                     ("Latest run", _timestamp(latest.start_time if latest else None)),
@@ -412,20 +393,14 @@ def experiment_page(experiment: ExperimentView) -> str:
         [("Experiments", "/"), (experiment.name, None)],
         f'<div class="page-head"><h1>{html(experiment.name)}</h1>{_layout_toggle()}</div>'
         f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
-        + _listing(
-            items, "This experiment has no runs the site can read.", "Environments"
-        ),
+        + _listing(items, "This experiment has no runs the site can read.", "Environments"),
     )
 
 
 def _metric_table(run: RunView, env: EnvironmentView) -> str:
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
-        {
-            name
-            for metrics in per_policy.values()
-            for name in charts.base_metric_names(metrics)
-        }
+        {name for metrics in per_policy.values() for name in charts.base_metric_names(metrics)}
     )
     if not names:
         return '<p class="empty">This run logged no metrics for this environment.</p>'
@@ -434,9 +409,7 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
     # interval tucked in beside the number, where it reads as part of it.
     head = (
         "<tr><th rowspan='2'>Metric</th>"
-        + "".join(
-            f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies
-        )
+        + "".join(f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies)
         + "</tr><tr>"
         + "".join("<th>Value</th><th>Confidence interval</th>" for _ in env.policies)
         + "</tr>"
@@ -458,9 +431,7 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
                 if low is not None and high is not None and high > low
                 else '<span class="dim">—</span>'
             )
-            cells.append(
-                f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>'
-            )
+            cells.append(f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>')
         rows.append("<tr>" + "".join(cells) + "</tr>")
 
     return (
@@ -478,11 +449,7 @@ def _comparison_charts(run: RunView, env: EnvironmentView, limit: int = 6) -> st
         return ""
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
-        {
-            name
-            for metrics in per_policy.values()
-            for name in charts.base_metric_names(metrics)
-        }
+        {name for metrics in per_policy.values() for name in charts.base_metric_names(metrics)}
     )
     # Headline metrics first: these are the ones a comparison is usually about.
     preferred_order = [
@@ -543,9 +510,7 @@ def _policy_cards(run: RunView, env: EnvironmentView) -> str:
     for policy in env.policies:
         metrics = run.metrics_for(env.name, policy.name)
         shown = [
-            (label, fmt.format(metrics[key]))
-            for key, label, fmt in headline
-            if key in metrics
+            (label, fmt.format(metrics[key])) for key, label, fmt in headline if key in metrics
         ]
         if not shown:
             shown = [
@@ -621,9 +586,7 @@ def _episode_returns(policy: PolicyView) -> List[float]:
     return returns
 
 
-def _returns_chart(
-    env: EnvironmentView, heading: str = "Discounted return per episode"
-) -> str:
+def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per episode") -> str:
     """The histogram of episode returns for every planner in one environment.
 
     Args:
@@ -635,9 +598,7 @@ def _returns_chart(
         return — a run of videos alone, for instance.
     """
     series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.histogram_svg(
-        series, value_label="Discounted return", count_label="Episodes"
-    )
+    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Episodes")
     if not svg:
         return ""
     episodes = sum(len(values) for _, values in series)
@@ -804,7 +765,7 @@ def _thumbnail(
         HTML for the thumbnail.
     """
     recorded = '<div class="thumb thumb-empty"><span>No recording</span></div>'
-    for kind in (ArtifactKind.GIF, ArtifactKind.PLOT, ArtifactKind.VIDEO):
+    for kind in (ArtifactKind.PLOT, ArtifactKind.VIDEO):
         artifact = next((a for a in artifacts if a.kind is kind), None)
         if artifact is None:
             continue
@@ -828,8 +789,7 @@ def _thumbnail(
         return recorded
     trace_src = artifact_url(run, f"{env}/{policy}/{trace.relative_path}")
     return (
-        recorded
-        + f'<canvas class="thumb thumb-scene" data-thumb-trace="{html(trace_src)}" '
+        recorded + f'<canvas class="thumb thumb-scene" data-thumb-trace="{html(trace_src)}" '
         f'aria-label="Scene from episode {index}" hidden></canvas>'
     )
 
@@ -857,9 +817,7 @@ def _thumbnail_scripts(policies: Sequence[PolicyView]) -> str:
     )
     if not kinds:
         return ""
-    scenes = "".join(
-        f'<script src="{html(scene_script_path(k))}"></script>' for k in kinds
-    )
+    scenes = "".join(f'<script src="{html(scene_script_url(k))}"></script>' for k in kinds)
     return (
         '<script src="/static/vendor/three.min.js"></script>'
         '<script src="/static/viewer/renderer-core.js"></script>'
@@ -937,9 +895,7 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
 def view_label(artifact: EpisodeArtifact) -> str:
     """Name one artifact as a way of watching the episode.
 
-    The label says what the viewer will see, not which file it came from:
-    "3D replay" and "Recorded path" are the two ways the same episode is shown,
-    and a GIF that is not a path — a board, a grid — is not called one.
+    The label says what the viewer will see, not which file it came from.
 
     Args:
         artifact: The artifact to label.
@@ -951,9 +907,6 @@ def view_label(artifact: EpisodeArtifact) -> str:
         return "3D replay"
     if artifact.kind is ArtifactKind.VIDEO:
         return "Recorded video"
-    if artifact.kind is ArtifactKind.GIF:
-        name = artifact.relative_path.rsplit("/", 1)[-1]
-        return "Recorded path" if "path" in name else "Recorded animation"
     return "Plot"
 
 
@@ -966,15 +919,11 @@ def _player_html(run: RunView, env: str, policy: str, artifact: EpisodeArtifact)
             f'src="{html(src)}"></video>'
         )
     if artifact.player == "image":
-        return (
-            f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
-        )
+        return f'<img class="player" src="{html(src)}" alt="{html(view_label(artifact))}">'
     return trace_viewer_html(src, artifact.payload_kind or "")
 
 
-def trace_viewer_html(
-    trace_src: str, payload_kind: str, static_root: str = "/static"
-) -> str:
+def trace_viewer_html(trace_src: str, payload_kind: str, static_root: str = "/static") -> str:
     """The 3D trace viewer: its canvas, HUD, controls and scripts.
 
     One definition for every page that replays a trace. The results site
@@ -1018,25 +967,9 @@ def trace_viewer_html(
         '<p class="viewer-status" id="viewer-status">Loading trace…</p>'
         f'<script src="{html(static_root)}/vendor/three.min.js"></script>'
         f'<script src="{html(static_root)}/viewer/renderer-core.js"></script>'
-        f'<script src="{html(scene_script_path(payload_kind, static_root))}"></script>'
+        f'<script src="{html(scene_script_url(payload_kind, static_root))}"></script>'
         f'<script src="{html(static_root)}/viewer/trace-player.js"></script>'
     )
-
-
-def scene_script_path(payload_kind: str, static_root: str = "/static") -> str:
-    """Path of the scene module that draws ``payload_kind``.
-
-    Derived by convention rather than looked up in a table, so adding an
-    environment means adding one file and editing nothing: a kind of
-    ``light_dark.v1`` loads ``scenes/light-dark.js``, which registers itself
-    under its own kind. A table here would be a merge conflict every time a new
-    environment is migrated, and a second place to forget to update.
-
-    ``static_root`` is where the viewer is served from: ``/static`` on the
-    results site, a relative path in the Sphinx docs.
-    """
-    name = payload_kind.split(".", 1)[0].replace("_", "-")
-    return f"{static_root}/viewer/scenes/{name}.js"
 
 
 def episode_page(
@@ -1058,9 +991,7 @@ def episode_page(
     # Every artifact that can be shown, preferred one first, so the tab that is
     # open on arrival is the richest view the episode produced.
     playable = [chosen] if chosen else []
-    playable += [
-        a for a in artifacts if a is not chosen and a.kind is not ArtifactKind.TRACE
-    ]
+    playable += [a for a in artifacts if a is not chosen and a.kind is not ArtifactKind.TRACE]
 
     tabs = "".join(
         f'<button type="button" class="tab" data-view="{i}" '
@@ -1094,11 +1025,7 @@ def episode_page(
             (
                 "Ended",
                 (
-                    (
-                        "terminal state"
-                        if summary.reach_terminal_state
-                        else "out of steps"
-                    )
+                    ("terminal state" if summary.reach_terminal_state else "out of steps")
                     if summary and summary.reach_terminal_state is not None
                     else ""
                 ),

@@ -1,16 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Mountain Car episode trace exporter.
+"""Tests for the Mountain Car episode trace.
 
-The exporter is the whole interface between a finished episode and the browser
+The visualizer is the whole interface between a finished episode and the browser
 viewer, so its payload is checked field by field: a field that does not survive
 the round trip is a field the viewer silently never sees, and a field the
 viewer reads by index is one a wrong-length row would quietly corrupt.
-
-The hill is checked against the GIF renderer rather than against a literal.
-Mountain Car's valley is the one part of this world that is not a constructor
-argument, and the two drawings of one episode disagreeing about where the
-ground is would be worse than either of them being wrong on its own.
 """
 
 from pathlib import Path
@@ -25,9 +20,8 @@ from POMDPPlanners.environments.mountain_car_pomdp import (
     MOUNTAIN_CAR_PAYLOAD_KIND,
     MountainCarPOMDP,
     MountainCarVisualizer,
-    build_mountain_car_trace,
 )
-from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_trace_exporter import (
+from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_visualization.mountain_car_visualizer import (
     hill_height,
 )
 
@@ -63,7 +57,7 @@ def _episode():
     """A short hand-built episode: reverse, coast, accelerate, arrive.
 
     Hand-built rather than planned, because these tests are about what the
-    exporter writes and not about what a planner does. The shapes are the real
+    visualizer writes and not about what a planner does. The shapes are the real
     ones: two-component states, a noisy reading of the same two numbers, and a
     terminal bookkeeping step that carries a state but no decision.
     """
@@ -89,7 +83,9 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
 
     Test type: unit
     """
-    trace = build_mountain_car_trace(env, _episode(), episode_index=2, policy_name="PFT_DPW")
+    trace = MountainCarVisualizer(env).build_trace(
+        _episode(), episode_index=2, policy_name="PFT_DPW"
+    )
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_2.json"))
 
     assert restored.payload_kind == MOUNTAIN_CAR_PAYLOAD_KIND
@@ -109,7 +105,7 @@ def test_trace_takes_the_world_from_the_instance(env):
 
     Test type: unit
     """
-    world = build_mountain_car_trace(env, _episode(), 0).payload["world"]
+    world = MountainCarVisualizer(env).build_trace(_episode(), 0).payload["world"]
 
     assert world["min_position"] == pytest.approx(env.min_position)
     assert world["max_position"] == pytest.approx(env.max_position)
@@ -133,26 +129,25 @@ def test_transition_noise_is_reported_at_the_configured_width(tmp_path: Path):
     """
     noisy = MountainCarPOMDP(discount_factor=0.99, state_transition_cov=np.diag([1e-3, 1e-4]))
 
-    world = build_mountain_car_trace(noisy, _episode(), 0).payload["world"]
+    world = MountainCarVisualizer(noisy).build_trace(_episode(), 0).payload["world"]
 
     assert np.allclose(world["state_transition_cov"], [[1e-3, 0.0], [0.0, 1e-4]])
 
 
-def test_hill_matches_the_gif_renderer(env):
-    """The payload's valley is the one the GIF draws.
+def test_hill_in_the_payload_is_the_valley_the_module_describes(env):
+    """The payload's valley is the one ``hill_height`` describes.
 
     Purpose: The hill is the only part of this world that is not a constructor
-    argument — the GIF renderer carries it as a literal expression, and the
-    payload carries it as three numbers. If those two drift apart, the browser
-    and the GIF show the same episode on different ground, and neither one
-    announces it.
+    argument, so the payload carries it as three numbers. If those drift from
+    the module's own description of the valley, the viewer draws the episode
+    on different ground and nothing announces it.
 
     Test type: unit
     """
-    hill = build_mountain_car_trace(env, _episode(), 0).payload["world"]["hill"]
+    hill = MountainCarVisualizer(env).build_trace(_episode(), 0).payload["world"]["hill"]
 
     for position in np.linspace(env.min_position, env.max_position, 25):
-        expected = MountainCarVisualizer.hill_height(float(position))
+        expected = 0.45 * np.sin(3.0 * position) + 0.55
         assert hill_height(float(position)) == pytest.approx(expected)
         assert (
             hill["amplitude"] * np.sin(hill["frequency"] * position) + hill["offset"]
@@ -165,13 +160,13 @@ def test_states_observations_and_beliefs_line_up_step_for_step(env):
     Purpose: The viewer indexes these lists by step. A list that is one short
     would draw the wrong step's belief beside the right step's position for the
     whole rest of the episode, which looks like a planner mistake rather than
-    an exporter one.
+    a visualizer one.
 
     Test type: unit
     """
     episode = _episode()
 
-    payload = build_mountain_car_trace(env, episode, 0).payload
+    payload = MountainCarVisualizer(env).build_trace(episode, 0).payload
 
     assert len(payload["states"]) == len(episode)
     assert len(payload["next_states"]) == len(episode)
@@ -190,7 +185,7 @@ def test_terminal_step_records_absence_rather_than_repetition(env):
 
     Test type: unit
     """
-    payload = build_mountain_car_trace(env, _episode(), 0).payload
+    payload = MountainCarVisualizer(env).build_trace(_episode(), 0).payload
 
     assert payload["observations"][-1] is None
     assert payload["next_states"][-1] is None
@@ -206,13 +201,13 @@ def test_outcome_is_read_from_the_final_state(env):
 
     Test type: unit
     """
-    reached = build_mountain_car_trace(env, _episode(), 0)
+    reached = MountainCarVisualizer(env).build_trace(_episode(), 0)
     # Same episode, stopped short of the hilltop.
     short = _episode()
     short[-1] = _step((-0.2, 0.01), None, None, None, short[-1].belief)
 
     assert reached.reach_terminal_state is True
-    assert build_mountain_car_trace(env, short, 0).reach_terminal_state is False
+    assert MountainCarVisualizer(env).build_trace(short, 0).reach_terminal_state is False
 
 
 def test_a_state_of_the_wrong_width_is_refused(env):
@@ -228,7 +223,7 @@ def test_a_state_of_the_wrong_width_is_refused(env):
     episode[1] = _step((0.1, 0.2, 0.3), NEUTRAL, (0.1, 0.2), -1.0, episode[1].belief)
 
     with pytest.raises(ValueError, match="need 2 components"):
-        build_mountain_car_trace(env, episode, 0)
+        MountainCarVisualizer(env).build_trace(episode, 0)
 
 
 def test_an_empty_history_is_refused(env):
@@ -240,21 +235,21 @@ def test_an_empty_history_is_refused(env):
     Test type: unit
     """
     with pytest.raises(ValueError, match="empty history"):
-        build_mountain_car_trace(env, [], 0)
+        MountainCarVisualizer(env).build_trace([], 0)
 
 
 def test_the_environment_hook_produces_the_same_trace(env):
-    """``build_episode_trace`` is the exporter, not a second implementation.
+    """The environment's visualizer is this one, not a second implementation.
 
-    Purpose: The episode loop calls the hook, and the tests above call the
-    function. If those ever diverge, everything above is testing code nothing
-    runs.
+    Purpose: The episode loop calls the hook, and the tests above build the
+    visualizer directly. If those ever diverge, everything above is testing
+    code nothing runs.
 
     Test type: unit
     """
     episode = _episode()
 
-    hooked = env.build_episode_trace(episode, episode_index=5, policy_name="POMCPOW")
-    direct = build_mountain_car_trace(env, episode, episode_index=5, policy_name="POMCPOW")
+    hooked = env.episode_visualizer().build_trace(episode, episode_index=5, policy_name="POMCPOW")
+    direct = MountainCarVisualizer(env).build_trace(episode, episode_index=5, policy_name="POMCPOW")
 
     assert hooked.to_dict() == direct.to_dict()

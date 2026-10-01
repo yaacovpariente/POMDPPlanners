@@ -1,27 +1,25 @@
 # SPDX-License-Identifier: MIT
 
-"""Everything that turns a Maze-family episode into something you can look at.
+"""How a Maze-family episode is shown.
 
-The renderer itself is not here. ``MazeVisualizer`` draws every environment in
-the family — the generated Maze and the T-Maze alike — so it stays at the
-package root rather than being claimed by either one.
-
-What lives here is one trace exporter per environment: the same episodes
-written as data, for the browser viewer.
+Two visualizers write episodes as traces for the 3D viewer, one per payload:
+``visualizer`` writes ``maze.v1`` for the generated Maze, discrete and
+continuous, and ``maze.scene.js`` replays it; ``t_maze_visualizer`` writes
+``t_maze.v1`` for the T-Maze, and ``t_maze.scene.js`` replays it.
 """
 
-from POMDPPlanners.environments.maze_pomdp.maze_visualization.t_maze_trace_exporter import (
+from POMDPPlanners.environments.maze_pomdp.maze_visualization.t_maze_visualizer import (
     T_MAZE_PAYLOAD_KIND,
-    build_t_maze_trace,
+    TMazeVisualizer,
 )
-from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
+from POMDPPlanners.environments.maze_pomdp.maze_visualization.maze_visualizer import (
     MAZE_PAYLOAD_KIND,
-    build_maze_trace,
+    MazeVisualizer,
 )
 
 __all__ = [
     "MAZE_PAYLOAD_KIND",
+    "MazeVisualizer",
+    "TMazeVisualizer",
     "T_MAZE_PAYLOAD_KIND",
-    "build_maze_trace",
-    "build_t_maze_trace",
 ]

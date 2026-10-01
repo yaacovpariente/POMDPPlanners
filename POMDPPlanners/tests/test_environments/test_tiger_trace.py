@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Tiger episode trace exporter.
+"""Tests for the Tiger episode trace.
 
-The exporter is the only thing standing between a recorded episode and a
+The visualizer is the only thing standing between a recorded episode and a
 browser page that claims to show it, so these check the two ways it could lie:
 by writing a number the environment does not hold, and by writing a belief the
-run did not have. The last test checks the move into the ``tiger_visualizer``
-package left the GIF alone, which is the other half of this migration.
+run did not have.
 """
 
 from pathlib import Path
@@ -24,7 +23,6 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.tiger_pomdp.tiger_visualization import (
     TIGER_PAYLOAD_KIND,
     TigerVisualizer,
-    build_tiger_trace,
 )
 
 
@@ -64,7 +62,7 @@ def test_payload_round_trips_through_json(tmp_path: Path, tiger: TigerPOMDP):
     When: Its trace is written to disk and read back.
     Then: Envelope and payload match the object that was written.
     """
-    trace = build_tiger_trace(tiger, _episode(), episode_index=3, policy_name="POMCP")
+    trace = TigerVisualizer(tiger).build_trace(_episode(), episode_index=3, policy_name="POMCP")
     path = trace.write(tmp_path / "trace.json")
     back = EpisodeTrace.read(path)
 
@@ -89,7 +87,7 @@ def test_world_block_is_read_out_of_the_environment(tiger: TigerPOMDP):
     When: Its trace is built.
     Then: The world block agrees with what the environment's own models say.
     """
-    world = build_tiger_trace(tiger, _episode(), episode_index=0).payload["world"]
+    world = TigerVisualizer(tiger).build_trace(_episode(), episode_index=0).payload["world"]
 
     assert world["states"] == ["tiger_left", "tiger_right"]
     assert world["actions"] == ["listen", "open_left", "open_right"]
@@ -110,7 +108,7 @@ def test_opening_a_door_is_not_terminal_and_the_side_is_re_drawn(tiger: TigerPOM
     When: Its trace is built.
     Then: Nothing is marked terminal, and the re-draw is recorded as uniform.
     """
-    trace = build_tiger_trace(tiger, _episode(), episode_index=0)
+    trace = TigerVisualizer(tiger).build_trace(_episode(), episode_index=0)
 
     assert trace.reach_terminal_state is False
     assert trace.payload["world"]["open_is_terminal"] is False
@@ -126,13 +124,13 @@ def test_belief_is_the_run_s_own_and_resets_after_the_open(tiger: TigerPOMDP):
 
     Purpose: A belief regenerated from the true state looks convincing and says
     nothing. The reset to even after an open is the environment's teaching
-    moment, and it has to come from the run rather than from this exporter.
+    moment, and it has to come from the run rather than from this visualizer.
 
     Given: An episode that listens to 0.85, opens, and is back at 0.50.
     When: Its trace is built.
     Then: The particle payloads carry those masses in that order.
     """
-    beliefs = build_tiger_trace(tiger, _episode(), episode_index=0).payload["beliefs"]
+    beliefs = TigerVisualizer(tiger).build_trace(_episode(), episode_index=0).payload["beliefs"]
 
     assert [b["kind"] for b in beliefs] == ["particles"] * 3
     assert [b["particles"] for b in beliefs] == [["tiger_left", "tiger_right"]] * 3
@@ -157,7 +155,7 @@ def test_unweighted_belief_keeps_its_labels(tiger: TigerPOMDP):
             UnweightedParticleBeliefStateUpdate(["tiger_left", "tiger_left", "tiger_right"]),
         )
     ]
-    belief = build_tiger_trace(tiger, history, episode_index=0).payload["beliefs"][0]
+    belief = TigerVisualizer(tiger).build_trace(history, episode_index=0).payload["beliefs"][0]
 
     assert belief["weighted"] is False
     assert belief["particles"] == ["tiger_left", "tiger_left", "tiger_right"]
@@ -167,57 +165,19 @@ def test_unweighted_belief_keeps_its_labels(tiger: TigerPOMDP):
 def test_empty_history_is_refused(tiger: TigerPOMDP):
     """There is no episode to write, so nothing is written."""
     with pytest.raises(ValueError, match="empty history"):
-        build_tiger_trace(tiger, [], episode_index=0)
+        TigerVisualizer(tiger).build_trace([], episode_index=0)
 
 
-def test_environment_writes_the_trace_beside_the_gif(tmp_path: Path, tiger: TigerPOMDP):
-    """``cache_trace`` is wired to the exporter through the environment.
+def test_the_environment_writes_a_readable_trace(tmp_path: Path, tiger: TigerPOMDP):
+    """The environment's visualizer writes its trace where the reporting site looks.
 
-    Purpose: The simulation layer calls ``cache_trace``, never the exporter, so
-    an exporter nobody reaches writes nothing however correct it is.
+    Purpose: The simulation layer calls ``episode_visualizer().write``, never
+    the visualizer directly, so a visualizer nobody reaches writes nothing
+    however correct it is.
     """
-    written = tiger.cache_trace(
+    written = tiger.episode_visualizer().write(
         history=_episode(), output_dir=tmp_path, episode_index=2, policy_name="POMCP"
     )
 
     assert written == tmp_path / "trace_2.json"
     assert EpisodeTrace.read(written).payload_kind == TIGER_PAYLOAD_KIND
-
-
-def test_exporting_a_trace_leaves_the_gif_bytes_alone(tmp_path: Path, tiger: TigerPOMDP):
-    """The GIF is byte-identical whether or not a trace was exported too.
-
-    Purpose: The GIF's bytes are pinned by a golden hash, and this migration
-    moved the renderer into a package and added a second consumer of the same
-    history beside it. Either could have perturbed it — by mutating the recorded
-    steps, or by leaving the renderer's cached background changed.
-
-    Given: One episode.
-    When: It is rendered, then exported and rendered again.
-    Then: Both GIFs are the same bytes.
-    """
-    history = _episode()
-    before = tmp_path / "before.gif"
-    after = tmp_path / "after.gif"
-
-    TigerVisualizer().create_visualization(history, before)
-    tiger.cache_trace(history=history, output_dir=tmp_path, episode_index=0)
-    TigerVisualizer().create_visualization(history, after)
-
-    assert before.read_bytes() == after.read_bytes()
-
-
-def test_the_renderer_still_finds_its_art_after_the_move():
-    """The chamber art came across with the renderer.
-
-    Purpose: The move was meant to be a move. The asset kept its directory name
-    so the path the renderer builds is the same string; this checks the file is
-    where that string now points, rather than waiting for the golden GIF test
-    that only runs inside the CI image.
-    """
-    from POMDPPlanners.environments.tiger_pomdp.tiger_visualization import (
-        tiger_visualizer as module,
-    )
-
-    art = Path(module.__file__).with_name("tiger_visualization_assets") / "chamber.png"
-    assert art.is_file()

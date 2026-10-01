@@ -1,51 +1,118 @@
 # SPDX-License-Identifier: MIT
 
-"""The occupancy-grid mapping episode trace, and the GIF beside it.
+"""The occupancy-grid mapping episode trace.
 
-Two things are checked here, and they are two halves of the same migration.
-
-The trace is new, so it is checked for the properties a viewer depends on: it
+The trace is checked for the properties a viewer depends on: it
 round-trips through JSON unchanged, its belief comes from core rather than from
 this environment, and the robot's map and the hidden map are written from the
 blocks they actually live in. The last one is worth a test of its own because
 both are ``num_cells`` floats sitting next to each other in the same state
 vector: swapping them would produce a trace that looks entirely plausible and
 shows a viewer the answer instead of the robot's guess at it.
-
-The GIF is old, and the renderer only moved into a package. Its bytes are
-pinned by the golden-file suite, which runs the byte comparison inside the
-project's Docker image. What that suite does not check, and what the move could
-break, is the hook in between: the environment's ``cache_visualization`` has to
-still reach the moved renderer, and reach the same one the golden suite renders
-with. So the check here is that the two paths agree byte for byte.
 """
 
-import hashlib
 import json
+import random
 from pathlib import Path
+from typing import List
 
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization import (
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
+    OccupancyGridAction,
+    OccupancyGridMappingBelief,
+    OccupancyGridMappingPOMDP,
+)
+from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.occupancy_grid_mapping_visualizer import (  # noqa: E501
+    MAX_TRACE_PARTICLES,
     OCCUPANCY_GRID_MAPPING_PAYLOAD_KIND,
     OccupancyGridMappingVisualizer,
-    build_occupancy_grid_mapping_trace,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_visualization.trace_exporter import (
-    MAX_TRACE_PARTICLES,
-)
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    build_occupancy_grid_mapping_env,
-    create_deterministic_occupancy_grid_mapping_episode,
-)
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import occupancy_grid_mapping_pinned_kwargs
+
+
+def build_occupancy_grid_mapping_env() -> OccupancyGridMappingPOMDP:
+    """Build the pinned environment the deterministic episode runs on."""
+    return OccupancyGridMappingPOMDP(discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs())
+
+
+def create_deterministic_occupancy_grid_mapping_episode(seed: int = 3) -> List[StepData]:
+    """Create a deterministic occupancy-grid mapping episode.
+
+    The action sequence is fixed, and the belief attached to each step is a real
+    :class:`OccupancyGridMappingBelief` rather than a mock: the belief is the
+    part of the trace most likely to regress, and a mock belief would leave it
+    untested. Both the resampling inside the filter and the sensor noise are
+    random, so the seed is pinned.
+
+    Both RNGs are seeded, not just NumPy: ``conftest`` seeds the stdlib
+    ``random`` once at import, so seeding NumPy alone would leave the episode
+    dependent on which tests ran before this one.
+
+    Args:
+        seed: Random seed pinning the true map, the scans and the resampling.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_occupancy_grid_mapping_env()
+
+    belief = OccupancyGridMappingBelief.initial(env, n_particles=24)
+    state = env.initial_state_dist().sample()[0]
+    history: List[StepData] = []
+
+    # A fixed tour: drive out, turn, drive out again, so the frames show the
+    # occupancy grid growing along a path rather than from one vantage point.
+    action_sequence = [
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.TURN_RIGHT,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.TURN_RIGHT,
+        OccupancyGridAction.FORWARD,
+        OccupancyGridAction.FORWARD,
+    ]
+
+    for action in action_sequence:
+        next_state, observation, reward = env.sample_next_step(state, int(action))
+        history.append(
+            StepData(
+                state=state,
+                action=int(action),
+                next_state=next_state,
+                observation=observation,
+                reward=reward,
+                belief=belief,
+                info=env.step_info(state, int(action), next_state),
+            )
+        )
+        belief = belief.update(action=int(action), observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
 
 
 @pytest.fixture(name="episode")
 def episode_fixture():
-    """The pinned deterministic episode the golden GIF is rendered from."""
+    """The pinned deterministic episode."""
     return create_deterministic_occupancy_grid_mapping_episode(seed=3)
 
 
@@ -68,7 +135,9 @@ def test_trace_round_trips_through_json(env, episode, tmp_path: Path):
 
     Test type: unit
     """
-    trace = build_occupancy_grid_mapping_trace(env, episode, episode_index=2, policy_name="PFT_DPW")
+    trace = OccupancyGridMappingVisualizer(env).build_trace(
+        episode, episode_index=2, policy_name="PFT_DPW"
+    )
     path = trace.write(tmp_path / "trace_2.json")
     restored = EpisodeTrace.read(path)
 
@@ -93,7 +162,7 @@ def test_trace_writes_the_world_from_the_instance(env, episode):
 
     Test type: unit
     """
-    world = build_occupancy_grid_mapping_trace(env, episode, 0).payload["world"]
+    world = OccupancyGridMappingVisualizer(env).build_trace(episode, 0).payload["world"]
 
     assert world["num_rows"] == env.num_rows
     assert world["num_cols"] == env.num_cols
@@ -120,7 +189,7 @@ def test_trace_keeps_the_robots_map_and_the_hidden_map_apart(env, episode):
 
     Test type: unit
     """
-    payload = build_occupancy_grid_mapping_trace(env, episode, 0).payload
+    payload = OccupancyGridMappingVisualizer(env).build_trace(episode, 0).payload
 
     for index, step in enumerate(episode):
         expected = env.log_odds(np.asarray(step.state, dtype=np.float64)).reshape(-1)
@@ -150,7 +219,7 @@ def test_trace_marks_the_pre_scan_state_as_unscanned(env, episode):
 
     Test type: unit
     """
-    payload = build_occupancy_grid_mapping_trace(env, episode, 0).payload
+    payload = OccupancyGridMappingVisualizer(env).build_trace(episode, 0).payload
 
     assert payload["scanned"][0] is False
     assert all(payload["scanned"][1:])
@@ -169,7 +238,7 @@ def test_trace_delegates_belief_serialization_to_core(env, episode):
 
     Test type: unit
     """
-    payload = build_occupancy_grid_mapping_trace(env, episode, 0).payload
+    payload = OccupancyGridMappingVisualizer(env).build_trace(episode, 0).payload
 
     for index, step in enumerate(episode):
         expected = belief_to_payload(step.belief, max_particles=MAX_TRACE_PARTICLES)
@@ -197,7 +266,7 @@ def test_trace_caps_how_many_whole_maps_are_written(env, episode):
     )
     history = [step._replace(belief=crowded)]
 
-    belief = build_occupancy_grid_mapping_trace(env, history, 0).payload["beliefs"][0]
+    belief = OccupancyGridMappingVisualizer(env).build_trace(history, 0).payload["beliefs"][0]
 
     assert belief["num_particles"] == len(crowded.particles)
     assert belief["num_written"] == min(MAX_TRACE_PARTICLES, len(crowded.particles))
@@ -207,18 +276,20 @@ def test_trace_caps_how_many_whole_maps_are_written(env, episode):
 def test_environment_writes_a_trace_file(env, episode, tmp_path: Path):
     """Test that the environment's own hook writes the trace.
 
-    Purpose: The simulation layer calls ``cache_trace``, not the exporter, so a
+    Purpose: The simulation layer calls the environment's visualizer, so a
         trace that only builds when called by hand would never be written by a
         real run
 
     Given: An environment and an episode
-    When: ``cache_trace`` is called
+    When: ``episode_visualizer().write`` is called
     Then: A ``trace_<index>.json`` is written and reads back with this
         environment's payload kind
 
     Test type: integration
     """
-    written = env.cache_trace(episode, tmp_path, episode_index=4, policy_name="PFT_DPW")
+    written = env.episode_visualizer().write(
+        episode, tmp_path, episode_index=4, policy_name="PFT_DPW"
+    )
 
     assert written == tmp_path / "trace_4.json"
     assert EpisodeTrace.read(written).payload_kind == OCCUPANCY_GRID_MAPPING_PAYLOAD_KIND
@@ -237,32 +308,4 @@ def test_trace_rejects_an_empty_history(env):
     Test type: unit
     """
     with pytest.raises(ValueError, match="empty history"):
-        build_occupancy_grid_mapping_trace(env, [], 0)
-
-
-def test_cache_visualization_renders_the_moved_renderer(env, episode, tmp_path: Path):
-    """Test that the environment's GIF hook and the golden suite agree.
-
-    Purpose: The renderer moved into a ``visualizer`` package, and the risk a
-        move creates is that the environment's hook reaches a different module
-        -- or no longer reaches one -- than the suite whose hash pins the bytes
-
-    Given: The pinned deterministic episode
-    When: The GIF is written by ``cache_visualization`` and, separately, by the
-        visualizer class the golden suite uses
-    Then: The two files are byte for byte identical
-
-    Test type: integration
-    """
-    hook_dir = tmp_path / "hook"
-    hook_dir.mkdir()
-    env.cache_visualization(episode, hook_dir, 0)
-    through_hook = hook_dir / "occupancy_grid_mapping_0.gif"
-
-    direct = tmp_path / "direct.gif"
-    OccupancyGridMappingVisualizer(env).create_visualization(episode, direct)
-
-    assert through_hook.exists()
-    assert hashlib.sha256(through_hook.read_bytes()).hexdigest() == (
-        hashlib.sha256(direct.read_bytes()).hexdigest()
-    )
+        OccupancyGridMappingVisualizer(env).build_trace([], 0)

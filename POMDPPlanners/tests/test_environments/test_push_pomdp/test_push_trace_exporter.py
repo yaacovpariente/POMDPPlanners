@@ -1,18 +1,14 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Push episode trace exporter and its visualizer package.
+"""Tests for the Push episode trace.
 
-Two things are checked here. The payload has to survive the round trip through
-JSON, because that file is the only interface between Python and the browser
-viewer: a field that does not survive is a field the viewer silently never
-sees. And the GIF has to be unaffected by moving the renderers into
-``push_pomdp/visualizer/``, because its bytes are pinned by a golden hash.
+The payload has to survive the round trip through JSON, because that file is
+the only interface between Python and the browser viewer: a field that does
+not survive is a field the viewer silently never sees.
 """
 
 from pathlib import Path
 from typing import Any, List
-
-import hashlib
 
 import numpy as np
 import pytest
@@ -27,9 +23,7 @@ from POMDPPlanners.environments.push_pomdp import (
 )
 from POMDPPlanners.environments.push_pomdp.push_visualization import (
     PUSH_PAYLOAD_KIND,
-    ContinuousPushPOMDPVisualizer,
-    PushPOMDPVisualizer,
-    build_push_trace,
+    PushVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_push_pinned_kwargs,
@@ -128,7 +122,7 @@ def test_discrete_payload_round_trips_through_json(discrete_env: PushPOMDP, tmp_
 
     Test type: integration
     """
-    trace = discrete_env.build_episode_trace(_discrete_episode(), 3, "POMCPOW")
+    trace = discrete_env.episode_visualizer().build_trace(_discrete_episode(), 3, "POMCPOW")
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_3.json"))
 
     assert restored.payload_kind == PUSH_PAYLOAD_KIND
@@ -155,7 +149,7 @@ def test_discrete_world_describes_circular_obstacles(discrete_env: PushPOMDP):
 
     Test type: unit
     """
-    world = discrete_env.build_episode_trace(_discrete_episode(), 0).payload["world"]
+    world = discrete_env.episode_visualizer().build_trace(_discrete_episode(), 0).payload["world"]
 
     assert world["variant"] == "discrete"
     assert world["obstacle_shape"] == "circle"
@@ -184,7 +178,9 @@ def test_continuous_world_describes_square_obstacles(continuous_env: ContinuousP
 
     Test type: unit
     """
-    world = continuous_env.build_episode_trace(_continuous_episode(), 0).payload["world"]
+    world = (
+        continuous_env.episode_visualizer().build_trace(_continuous_episode(), 0).payload["world"]
+    )
 
     assert world["variant"] == "continuous"
     assert world["obstacle_shape"] == "square"
@@ -210,7 +206,7 @@ def test_continuous_actions_are_written_as_vectors(continuous_env: ContinuousPus
 
     Test type: unit
     """
-    trace = continuous_env.build_episode_trace(_continuous_episode(), 0)
+    trace = continuous_env.episode_visualizer().build_trace(_continuous_episode(), 0)
 
     assert trace.steps[0].action == [1.4, 0.0]
     assert trace.steps[-1].action is None
@@ -220,7 +216,7 @@ def test_continuous_actions_are_written_as_vectors(continuous_env: ContinuousPus
 def test_discrete_action_wrapper_keeps_the_continuous_world():
     """The discrete-action wrapper is the continuous world with labels.
 
-    Purpose: It inherits the exporter, and a viewer that took its labels as
+    Purpose: It inherits the visualizer, and a viewer that took its labels as
         proof of the discrete world would draw circular obstacles for a world
         whose obstacles are squares.
 
@@ -235,7 +231,7 @@ def test_discrete_action_wrapper_keeps_the_continuous_world():
         **continuous_push_pinned_kwargs(grid_size=10, obstacles=[(3.0, 3.0, 0.5)]),
     )
     history = _episode([[0.8, 1.2, 2.2, 1.4, 9.0, 9.0], [1.8, 1.2, 2.2, 1.4, 9.0, 9.0]], ["right"])
-    world = env.build_episode_trace(history, 0).payload["world"]
+    world = env.episode_visualizer().build_trace(history, 0).payload["world"]
 
     assert world["variant"] == "continuous"
     assert world["obstacle_shape"] == "square"
@@ -266,7 +262,7 @@ def test_hazard_terminal_state_keeps_only_the_two_positions():
         [[0.8, 1.2, 2.2, 1.4, 9.0, 9.0, 0.0], [1.8, 1.2, 2.2, 1.4, 9.0, 9.0, 1.0]],
         [np.array([1.0, 0.0])],
     )
-    trace = env.build_episode_trace(history, 0)
+    trace = env.episode_visualizer().build_trace(history, 0)
 
     assert trace.payload["states"] == [[0.8, 1.2, 2.2, 1.4], [1.8, 1.2, 2.2, 1.4]]
     assert trace.payload["world"]["obstacle_hit_terminal"] is True
@@ -279,48 +275,10 @@ def test_empty_history_is_refused(discrete_env: PushPOMDP):
     Purpose: A trace of nothing would be indexed and played as a real episode.
 
     Given: An empty history.
-    When: The exporter is asked to write it.
+    When: The visualizer is asked to write it.
     Then: It raises.
 
     Test type: unit
     """
     with pytest.raises(ValueError):
-        build_push_trace(environment=discrete_env, history=[], episode_index=0)
-
-
-@pytest.mark.parametrize("variant", ["discrete", "continuous"])
-def test_gif_is_unchanged_by_the_visualizer_package(variant: str, tmp_path: Path):
-    """The renderers draw the same bytes from their new home.
-
-    Purpose: Moving the Pillow renderers into ``visualizer/`` moved the sprite
-        sheet with them, and the byte-for-byte golden hashes those GIFs are
-        pinned to only run inside the project's Docker image. This renders
-        twice through one visualizer and compares, which catches both a sprite
-        that no longer resolves and a renderer that carries state between
-        renders.
-
-    Given: A Push environment of each variant and a fixed episode.
-    When: The same visualizer renders it twice.
-    Then: The two files are byte-identical and neither is empty.
-
-    Test type: integration
-    """
-    if variant == "discrete":
-        env: Any = PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(grid_size=10))
-        visualizer: Any = PushPOMDPVisualizer(env)
-        history = _discrete_episode()
-    else:
-        env = ContinuousPushPOMDP(
-            discount_factor=0.99, **continuous_push_pinned_kwargs(grid_size=10)
-        )
-        visualizer = ContinuousPushPOMDPVisualizer(env)
-        history = _continuous_episode()
-
-    digests = []
-    for index in range(2):
-        path = tmp_path / f"{variant}_{index}.gif"
-        visualizer.create_visualization(history, path)
-        digests.append(hashlib.sha256(path.read_bytes()).hexdigest())
-        assert path.stat().st_size > 0
-
-    assert digests[0] == digests[1]
+        PushVisualizer(discrete_env).build_trace(history=[], episode_index=0)

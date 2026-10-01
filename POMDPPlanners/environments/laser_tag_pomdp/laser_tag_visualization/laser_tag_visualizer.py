@@ -1,119 +1,343 @@
 # SPDX-License-Identifier: MIT
-"""Cached Pillow renderer for the discrete LaserTag environment."""
 
-from pathlib import Path
-from typing import List, Set, Tuple
+"""LaserTag episode visualizers, for both variants.
+
+They write an episode as a trace, which ``laser_tag.scene.js`` beside this
+module replays in the browser. Nothing here is re-derived: every number written comes from the recorded episode or from the
+environment's own configuration.
+
+The eight laser ranges are the whole observation in this environment, so they
+are the one thing the payload cannot leave to the reader. A viewer that recast
+its own rays would be a second, drifting copy of the observation model — and
+the two copies have already disagreed once, because an earlier ray walk
+ignored the opponent while the observation model stops at it. So this
+module calls the environment's own range function and writes the eight
+numbers out, and the viewer draws each beam ending exactly where that number
+puts it.
+
+Two range arrays are written per step, and the difference between them is the
+environment:
+
+* ``laser_ranges`` — the true ranges at the drawn state, from the model with
+  no noise added.
+* ``observed_ranges`` — the noisy reading the agent actually received at that
+  same state. An observation is emitted for a step's ``next_state``, so the
+  reading taken *at* state ``i`` is ``history[i - 1].observation``; that is the
+  pairing written here, and the first state has no recorded reading and is
+  written as ``null`` rather than paired with a reading from elsewhere.
+
+The belief is not serialized here. It is a core abstraction with a closed
+family of implementations, so
+:func:`~POMDPPlanners.core.simulation.belief_payloads.belief_to_payload` writes
+it for every environment, and this module is left with what is genuinely
+LaserTag's: the arena, the two bodies and the ranges.
+"""
+
+from abc import abstractmethod
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_renderer import (
-    LaserTagFrameRenderer,
-)
+from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
+from POMDPPlanners.core.simulation.episode_visualizers import TraceVisualizer
+from POMDPPlanners.core.simulation.traces import to_jsonable
+
+# Payload version, independent of the envelope's. Bump it when the meaning of
+# a payload field changes, so a viewer can refuse a file it would misdraw.
+LASER_TAG_PAYLOAD_KIND = "laser_tag.v1"
+
+DISCRETE_LASER_TAG_VARIANT = "discrete"
+CONTINUOUS_LASER_TAG_VARIANT = "continuous"
+
+# The eight beams, in the order both variants report them.
+BEAM_LABELS: Tuple[str, ...] = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+
+# The sentinel a terminal state emits instead of a measurement.
+_TERMINAL_OBSERVATION = -1.0
 
 
-class LaserTagVisualizer(LaserTagFrameRenderer):
-    """Draw discrete LaserTag episodes without episode-time Matplotlib work."""
+def _positions(state: Any) -> Tuple[List[float], List[float], bool]:
+    """Split a LaserTag state into robot, opponent and the terminal flag."""
+    values = np.asarray(state, dtype=float).reshape(-1)
+    return (
+        [float(values[0]), float(values[1])],
+        [float(values[2]), float(values[3])],
+        bool(values[4]),
+    )
 
-    _ACTION_DIRS = {
-        0: np.array([-1.0, 0.0]),
-        1: np.array([1.0, 0.0]),
-        2: np.array([0.0, 1.0]),
-        3: np.array([0.0, -1.0]),
-        4: np.array([0.0, 0.0]),
-    }
-    _ACTION_NAMES = {0: "North", 1: "South", 2: "East", 3: "West", 4: "Tag"}
 
-    def __init__(
-        self,
-        floor_shape: Tuple[int, int],
-        walls: Set[Tuple[int, int]],
-        dangerous_areas: List[Tuple[int, int]],
-        dangerous_area_radius: float,
-    ):
-        self.floor_shape = floor_shape
-        self._wall_cells = set(walls)
-        wall_rectangles = np.asarray(
-            [(row, col, 0.4, 0.4) for row, col in sorted(walls)], dtype=float
-        ).reshape(-1, 4)
-        super().__init__(
-            grid_size=np.asarray(floor_shape, dtype=float) - 1,
-            walls=wall_rectangles,
-            robot_radius=0.0,
-            opponent_radius=0.0,
-            dangerous_areas=[(float(row), float(col)) for row, col in dangerous_areas],
-            dangerous_area_radius=dangerous_area_radius,
-        )
-        self._title = "LaserTag POMDP Episode Visualization"
-        self.walls = walls
-        self._x_label = "Row"
-        self._y_label = "Column"
+def _observation_row(observation: Any) -> Optional[List[float]]:
+    """A recorded observation as eight floats, or ``None`` if it is not one.
 
-    def _world_to_pixel(self, point) -> Tuple[float, float]:
-        return (
-            self._left + (float(point[0]) + 0.5) * self._scale,
-            self._top + (float(point[1]) + 0.5) * self._scale,
-        )
+    A terminal step carries ``None``, and a terminal state emits the all
+    ``-1`` sentinel rather than a measurement. Neither is a range, so neither
+    is written as one.
+    """
+    if observation is None:
+        return None
+    values = np.asarray(observation, dtype=float).reshape(-1)
+    if values.size != len(BEAM_LABELS):
+        return None
+    if bool(np.all(values == _TERMINAL_OBSERVATION)):
+        return None
+    return [float(v) for v in values]
 
-    def create_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        """Preserve the public discrete visualization contract."""
-        super().create_visualization(history, cache_path)
 
-    def _extract_history(self, history: List[StepData]) -> Tuple:
-        robot_path, opponent_path, actions, beliefs = super()._extract_history(history)
-        return (
-            [np.asarray(point, dtype=int) for point in robot_path],
-            [np.asarray(point, dtype=int) for point in opponent_path],
-            actions,
-            beliefs,
-        )
+def _paired_observations(history: Sequence[StepData]) -> List[Optional[List[float]]]:
+    """Line each step's recorded reading up with the state it was taken at.
 
-    def _action_info(self, action):
-        if action not in self._ACTION_DIRS:
-            return "", False, np.zeros(2)
-        return f"Action: {self._ACTION_NAMES[action]}", action == 4, self._ACTION_DIRS[action]
-
-    def _laser_segments(self, rp, op):
-        # The measured ray stops at the opponent as well as at a wall or the
-        # grid edge (see ``LaserTagPOMDP._laser_distance_inline``), so the drawn
-        # beam must stop there too — otherwise the GIF shows lasers passing
-        # through the very opponent they are measuring.
-        opponent_cell = (int(op[0]), int(op[1]))
-        segments = []
-        for direction in (
-            (-1, 0),
-            (-1, 1),
-            (0, 1),
-            (1, 1),
-            (1, 0),
-            (1, -1),
-            (0, -1),
-            (-1, -1),
+    ``sample_observation`` is called on a step's ``next_state``, so the reading
+    that belongs beside state ``i`` was recorded on step ``i - 1``. The pairing
+    is checked rather than assumed: if a recorded ``next_state`` does not match
+    the following step's ``state`` — a stitched or filtered history — the
+    reading is dropped instead of being attached to a state it was not taken
+    from.
+    """
+    rows: List[Optional[List[float]]] = [None] * len(history)
+    for index in range(1, len(history)):
+        previous = history[index - 1]
+        if previous.next_state is None:
+            continue
+        if not np.array_equal(
+            np.asarray(previous.next_state, dtype=float).reshape(-1),
+            np.asarray(history[index].state, dtype=float).reshape(-1),
         ):
-            dr, dc = direction
-            distance = 0
-            while True:
-                row = int(rp[0]) + dr * (distance + 1)
-                col = int(rp[1]) + dc * (distance + 1)
-                if (
-                    row < 0
-                    or row >= self.floor_shape[0]
-                    or col < 0
-                    or col >= self.floor_shape[1]
-                    or (row, col) in self._wall_cells
-                    or (row, col) == opponent_cell
-                ):
-                    break
-                distance += 1
-            end = np.asarray(rp, dtype=float) + np.asarray(direction, dtype=float) * distance
-            segments.append((rp, end))
-        return segments
+            continue
+        rows[index] = _observation_row(previous.observation)
+    return rows
 
-    def _is_successful_tag(self, rp, op) -> bool:
-        return bool(np.array_equal(rp, op))
 
-    def _belief_radius(self, distribution, index) -> float:
-        """Keep marker area proportional to probability, as in the original scatter."""
-        probability = float(distribution.probs[index])
-        # The original scatter used area p * 100 points squared at 100 dpi.
-        return float(np.sqrt(max(0.0, probability) * 100) * 100 / 72 / 2)
+def _discrete_laser_directions() -> Sequence[Tuple[int, int]]:
+    """The discrete environment's own ``(drow, dcol)`` table.
+
+    Imported inside the function so this module does not load the
+    environment's dynamics just to be imported.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import _LASER_DIRECTIONS
+
+    return _LASER_DIRECTIONS
+
+
+def _discrete_scan(
+    environment: Any, robot: List[float], opponent: List[float]
+) -> Tuple[List[float], List[bool]]:
+    """Discrete ranges, from the environment's own cell walk.
+
+    ``hit_opponent`` is derived rather than re-implemented: the same walk is
+    run a second time with the opponent placed off the grid, and a beam whose
+    range grows when the opponent is removed is a beam the opponent stopped.
+    """
+    # pylint: disable-next=protected-access
+    walk = environment._laser_distance_inline
+    robot_cell = (int(robot[0]), int(robot[1]))
+    opponent_cell = (int(opponent[0]), int(opponent[1]))
+    # A cell no grid contains, so the second walk sees walls and edges only.
+    nowhere = (-1, -1)
+
+    ranges: List[float] = []
+    hit: List[bool] = []
+    for direction in _discrete_laser_directions():
+        with_opponent = float(walk(robot_cell, direction, opponent_cell))
+        without_opponent = float(walk(robot_cell, direction, nowhere))
+        ranges.append(with_opponent)
+        hit.append(with_opponent < without_opponent)
+    return ranges, hit
+
+
+def _continuous_scan(
+    environment: Any, robot: List[float], opponent: List[float]
+) -> Tuple[List[float], List[bool]]:
+    """Continuous ranges, from the environment's own ray cast.
+
+    Same trick as the discrete scan for ``hit_opponent``: cast once with the
+    opponent where it is and once with it moved far outside the arena, and
+    compare.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry import (
+        compute_laser_measurements,
+    )
+
+    robot_pos = np.asarray(robot, dtype=float)
+    walls = np.asarray(environment.walls, dtype=float).reshape(-1, 4)
+    grid = np.asarray(environment.grid_size, dtype=float).reshape(-1)
+    far = grid * 1.0e6 + 1.0e6
+
+    with_opponent = compute_laser_measurements(
+        robot_pos, np.asarray(opponent, dtype=float), environment.opponent_radius, walls, grid
+    )
+    without_opponent = compute_laser_measurements(
+        robot_pos, far, environment.opponent_radius, walls, grid
+    )
+    return (
+        [float(v) for v in with_opponent],
+        [bool(a < b) for a, b in zip(with_opponent, without_opponent)],
+    )
+
+
+def _shared_payload(environment: Any, variant: str) -> Dict[str, Any]:
+    """The world block both variants fill in the same way."""
+    return {
+        "variant": variant,
+        "beam_labels": list(BEAM_LABELS),
+        "hazards": [[float(r), float(c)] for r, c in environment.dangerous_areas],
+        "hazard_radius": float(environment.dangerous_area_radius),
+        "hazard_penalty": float(environment.dangerous_area_penalty),
+        "hazard_is_terminal": bool(environment.is_dangerous_area_hit_terminal),
+        "tag_reward": float(environment.tag_reward),
+        "tag_penalty": float(environment.tag_penalty),
+        "step_cost": float(environment.step_cost),
+        "measurement_noise": float(environment.measurement_noise),
+    }
+
+
+class _LaserTagTraceVisualizer(TraceVisualizer):
+    """What both LaserTag variants write; each subclass adds its world and scan."""
+
+    payload_kind = LASER_TAG_PAYLOAD_KIND
+    variant: str
+
+    @abstractmethod
+    def world(self) -> Dict[str, Any]:
+        """The variant's world block, built from the environment."""
+
+    @abstractmethod
+    def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
+        """The variant's laser ranges and which beams the opponent stopped."""
+
+    def metadata(self) -> Dict[str, Any]:
+        """The environment's class name and which LaserTag variant it is."""
+        return {**super().metadata(), "variant": self.variant}
+
+    def build_payload(self, history: List[StepData]) -> Dict[str, Any]:
+        """Build the LaserTag half of the trace, whichever variant it came from.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            The ``laser_tag.v1`` payload.
+        """
+        world = self.world()
+
+        robots: List[List[float]] = []
+        opponents: List[List[float]] = []
+        terminals: List[bool] = []
+        laser_ranges: List[List[float]] = []
+        hit_opponent: List[List[bool]] = []
+        beliefs: List[Dict[str, Any]] = []
+
+        for step in history:
+            robot, opponent, terminal = _positions(step.state)
+            robots.append(robot)
+            opponents.append(opponent)
+            terminals.append(terminal)
+            # A terminal state emits the sentinel, not a measurement, so it gets
+            # no beams rather than beams of length zero, which would read as a
+            # robot boxed in on all eight sides.
+            if terminal:
+                laser_ranges.append([])
+                hit_opponent.append([])
+            else:
+                ranges, hit = self.scan(robot, opponent)
+                laser_ranges.append(ranges)
+                hit_opponent.append(hit)
+            beliefs.append(belief_to_payload(step.belief))
+
+        return {
+            "world": world,
+            "robots": robots,
+            "opponents": opponents,
+            "terminals": terminals,
+            "laser_ranges": laser_ranges,
+            "observed_ranges": _paired_observations(history),
+            "hit_opponent": hit_opponent,
+            "beliefs": beliefs,
+            "actions": [to_jsonable(step.action) for step in history],
+        }
+
+
+class LaserTagVisualizer(_LaserTagTraceVisualizer):
+    """Writes discrete LaserTag episodes as ``laser_tag.v1`` traces.
+
+    The environment's grid, walls, hazards and reward constants are copied
+    into the payload's ``world`` block so a viewer can build the arena without
+    importing Python.
+    """
+
+    variant = DISCRETE_LASER_TAG_VARIANT
+
+    def world(self) -> Dict[str, Any]:
+        """The discrete arena: cells, walls and the cell-step laser table."""
+        # Typed as Any: the attributes read below belong to this environment
+        # class, not to the base Environment the visualizer is typed against.
+        environment: Any = self.environment
+        world = _shared_payload(environment, DISCRETE_LASER_TAG_VARIANT)
+        world.update(
+            {
+                # (rows, cols), as the environment stores it. A discrete
+                # position is a cell index, so the arena spans 0..rows-1 by
+                # 0..cols-1 and the drawn plate is one cell wider on each axis
+                # than that span.
+                "floor_shape": [int(environment.floor_shape[0]), int(environment.floor_shape[1])],
+                "walls": [[int(row), int(col)] for row, col in sorted(environment.walls)],
+                # (drow, dcol) cell steps, the environment's own table. Written
+                # out so the viewer never has to hold a second copy of it.
+                "laser_directions": [[int(dr), int(dc)] for dr, dc in _discrete_laser_directions()],
+                "transition_error_prob": float(environment.transition_error_prob),
+                "opponent_policy": str(environment.opponent_policy.value),
+            }
+        )
+        return world
+
+    def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
+        """Discrete ranges, from the environment's own cell walk."""
+        return _discrete_scan(self.environment, robot, opponent)
+
+
+class ContinuousLaserTagVisualizer(_LaserTagTraceVisualizer):
+    """Writes continuous LaserTag episodes as ``laser_tag.v1`` traces.
+
+    Used for :class:`ContinuousLaserTagPOMDP` and its discrete-action wrapper.
+    """
+
+    variant = CONTINUOUS_LASER_TAG_VARIANT
+
+    def world(self) -> Dict[str, Any]:
+        """The continuous arena: box walls, body radii and the unit-ray table."""
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_geometry import (
+            LASER_DIRECTIONS,
+        )
+
+        # Typed as Any: the attributes read below belong to this environment
+        # class, not to the base Environment the visualizer is typed against.
+        environment: Any = self.environment
+        grid = np.asarray(environment.grid_size, dtype=float).reshape(-1)
+        world = _shared_payload(environment, CONTINUOUS_LASER_TAG_VARIANT)
+        world.update(
+            {
+                "grid_size": [float(grid[0]), float(grid[1])],
+                # (cx, cy, hx, hy) AABBs, as the environment stores them.
+                "walls": [
+                    [float(v) for v in wall]
+                    for wall in np.asarray(environment.walls, dtype=float).reshape(-1, 4)
+                ],
+                # Unit (dx, dy) vectors, the environment's own table. It is not
+                # the discrete table in another frame and must not be treated
+                # as one.
+                "laser_directions": [[float(dx), float(dy)] for dx, dy in LASER_DIRECTIONS],
+                "robot_radius": float(environment.robot_radius),
+                "opponent_radius": float(environment.opponent_radius),
+                "tag_radius": float(environment.tag_radius),
+                "hazard_hit_probability": float(environment.dangerous_area_hit_probability),
+                "opponent_policy": str(environment.opponent_policy.value),
+            }
+        )
+        return world
+
+    def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
+        """Continuous ranges, from the environment's own ray cast."""
+        return _continuous_scan(self.environment, robot, opponent)

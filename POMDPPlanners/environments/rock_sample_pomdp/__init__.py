@@ -8,7 +8,7 @@ components for robot navigation and sampling tasks.
 Classes:
     RockSamplePOMDP: Main POMDP environment for rock sampling tasks
     RockSampleState: State representation with robot position and rock qualities
-    RockSampleVisualizer: Visualization utilities for RockSample POMDP episodes
+    RockSampleVisualizer: Writes episodes as traces for the 3D viewer
 """
 
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
@@ -28,7 +28,6 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs impo
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization import (
     ROCK_SAMPLE_PAYLOAD_KIND,
     RockSampleVisualizer,
-    build_rock_sample_trace,
 )
 
 __all__ = [
@@ -38,7 +37,6 @@ __all__ = [
     "RockSampleState",
     "RockSampleVisualizer",
     "RockSampleVectorizedUpdater",
-    "build_rock_sample_trace",
     "create_random_rock_sample",
     "create_rock_sample_state",
     "create_rocksample_belief",
