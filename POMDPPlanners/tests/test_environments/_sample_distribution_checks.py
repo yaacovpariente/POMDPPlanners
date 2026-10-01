@@ -38,7 +38,7 @@ Functions:
     assert_same_distribution: Assert two ``(n, d)`` sample matrices share a law.
 """
 
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 import numpy as np
 from scipy import stats
@@ -234,7 +234,10 @@ def _column_p_value(column_a: np.ndarray, column_b: np.ndarray) -> Tuple[str, fl
     # alone -- the signature of a mis-scaled noise term. Brown-Forsythe
     # (Levene's test about the median) covers spread; the smaller p-value is
     # kept, doubled.
-    ks = float(stats.ks_2samp(column_a, column_b).pvalue)
+    # Typed through Any: some scipy versions annotate ks_2samp's result as a
+    # bare tuple-bunch with no ``pvalue`` attribute, which pyright rejects.
+    ks_result: Any = stats.ks_2samp(column_a, column_b)
+    ks = float(ks_result.pvalue)
     spread = float(stats.levene(column_a, column_b, center="median").pvalue)
     # Both columns are finite and non-constant here, so a non-finite p-value
     # can only come from a degenerate spread (one column constant); count it
