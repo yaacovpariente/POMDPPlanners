@@ -125,16 +125,17 @@ The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
 which runs parallel episodes, applies persistent caching, and returns aggregated
 statistics (mean return, CVaR, VaR, confidence intervals).
 
-The example below compares POMCPOW and PFT-DPW on the T-Maze: the agent must
-walk to a noisy cue to learn which arm holds the goal. Each planner gets 2
-seconds per decision, and the episodes (30 per planner) run in parallel on
-every CPU core.
+The example below compares POMCPOW and PFT-DPW on Light-Dark: a robot must
+reach a goal, but its position readings are only precise near a light source,
+so it has to detour toward the light before it can find the goal. Each planner
+gets 2 seconds per decision, and the episodes (30 per planner) run in parallel
+on every CPU core.
 Save it as `compare_planners.py` and run `python compare_planners.py`.
 
 ```python
 from pathlib import Path
 
-from POMDPPlanners.environments import TMazePOMDP
+from POMDPPlanners.environments import ContinuousLightDarkPOMDPDiscreteActions
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
@@ -142,7 +143,7 @@ from POMDPPlanners.utils.belief_factory import create_environment_belief
 from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
 from POMDPPlanners.core.simulation import EnvironmentRunParams
 
-env = TMazePOMDP(discount_factor=0.95)
+env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
 sampler = DiscreteActionSampler(env.get_actions())
 
 pomcpow = POMCPOW(environment=env, discount_factor=0.95, depth=10,
@@ -160,7 +161,7 @@ _, stats = api.run_multiple_environments_and_policies(
         environment=env, belief=belief,
         policies=[pomcpow, pft_dpw], num_episodes=30, num_steps=30)],
     alpha=0.1, confidence_interval_level=0.95,
-    experiment_name="TMaze_Evaluation",
+    experiment_name="LightDark_Evaluation",
     n_jobs=-1,  # run episodes in parallel, one per CPU core
     cache_dir_path=Path("results"),
 )
@@ -176,7 +177,7 @@ site:
 pomdp-report serve results
 ```
 
-Then browse to http://127.0.0.1:8765. Open the `TMaze_Evaluation` experiment
+Then browse to http://127.0.0.1:8765. Open the `LightDark_Evaluation` experiment
 to compare the two planners side by side on expected return and task
 completion rate, and replay any episode in 3D.
 
