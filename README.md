@@ -147,11 +147,11 @@ env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
 sampler = DiscreteActionSampler(env.get_actions())
 
 pomcpow = POMCPOW(environment=env, discount_factor=0.95, depth=10,
-                  exploration_constant=400.0, k_o=2.0, k_a=2.0,
+                  exploration_constant=200.0, k_o=1.0, k_a=1.0,
                   alpha_o=0.5, alpha_a=0.5, time_out_in_seconds=2,
                   action_sampler=sampler, name="POMCPOW")
 pft_dpw = PFT_DPW(environment=env, discount_factor=0.95, depth=10,
-                  exploration_constant=400.0, time_out_in_seconds=2,
+                  exploration_constant=200.0, time_out_in_seconds=2,
                   action_sampler=sampler, name="PFT_DPW")
 belief = create_environment_belief(env, n_particles=200)
 
