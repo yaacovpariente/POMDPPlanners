@@ -419,6 +419,23 @@
 
     var pacLight = new THREE.PointLight(0xFFC55A, 1, 3.4, 2);
     pacLight.power = 90;
+
+    /* Burnt out, only when a hazard zone ended the episode. PacMan chars where
+       it stands, and the zone it died in is the one whose rim flashes, so the
+       cause is on screen next to the body. */
+    var burnt = !!payload.ended_in_danger_zone;
+    var deathRim = null;
+    if (burnt && hazardRims.length) {
+      var last = payload.pacman_positions[payload.pacman_positions.length - 1];
+      var nearestD = Infinity;
+      world.dangerous_areas.forEach(function (d, k) {
+        var dd = Math.hypot(last[0] - d[0], last[1] - d[1]);
+        if (dd < nearestD) { nearestD = dd; deathRim = hazardRims[k]; }
+      });
+    }
+    var LIVE_SKIN = new THREE.Color(COLORS.pac), CHARRED = new THREE.Color(0x2B2724);
+    var LIVE_GLOW = new THREE.Color(0x6A4A00), EMBER_GLOW = new THREE.Color(0x8A2C06);
+    var RIM_COLOR = new THREE.Color(COLORS.hazard);
     pacLight.position.y = PAC_R + 0.1;
     pacman.add(pacLight);
     var pacBlob = new THREE.Mesh(
@@ -832,7 +849,24 @@
            is all on the body: the tilt sways the sphere a little off centre,
            but the shadow, the light and the recorded cell stay put. Paused,
            it eases to a tremble rather than shaking at full strength. */
-        var rough = sample.rough * (0.4 + (sample.moving && playing ? 0.6 : 0));
+        /* Burnt out: through the last step the yellow chars to charcoal, the
+           glow gutters through a dull ember and goes out, the light dies, and
+           the struggle stops with the mouth hanging half open. The step index
+           drives it, so it holds on the final frame however the replay got
+           there. */
+        var burn = burnt ? clamp((t - (steps - 1.6)) / 0.6, 0, 1) : 0;
+        if (burnt) {
+          var flicker = reduceMotion ? 1 : 0.7 + 0.3 * Math.sin(elapsed * 23.0);
+          pacSkin.color.copy(LIVE_SKIN).lerp(CHARRED, burn);
+          pacSkin.emissive.copy(LIVE_GLOW).lerp(EMBER_GLOW, Math.min(1, burn * 2));
+          pacSkin.emissiveIntensity =
+            0.55 * (1 - burn) + 0.9 * Math.sin(Math.PI * burn) * flicker;
+          pacSkin.roughness = lerp(0.28, 0.92, burn);
+          pacLight.power = 90 * (1 - burn);
+          mouth = lerp(mouth, 0.34, burn);
+        }
+
+        var rough = sample.rough * (0.4 + (sample.moving && playing ? 0.6 : 0)) * (1 - burn);
         var shudder = rough * (Math.sin(elapsed * 31.0) * 0.6 + Math.sin(elapsed * 47.0 + 1.3) * 0.4);
         pacBody.rotation.z = Math.sin(elapsed * 11.0 + 0.7) * rough * 0.30 + shudder * 0.08;
         pacBody.rotation.x = Math.sin(elapsed * 8.3) * rough * 0.22;
@@ -892,6 +926,12 @@
 
         var pulse = 0.62 + Math.sin(elapsed * 2.1) * 0.22;
         for (var h = 0; h < hazardRims.length; h++) hazardRims[h].material.opacity = pulse;
+        if (deathRim) {
+          // A flash as PacMan burns out, then a steady glow that marks the zone.
+          var glow = 1 + burn * 1.6 + Math.sin(Math.PI * burn) * 3.0;
+          deathRim.material.color.copy(RIM_COLOR).multiplyScalar(glow);
+          deathRim.material.opacity = lerp(pulse, 1, burn);
+        }
 
         var beliefLabel = drawBelief(sample.index, elapsed);
         drawTrail(sample.index);
