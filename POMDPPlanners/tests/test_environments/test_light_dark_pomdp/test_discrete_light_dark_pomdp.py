@@ -1102,7 +1102,7 @@ def test_compute_metrics_empty_histories_is_rejected():
     """Test that scoring an empty batch of episodes raises.
 
     Purpose: Validates that an empty batch is rejected rather than scored. A
-        zero goal_reaching_rate over no episodes is indistinguishable from a run
+        zero task_completion_rate over no episodes is indistinguishable from a run
         in which the agent never reached the goal
 
     Given: A DiscreteLightDarkPOMDP environment and an empty history list
@@ -1124,7 +1124,7 @@ def test_compute_metrics():
 
     Given: Three simulation histories - 2 reaching goal, 1 hitting obstacle, with proper StepData and belief sequences
     When: compute_metrics analyzes the simulation histories for performance statistics
-    Then: Returns goal_reaching_rate=2/3 and obstacle_hit_rate=1/3 with confidence bounds
+    Then: Returns task_completion_rate=2/3 and collision_rate=1/3 with confidence bounds
 
     Test type: unit
     """
@@ -1295,14 +1295,14 @@ def test_compute_metrics():
     metrics_dict = {metric.name: metric for metric in metrics}
 
     # Test goal reaching rate
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories reach goal
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
     # Test obstacle hit rate
-    assert "obstacle_hit_rate" in metrics_dict
-    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert "collision_rate" in metrics_dict
+    obstacle_rate = metrics_dict["collision_rate"]
     assert obstacle_rate.value == 1 / 3  # 1 out of 3 histories hits obstacle
     assert (
         obstacle_rate.lower_confidence_bound

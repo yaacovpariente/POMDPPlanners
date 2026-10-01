@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tupl
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -56,13 +57,13 @@ _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
 class PacManPOMDPMetrics(Enum):
     """Metric names for PacMan POMDP environment."""
 
-    WIN_RATE = "win_rate"
-    AVG_PELLETS_COLLECTED = "avg_pellets_collected"
-    AVG_EPISODE_LENGTH = "avg_episode_length"
-    AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
-    AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
-    AVG_DANGEROUS_AREA_STEPS = "avg_dangerous_area_steps"
-    AVG_ALL_DANGEROUS_ENCOUNTERS = "avg_all_dangerous_encounters"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_PELLETS_COLLECTED = "average_pellets_collected"
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
+    AVERAGE_CLOSEST_GHOST_DISTANCE = "average_closest_ghost_distance"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class RewardModelType(Enum):
@@ -1378,7 +1379,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 if ghost_id < len(episode_avgs)
             ]
             metric = self._create_metric_value(
-                f"avg_pacman_ghost_{ghost_id}_distance", ghost_distance_values
+                f"average_ghost_{ghost_id}_distance", ghost_distance_values
             )
             if metric:
                 metrics.append(metric)
@@ -1398,13 +1399,13 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Get names of PacMan POMDP specific metrics.
 
         Returns:
-            List containing metric names including standard metrics (win_rate,
-            avg_pellets_collected, avg_episode_length, avg_pacman_closest_ghost_distance,
-            avg_collision_encounters, avg_dangerous_area_steps,
-            avg_all_dangerous_encounters) and dynamically generated per-ghost
+            List containing metric names including standard metrics (task_completion_rate,
+            average_pellets_collected, average_episode_length, average_closest_ghost_distance,
+            average_collisions, average_dangerous_area_steps,
+            average_dangerous_encounters) and dynamically generated per-ghost
             distance metrics for multi-ghost scenarios
-            (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.).
-            ``avg_all_dangerous_encounters`` is the per-step sum of
+            (average_ghost_0_distance, average_ghost_1_distance, etc.).
+            ``average_dangerous_encounters`` is the per-step sum of
             ghost-collision and dangerous-area-step events; a step that is both
             counts twice.
         """
@@ -1414,7 +1415,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Add dynamic per-ghost metrics for multi-ghost scenarios
         if self.num_ghosts > 1:
             for ghost_id in range(self.num_ghosts):
-                metric_names.append(f"avg_pacman_ghost_{ghost_id}_distance")
+                metric_names.append(f"average_ghost_{ghost_id}_distance")
 
         return metric_names
 
@@ -1457,14 +1458,14 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Create standard metrics using helper
         metrics = []
         metric_definitions = [
-            (PacManPOMDPMetrics.WIN_RATE.value, wins),
-            (PacManPOMDPMetrics.AVG_PELLETS_COLLECTED.value, pellets_collected),
-            (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
-            (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
-            (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
-            (PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
+            (PacManPOMDPMetrics.TASK_COMPLETION_RATE.value, wins),
+            (PacManPOMDPMetrics.AVERAGE_PELLETS_COLLECTED.value, pellets_collected),
+            (PacManPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value, episode_lengths),
+            (PacManPOMDPMetrics.AVERAGE_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
+            (PacManPOMDPMetrics.AVERAGE_COLLISIONS.value, collision_encounters),
+            (PacManPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
             (
-                PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
+                PacManPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
                 all_dangerous_encounters,
             ),
         ]

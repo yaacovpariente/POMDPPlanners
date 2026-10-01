@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -66,9 +67,9 @@ class RockSampleStepChannel(Enum):
 class RockSamplePOMDPMetrics(Enum):
     """Metric names for RockSample POMDP environment."""
 
-    AVG_ROCKS_SAMPLED = "avg_rocks_sampled"
-    EXIT_SUCCESS_RATE = "exit_success_rate"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
+    AVERAGE_ROCKS_SAMPLED = "average_rocks_sampled"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
 
 
 class RewardModelType(Enum):
@@ -921,17 +922,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         """Declare the RockSample metrics derived from the per-step channels.
 
         Returns:
-            Specs for ``avg_rocks_sampled``, ``exit_success_rate`` and
+            Specs for ``average_rocks_sampled``, ``task_completion_rate`` and
             ``average_dangerous_area_steps``.
         """
         return [
             StepInfoMetric(
-                name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
+                name=RockSamplePOMDPMetrics.AVERAGE_ROCKS_SAMPLED.value,
                 channel=RockSampleStepChannel.SAMPLED_ROCK.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
+                name=RockSamplePOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=RockSampleStepChannel.TERMINAL_STATE.value,
                 per_episode=EpisodeReduction.ANY,
             ),

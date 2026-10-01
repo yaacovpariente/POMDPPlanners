@@ -229,9 +229,9 @@ def test_completion_reduces_with_any_and_the_end_reasons_with_last():
     specs = {spec.name: spec for spec in env.get_metric_specs()}
     assert specs[SnakePOMDPMetrics.TASK_COMPLETION_RATE.value].per_episode is EpisodeReduction.ANY
     for name in (
-        SnakePOMDPMetrics.ENDED_BY_GOAL,
-        SnakePOMDPMetrics.ENDED_BY_FAILURE,
-        SnakePOMDPMetrics.ENDED_BY_TIMEOUT,
+        SnakePOMDPMetrics.ENDED_BY_GOAL_RATE,
+        SnakePOMDPMetrics.ENDED_BY_FAILURE_RATE,
+        SnakePOMDPMetrics.ENDED_BY_TIMEOUT_RATE,
     ):
         assert specs[name.value].per_episode is EpisodeReduction.LAST
     assert specs[SnakePOMDPMetrics.AVERAGE_EPISODE_LENGTH.value].per_episode is EpisodeReduction.SUM
@@ -248,9 +248,9 @@ def test_a_won_episode_scores_as_a_goal():
     history = run_episode(env, [int(SnakeAction.GO_STRAIGHT)] * 3, state)
     values = metrics_of(env, [history])
     assert values[SnakePOMDPMetrics.TASK_COMPLETION_RATE.value] == 1.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL.value] == 1.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE.value] == 0.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 1.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE_RATE.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 0.0
     assert values[SnakePOMDPMetrics.AVERAGE_FOOD_EATEN.value] == 1.0
     assert values[SnakePOMDPMetrics.MAX_SNAKE_LENGTH.value] == 4.0
 
@@ -265,9 +265,9 @@ def test_a_wall_death_scores_as_a_failure():
     np.random.seed(0)
     history = run_episode(env, [int(SnakeAction.GO_STRAIGHT)] * 3, state)
     values = metrics_of(env, [history])
-    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE.value] == 1.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL.value] == 0.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE_RATE.value] == 1.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 0.0
     assert values[SnakePOMDPMetrics.WALL_DEATH_RATE.value] == 1.0
 
 
@@ -281,9 +281,9 @@ def test_an_unfinished_episode_scores_as_a_timeout_and_not_a_failure():
     np.random.seed(0)
     history = run_episode(env, [int(SnakeAction.TURN_LEFT), int(SnakeAction.TURN_LEFT)], state)
     values = metrics_of(env, [history])
-    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT.value] == 1.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE.value] == 0.0
-    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 1.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_FAILURE_RATE.value] == 0.0
+    assert values[SnakePOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 0.0
     assert values[SnakePOMDPMetrics.AVERAGE_EPISODE_LENGTH.value] == 2.0
 
 

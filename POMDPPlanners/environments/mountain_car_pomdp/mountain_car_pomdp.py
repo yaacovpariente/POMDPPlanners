@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 import numpy as np
 from numpy.typing import NDArray
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -59,7 +60,7 @@ class MountainCarStepChannel(Enum):
 class MountainCarPOMDPMetrics(Enum):
     """Metric names for Mountain Car POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -420,7 +421,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         The shared aggregator omits a metric no episode reported, which happens
         for an episode with no recorded steps. This environment has always
-        reported a zero-valued goal_reaching_rate in that case, so the declared
+        reported a zero-valued task_completion_rate in that case, so the declared
         names are filled rather than dropped.
 
         Args:
@@ -440,12 +441,12 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         """Declare the Mountain Car metric derived from the per-step channel.
 
         Returns:
-            A spec for ``goal_reaching_rate``. ``ANY`` reproduces the historical
+            A spec for ``task_completion_rate``. ``ANY`` reproduces the historical
             scan, which stopped at the first state past the goal.
         """
         return [
             StepInfoMetric(
-                name=MountainCarPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=MountainCarPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=MountainCarStepChannel.AT_GOAL.value,
                 per_episode=EpisodeReduction.ANY,
             )

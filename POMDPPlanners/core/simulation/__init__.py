@@ -13,7 +13,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     EarlyStoppingConfig,
     ParallelizationLevel,
 )
-from POMDPPlanners.core.simulation.metrics import MetricValue
+from POMDPPlanners.core.simulation.metrics import CommonMetricName, MetricValue
 from POMDPPlanners.core.simulation.simulation_configs import (
     EnvironmentRunParams,
     HyperParameterRunParams,
@@ -61,6 +61,7 @@ __all__ = [
     "HyperParameterFeature",
     "EarlyStoppingConfig",
     "ParallelizationLevel",
+    "CommonMetricName",
     "MetricValue",
     "EnvironmentRunParams",
     "HyperParameterRunParams",

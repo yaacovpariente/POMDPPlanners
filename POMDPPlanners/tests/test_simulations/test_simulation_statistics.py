@@ -566,7 +566,7 @@ def test_get_metric_names_from_environment_policy_pair_basic():
 
     Given: TigerPOMDP environment and POMCP policy class
     When: get_metric_names_from_environment_policy_pair is called
-    Then: Returns list containing environment metrics (success_rate, average_listens), policy info metrics (prefixed with policy_info_), and all standard metrics in correct order
+    Then: Returns list containing environment metrics (task_completion_rate, average_listens), policy info metrics (prefixed with policy_info_), and all standard metrics in correct order
 
     Test type: unit
     """
@@ -580,7 +580,7 @@ def test_get_metric_names_from_environment_policy_pair_basic():
         ), f"Missing standard metric: {standard_metric.value}"
 
     # Verify environment-specific metrics are present
-    assert "success_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert "average_listens" in metric_names
 
     # Verify policy info metrics are present with proper prefix
@@ -657,7 +657,7 @@ def test_get_metric_names_from_environment_policy_pair_policy_without_info_vars(
         assert standard_metric.value in metric_names
 
     # Verify environment metrics are present
-    assert "success_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert "average_listens" in metric_names
 
 
@@ -741,7 +741,7 @@ def test_get_metric_names_from_environment_policy_pair_multiple_environments():
     assert metric_names1 == metric_names2
 
     # Verify they contain the expected TigerPOMDP metrics
-    assert "success_rate" in metric_names1
+    assert "task_completion_rate" in metric_names1
     assert "average_listens" in metric_names1
 
 

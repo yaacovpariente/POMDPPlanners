@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Un
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -95,11 +96,11 @@ class BattleshipStepChannel(Enum):
 class BattleshipPOMDPMetrics(Enum):
     """Metric names for the Battleship POMDP environment."""
 
-    TASK_COMPLETION_RATE = "task_completion_rate"
-    ENDED_BY_GOAL = "ended_by_goal"
-    ENDED_BY_FAILURE = "ended_by_failure"
-    ENDED_BY_TIMEOUT = "ended_by_timeout"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ENDED_BY_GOAL_RATE = CommonMetricName.ENDED_BY_GOAL_RATE.value
+    ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
+    ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_UNIQUE_SHIP_CELL_HITS = "average_unique_ship_cell_hits"
     AVERAGE_WATER_PROBES = "average_water_probes"
     AVERAGE_REPEAT_PROBES = "average_repeat_probes"
@@ -582,17 +583,17 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
                 per_episode=EpisodeReduction.ANY,
             ),
             StepInfoMetric(
-                name=BattleshipPOMDPMetrics.ENDED_BY_GOAL.value,
+                name=BattleshipPOMDPMetrics.ENDED_BY_GOAL_RATE.value,
                 channel=BattleshipStepChannel.FLEET_SUNK.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=BattleshipPOMDPMetrics.ENDED_BY_FAILURE.value,
+                name=BattleshipPOMDPMetrics.ENDED_BY_FAILURE_RATE.value,
                 channel=BattleshipStepChannel.EPISODE_FAILURE.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
-                name=BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT.value,
+                name=BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value,
                 channel=BattleshipStepChannel.FLEET_NOT_SUNK.value,
                 per_episode=EpisodeReduction.LAST,
             ),

@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -121,12 +122,12 @@ class ContinuousLaserTagPOMDPMetrics(Enum):
     """Metric names for Continuous LaserTag POMDP."""
 
     TAG_SUCCESS_RATE = "tag_success_rate"
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
-    AVERAGE_WALL_COLLISIONS = "average_wall_collisions"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
-    AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-methods
@@ -1030,9 +1031,9 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
             ),
             ContinuousLaserTagStepChannel.RECORDED_STEP.value: 1.0,
             # Constant zero, preserved deliberately: the historical counter was
-            # initialised to zero and never incremented, so average_wall_collisions
+            # initialised to zero and never incremented, so average_collisions
             # has always reported 0.0. This is a preserved dead metric, not a
-            # measurement -- and it is why average_all_dangerous_encounters equals
+            # measurement -- and it is why average_dangerous_encounters equals
             # the dangerous-area count.
             ContinuousLaserTagStepChannel.WALL_COLLISION.value: 0.0,
             ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
@@ -1048,7 +1049,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         """
         return [
             StepInfoMetric(
-                name=ContinuousLaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=ContinuousLaserTagPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 channel=ContinuousLaserTagStepChannel.TAGGED.value,
                 per_episode=EpisodeReduction.ANY,
             ),
@@ -1058,7 +1059,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_WALL_COLLISIONS.value,
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_COLLISIONS.value,
                 channel=ContinuousLaserTagStepChannel.WALL_COLLISION.value,
                 per_episode=EpisodeReduction.SUM,
             ),
@@ -1068,7 +1069,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
                 channel=ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
                 per_episode=EpisodeReduction.SUM,
             ),

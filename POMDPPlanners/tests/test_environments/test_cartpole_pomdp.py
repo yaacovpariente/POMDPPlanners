@@ -730,20 +730,20 @@ def test_cartpole_observation_model_probability_values_reasonable():
 
 
 def test_get_metric_names():
-    """Test that get_metric_names returns goal_reaching_rate.
+    """Test that get_metric_names returns task_completion_rate.
 
     Purpose: Validates that CartPolePOMDP returns the correct metric names
 
     Given: A CartPolePOMDP environment
     When: get_metric_names is called
-    Then: Returns list containing "goal_reaching_rate"
+    Then: Returns list containing "task_completion_rate"
 
     Test type: unit
     """
     noise_cov = np.eye(4) * 0.1
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
     metric_names = env.get_metric_names()
-    assert "goal_reaching_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert len(metric_names) == 1
 
 
@@ -754,7 +754,7 @@ def test_compute_metrics_goal_reaching():
 
     Given: Three simulation histories - 2 completing successfully (no crash), 1 crashing
     When: compute_metrics analyzes the simulation histories
-    Then: Returns goal_reaching_rate=2/3 with confidence bounds
+    Then: Returns task_completion_rate=2/3 with confidence bounds
 
     Test type: unit
     """
@@ -864,8 +864,8 @@ def test_compute_metrics_goal_reaching():
     metrics_dict = {metric.name: metric for metric in metrics}
 
     # Test goal reaching rate
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories complete successfully
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 

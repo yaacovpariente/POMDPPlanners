@@ -41,7 +41,7 @@ _ENV_SLUGS = sorted(build_registry())
 # -- and now gets a real 95% t-interval from the shared aggregator. Listed here
 # rather than baked into the baseline so the exception stays visible: every other
 # environment, metric and shape is asserted unchanged.
-_DELIBERATELY_CHANGED_BOUNDS = {("tiger", "success_rate")}
+_DELIBERATELY_CHANGED_BOUNDS = {("tiger", "task_completion_rate")}
 
 
 @pytest.fixture(name="frozen_histories", scope="module")

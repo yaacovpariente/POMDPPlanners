@@ -101,7 +101,7 @@ class TestCompletedEpisode:
 
         Given: an episode probing every ship cell and two water cells
         When: metrics are computed
-        Then: completion is 1, ended_by_goal is 1, and the other two reasons are 0
+        Then: completion is 1, ended_by_goal_rate is 1, and the other two reasons are 0
 
         Test type: unit
         """
@@ -109,9 +109,9 @@ class TestCompletedEpisode:
         values = _metrics(env, [history])
 
         assert values[BattleshipPOMDPMetrics.TASK_COMPLETION_RATE.value] == 1.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL.value] == 1.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT.value] == 0.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE.value] == 0.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 1.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 0.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE_RATE.value] == 0.0
 
     def test_probe_counts_and_length(self, env: BattleshipPOMDP) -> None:
         """Purpose: the counts must exclude the terminal bookkeeping step.
@@ -155,16 +155,16 @@ class TestTimedOutEpisode:
 
         Given: an episode probing only three of the seven ship cells
         When: metrics are computed
-        Then: completion is 0, ended_by_timeout is 1, ended_by_failure is 0
+        Then: completion is 0, ended_by_timeout_rate is 1, ended_by_failure_rate is 0
 
         Test type: unit
         """
         values = _metrics(env, [_episode(env, SHIPS, [0, 1, 2, 5, 6])])
 
         assert values[BattleshipPOMDPMetrics.TASK_COMPLETION_RATE.value] == 0.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL.value] == 0.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT.value] == 1.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE.value] == 0.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 0.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 1.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE_RATE.value] == 0.0
 
     def test_partial_progress_is_reported(self, env: BattleshipPOMDP) -> None:
         """Purpose: a completion rate of zero alone hides how close the run got.
@@ -198,7 +198,7 @@ class TestHorizonBoundary:
         Given: an episode whose final recorded probe is the seventh hit, with no
                terminal step appended
         When: metrics are computed
-        Then: completion and ended_by_goal are 1, timeout is 0, and all seven
+        Then: completion and ended_by_goal_rate are 1, timeout is 0, and all seven
               hits are counted
 
         Test type: unit
@@ -239,8 +239,8 @@ class TestHorizonBoundary:
         values = _metrics(env, [history])
 
         assert values[BattleshipPOMDPMetrics.TASK_COMPLETION_RATE.value] == 1.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL.value] == 1.0
-        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT.value] == 0.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_GOAL_RATE.value] == 1.0
+        assert values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value] == 0.0
         assert values[BattleshipPOMDPMetrics.AVERAGE_UNIQUE_SHIP_CELL_HITS.value] == 7.0
         assert values[BattleshipPOMDPMetrics.MAX_FLEET_HIT_FRACTION.value] == 1.0
 
@@ -263,9 +263,9 @@ class TestAcrossEpisodes:
         ]
         values = _metrics(env, histories)
         total = (
-            values[BattleshipPOMDPMetrics.ENDED_BY_GOAL.value]
-            + values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE.value]
-            + values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT.value]
+            values[BattleshipPOMDPMetrics.ENDED_BY_GOAL_RATE.value]
+            + values[BattleshipPOMDPMetrics.ENDED_BY_FAILURE_RATE.value]
+            + values[BattleshipPOMDPMetrics.ENDED_BY_TIMEOUT_RATE.value]
         )
         assert total == pytest.approx(1.0)
         assert values[BattleshipPOMDPMetrics.TASK_COMPLETION_RATE.value] == pytest.approx(0.5)

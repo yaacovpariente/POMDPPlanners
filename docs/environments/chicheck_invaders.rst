@@ -428,7 +428,7 @@ Metrics
 
 ``task_completion_rate`` is the fraction of episodes that cleared the flock,
 reduced with ``ANY`` -- clearing happens once and ends the episode.
-``ended_by_goal``, ``ended_by_failure`` and ``ended_by_timeout`` reduce with
+``ended_by_goal_rate``, ``ended_by_failure_rate`` and ``ended_by_timeout_rate`` reduce with
 ``LAST`` and sum to one per episode. ``average_episode_length``,
 ``average_chickens_killed`` and ``average_shots_fired`` are per-episode sums.
 
@@ -440,7 +440,7 @@ from the ship to a live chicken, so larger means closer and the distance itself
 is recoverable by subtraction. It is reported this way round because the episode
 reduction available for a severity is ``MAX`` and there is no ``MIN``.
 
-``shot_accuracy`` is kills per shot, which under hitscan is simply hits per
+``average_shot_accuracy`` is kills per shot, which under hitscan is simply hits per
 shot. It is the one metric that is not a channel
 reduction -- a ratio of two per-episode sums cannot be expressed as a reduction
 over a single channel, and a mean of per-step ratios is not the episode's ratio

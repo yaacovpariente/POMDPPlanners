@@ -1250,7 +1250,7 @@ class TestMetricsComputation:
         """Test metrics computation with empty histories.
 
         Purpose: Validates that an empty batch is rejected rather than scored. A
-            zero-valued avg_rocks_sampled over no episodes is indistinguishable
+            zero-valued average_rocks_sampled over no episodes is indistinguishable
             from a run in which no rock was ever sampled
 
         Given: Empty list of histories
@@ -1311,7 +1311,7 @@ class TestMetricsComputation:
         metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find rocks sampled metric
-        rocks_metric = next((m for m in metrics if m.name == "avg_rocks_sampled"), None)
+        rocks_metric = next((m for m in metrics if m.name == "average_rocks_sampled"), None)
         assert rocks_metric is not None
         assert rocks_metric.value == 2.0  # (1+2+3)/3
 
@@ -1363,7 +1363,7 @@ class TestMetricsComputation:
         metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find exit success rate metric
-        exit_metric = next((m for m in metrics if m.name == "exit_success_rate"), None)
+        exit_metric = next((m for m in metrics if m.name == "task_completion_rate"), None)
         assert exit_metric is not None
         assert exit_metric.value == 0.5  # 1/2 successful exits
 
