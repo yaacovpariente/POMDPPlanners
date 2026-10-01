@@ -177,15 +177,15 @@ site:
 pomdp-report serve results
 ```
 
-Then browse to http://127.0.0.1:8765. To use another port, pass `--port`:
+Then browse to http://127.0.0.1:8765. To serve on another port, pass `--port`
+and browse to that port instead:
 
 ```bash
-pomdp-report serve results --port 9000
+pomdp-report serve results --port 9000  # then open http://127.0.0.1:9000
 ```
 
-Open the `LightDark_Evaluation` experiment
-to compare the two planners side by side on expected return and task
-completion rate, and replay any episode in 3D.
+Open the `LightDark_Evaluation` experiment to compare the two planners side by
+side on expected return and task completion rate, and replay any episode in 3D.
 
 The video below walks through the whole example: copying the code from this
 README, running it, and comparing the planners in the results site. It also
