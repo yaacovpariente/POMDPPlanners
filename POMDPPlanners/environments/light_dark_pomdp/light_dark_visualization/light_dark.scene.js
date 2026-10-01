@@ -508,16 +508,48 @@
       running.push(total);
     }
 
+    var reduceMotion = global.matchMedia
+      ? global.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
+    /* How deep into a hazard a point is: 0 outside, 1 well inside. It ramps
+       across the rim rather than switching on, so the rover starts to labour
+       as it climbs in rather than lurching the instant it crosses. */
+    function zoneDepth(x, y) {
+      var worst = 0;
+      for (var i = 0; i < world.obstacles.length; i++) {
+        var d = Math.hypot(x - world.obstacles[i][0], y - world.obstacles[i][1]);
+        worst = Math.max(worst, clamp((hazardRadius + 0.15 - d) / 0.45, 0, 1));
+      }
+      return worst * worst * (3 - 2 * worst);
+    }
+
     function sampleAt(t) {
       var n = payload.states.length;
       var i0 = Math.floor(clamp(t, 0, n - 1));
       var i1 = Math.min(i0 + 1, n - 1);
       var f = clamp(t - i0, 0, 1);
       var a = payload.states[i0], b = payload.states[i1];
+
+      /* Broken ground makes the crossing uneven, not slow. A hazard costs
+         reward and nothing else: the step still takes one step. The envelope
+         sin(pi f) is exactly zero at both ends, so the lurch only redistributes
+         progress inside the step and never moves where it starts or ends. It is
+         keyed to the step index, never to wall-clock time, so scrubbing is
+         repeatable, and roughness is read at the step's midpoint, so the lurch
+         cannot feed back into where the rover is. */
+      var e = f;
+      var mid = zoneDepth((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      if (mid > 0 && !reduceMotion) {
+        var wob = 0.62 * Math.sin(f * 6.9 + i0 * 2.399) + 0.38 * Math.sin(f * 12.7 + i0 * 5.137);
+        e = clamp(f + mid * 0.11 * Math.sin(Math.PI * f) * wob, 0, 1);
+      }
+      var x = lerp(a[0], b[0], e), y = lerp(a[1], b[1], e);
       return {
-        index: i0, frac: f,
-        x: lerp(a[0], b[0], f),
-        y: lerp(a[1], b[1], f)
+        index: i0, frac: f, x: x, y: y,
+        // The HUD reads the plain interpolation, so the numbers never wobble.
+        hudX: lerp(a[0], b[0], f), hudY: lerp(a[1], b[1], f),
+        rough: reduceMotion ? 0 : zoneDepth(x, y)
       };
     }
 
@@ -692,9 +724,25 @@
         rover.position.set(px, 0, pz);
         rover.rotation.y = -heading;
 
-        var speed = playing ? 1 : 0;
-        wheelSpin += dt * speed * 6.2;
-        for (var w = 0; w < wheels.length; w++) wheels[w].rotation.y = wheelSpin;
+        /* The struggle is attitude only: the hull pitches, rolls and jolts on
+           the rubble and the wheels spin ahead of the ground and catch. None of
+           it moves the rover off the recorded state. */
+        var rough = sample.rough;
+        var moving = playing ? 1 : 0;
+        var judder = rough * (Math.sin(elapsed * 23.0) * 0.6 + Math.sin(elapsed * 37.0 + 1.7) * 0.4);
+        var snap = clamp(dt * (8 + rough * 26), 0, 1);      // stiffer, so it jolts
+        hull.rotation.z = lerp(hull.rotation.z, judder * 0.14 * (0.4 + moving), snap);
+        hull.rotation.x = lerp(
+          hull.rotation.x, Math.sin(elapsed * 19.0 + 2.2) * rough * 0.16 * (0.4 + moving), snap
+        );
+        hull.position.y = Math.abs(judder) * 0.035;
+
+        var slip = 1 + rough * 2.0 + rough * Math.sin(elapsed * 27.0) * 0.9;
+        wheelSpin += dt * 6.2 * (moving ? slip : rough * 0.8 * Math.max(0, Math.sin(elapsed * 13.0)));
+        for (var w = 0; w < wheels.length; w++) {
+          wheels[w].rotation.y = wheelSpin;
+          wheels[w].position.y = 0.115 + Math.sin(elapsed * 29.0 + w * 1.9) * rough * 0.014;
+        }
 
         // Move the one shadow caster to the nearest lamp and take that much
         // light back off it, so the shadow follows without over-lighting.
@@ -726,8 +774,8 @@
           follow: { x: px, z: pz, heading: heading },
           step: sample.index,
           action: step.action === null || step.action === undefined ? "—" : String(step.action),
-          x: sample.x,
-          y: sample.y,
+          x: sample.hudX,
+          y: sample.hudY,
           reward: step.reward,
           ret: running[sample.index],
           belief: beliefLabel

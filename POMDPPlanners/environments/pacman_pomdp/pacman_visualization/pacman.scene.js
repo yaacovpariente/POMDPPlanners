@@ -398,8 +398,12 @@
     var mouthMat = new THREE.MeshStandardMaterial({
       color: 0x24150A, roughness: 0.85, metalness: 0.0, side: THREE.DoubleSide
     });
+    // The jaws ride on a body, so PacMan can shudder and tilt over a hazard
+    // without moving its shadow or its light off the recorded cell.
+    var pacBody = new THREE.Group();
+    pacman.add(pacBody);
     var jawPos = new THREE.Group(), jawNeg = new THREE.Group();
-    pacman.add(jawPos); pacman.add(jawNeg);
+    pacBody.add(jawPos); pacBody.add(jawNeg);
     var hemiGeo = new THREE.SphereGeometry(PAC_R, 40, 22, 0, Math.PI * 2, 0, Math.PI / 2);
     var pacCapGeo = new THREE.CircleGeometry(PAC_R, 40);
     var halfA = new THREE.Mesh(hemiGeo, pacSkin);
@@ -586,12 +590,43 @@
     // teleporting: smoothstep keeps the motion crisp but not jerky.
     function ease(f) { return f * f * (3 - 2 * f); }
 
+    var reduceMotion = global.matchMedia
+      ? global.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
+    /* How deep into a hazard a cell position is: 0 outside, 1 well inside. It
+       ramps across the rim rather than switching on, so PacMan starts to
+       labour as it reaches the zone instead of snapping. */
+    function zoneDepth(row, col) {
+      var worst = 0;
+      for (var i = 0; i < world.dangerous_areas.length; i++) {
+        var d = Math.hypot(row - world.dangerous_areas[i][0], col - world.dangerous_areas[i][1]);
+        worst = Math.max(worst, clamp((world.dangerous_area_radius + 0.30 - d) / 0.50, 0, 1));
+      }
+      return ease(worst);
+    }
+
     function sampleAt(t) {
       var i0 = Math.floor(clamp(t, 0, steps - 1));
       var i1 = Math.min(i0 + 1, steps - 1);
       var raw = clamp(t - i0, 0, 1);
-      var f = ease(raw);
       var a = payload.pacman_positions[i0], b = payload.pacman_positions[i1];
+      var f = ease(raw);
+
+      /* Inside a hazard PacMan wades: the crossing catches and lurches. The
+         hazard costs reward and nothing else, so the step still takes one
+         step. The envelope sin(pi f) is exactly zero at both ends, so the
+         lurch never moves where a step starts or ends; it is keyed to the step
+         index, so scrubbing is repeatable; and roughness is read at the step's
+         midpoint, so the lurch cannot feed back into where PacMan is. The
+         ghosts keep the plain ease: the hazard is PacMan's, not theirs. */
+      var mid = zoneDepth((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      var e = f;
+      if (mid > 0 && !reduceMotion) {
+        // Small enough that PacMan never steps backwards inside a step.
+        var wob = 0.62 * Math.sin(f * 6.9 + i0 * 2.399) + 0.38 * Math.sin(f * 12.7 + i0 * 5.137);
+        e = clamp(f + mid * 0.11 * Math.sin(Math.PI * f) * wob, 0, 1);
+      }
       var ga = payload.ghost_positions[i0], gb = payload.ghost_positions[i1];
       var ghosts = [];
       for (var g = 0; g < ghostNodes.length; g++) {
@@ -603,7 +638,8 @@
         // never shows a cell that is half way between two cells.
         index: raw < 0.5 ? i0 : i1,
         from: i0, frac: raw, moving: raw > 0.02 && raw < 0.98,
-        row: lerp(a[0], b[0], f), col: lerp(a[1], b[1], f),
+        row: lerp(a[0], b[0], e), col: lerp(a[1], b[1], e),
+        rough: reduceMotion ? 0 : zoneDepth(lerp(a[0], b[0], e), lerp(a[1], b[1], e)),
         ghosts: ghosts
       };
     }
@@ -790,6 +826,19 @@
           ? Math.abs(Math.sin(elapsed * 9.0))
           : 0.6 + Math.sin(elapsed * 2.2) * 0.2;
         var mouth = 0.16 + chew * 0.62;
+
+        /* In a hazard PacMan strains: the body shudders and tips, it bobs as
+           if wading, and the jaws clench and chatter instead of chomping. It
+           is all on the body: the tilt sways the sphere a little off centre,
+           but the shadow, the light and the recorded cell stay put. Paused,
+           it eases to a tremble rather than shaking at full strength. */
+        var rough = sample.rough * (0.4 + (sample.moving && playing ? 0.6 : 0));
+        var shudder = rough * (Math.sin(elapsed * 31.0) * 0.6 + Math.sin(elapsed * 47.0 + 1.3) * 0.4);
+        pacBody.rotation.z = Math.sin(elapsed * 11.0 + 0.7) * rough * 0.30 + shudder * 0.08;
+        pacBody.rotation.x = Math.sin(elapsed * 8.3) * rough * 0.22;
+        pacBody.position.x = shudder * 0.035;
+        pacBody.position.y = rough * (Math.abs(Math.sin(elapsed * 6.5)) * 0.07 - 0.05);
+        mouth = lerp(mouth, 0.05 + Math.abs(Math.sin(elapsed * 23.0)) * 0.12, rough);
         jawPos.rotation.y = -mouth;
         jawNeg.rotation.y = mouth;
 
