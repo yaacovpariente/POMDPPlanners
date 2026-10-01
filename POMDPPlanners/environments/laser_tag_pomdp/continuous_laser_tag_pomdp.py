@@ -40,7 +40,7 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -61,12 +61,14 @@ from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.continuous_laser_tag_visualizer import (
-    ContinuousLaserTagVisualizer,
-)
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+        ContinuousLaserTagVisualizer,
+    )
 
 
 # Default walls matching the discrete LaserTag grid, converted to AABBs.
@@ -871,9 +873,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         centers = self._dangerous_areas_arr.reshape(-1, 2)
         positions = next_arr[hazard_hit, :2]
         deltas = positions[:, None, :] - centers[None, :, :]
-        counts = np.sum(
-            np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1
-        )
+        counts = np.sum(np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1)
         rewards[hazard_hit] -= counts.astype(np.float64) * float(self.dangerous_area_penalty)
         return rewards
 
@@ -1096,48 +1096,16 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     # Visualization
     # ------------------------------------------------------------------
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = ContinuousLaserTagVisualizer(
-            grid_size=self._grid_size,
-            walls=self._walls,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_area_radius=self.dangerous_area_radius,
-        )
-        visualizer.create_visualization(history, cache_path)
-        self.logger.info("Saved ContinuousLaserTag visualization to %s", cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> Any:
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``laser_tag.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every run including
-        # ones that never write anything.
+    def episode_visualizer(self) -> "ContinuousLaserTagVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
-            build_continuous_laser_tag_trace,
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+            ContinuousLaserTagVisualizer,
         )
 
-        return build_continuous_laser_tag_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return ContinuousLaserTagVisualizer(self)
 
     # ------------------------------------------------------------------
     # Accessors used by the vectorized updater

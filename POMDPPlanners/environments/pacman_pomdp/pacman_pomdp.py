@@ -33,7 +33,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
@@ -45,7 +45,9 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_mo
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+        PacManVisualizer,
+    )
 
 _GHOST_COORDINATION_CODES = {"independent": 0, "coordinated": 1, "mixed": 2}
 _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
@@ -1479,66 +1481,16 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         return metrics
 
-    def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path):
-        """Visualize PacMan path through the maze using sprite-based rendering.
-
-        Args:
-            path: List of state arrays representing the path through the maze.
-            actions: List of actions taken at each step.
-            cache_path: Path where the GIF should be saved.
-        """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
-            PacManVisualizer,
-        )  # pylint: disable=import-outside-toplevel
-
-        visualizer = PacManVisualizer(self)
-        visualizer.visualize_path(path, actions, cache_path)
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache visualization of episode history.
-
-        Args:
-            history: List of StepData objects representing the episode
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
-        """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
-            PacManVisualizer,
-        )  # pylint: disable=import-outside-toplevel
-
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = PacManVisualizer(self)
-        visualizer.cache_visualization(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``pacman.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every PacMan run
-        # including ones that never write anything.
+    def episode_visualizer(self) -> "PacManVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.trace_exporter import (
-            build_pacman_trace,
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+            PacManVisualizer,
         )
 
-        return build_pacman_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return PacManVisualizer(self)
 
 
 class _PacManInitialObservationDistribution(Distribution):

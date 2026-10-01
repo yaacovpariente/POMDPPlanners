@@ -136,12 +136,13 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.maze_pomdp.maze_geometry import Cell, MazeGeometry
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.maze_pomdp.maze_visualization.maze_visualizer import (
+        MazeVisualizer,
+    )
 
 # State slot indices. Deliberately the same layout the T-Maze uses, so a reader who
 # knows one knows the other and the two can share a mental model.
@@ -857,7 +858,7 @@ class BaseMazePOMDP(Environment):
     # Visualization
     @property
     def draws_cell_guides(self) -> bool:
-        """Whether the renderer should rule cell guides inside the walkable cells.
+        """Whether the viewer should rule cell guides inside the walkable cells.
 
         True where positions are cells and the guides say what a step is worth; false
         where positions are real and a grid would suggest quantization that is not
@@ -865,59 +866,22 @@ class BaseMazePOMDP(Environment):
         """
         return True
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Write a GIF of one episode, belief included.
-
-        Args:
-            history: The episode's step records.
-            output_dir: Directory the ``.gif`` is written into.
-            episode_index: Zero-based episode index, used to name the file.
-        """
-        # Imported here so the environment can be constructed and planned on without
-        # matplotlib installed, matching how the other grid environments defer it.
-        # pylint: disable=import-outside-toplevel
-        from POMDPPlanners.environments.maze_pomdp.maze_visualizer import (
-            MazeVisualizer,
-        )
-
-        MazeVisualizer(self).create_visualization(
-            history, output_dir / f"agent_path_{episode_index}.gif"
-        )
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
+    def episode_visualizer(self) -> "MazeVisualizer":
+        """Return the visualizer that writes this environment's traces.
 
         Written once here rather than on each variant: the two share a map, a
         cue and a reward, so they share a payload, and a viewer that could draw
         one but not the other would be drawing the movement model instead of
         the task.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``maze.v1``.
         """
-        # Imported here rather than at module scope, matching the GIF renderer
-        # above: the exporter pulls in the trace schema, and this module is
-        # imported by every Maze run including ones that write nothing.
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
-            build_maze_trace,
+        from POMDPPlanners.environments.maze_pomdp.maze_visualization.maze_visualizer import (
+            MazeVisualizer,
         )
 
-        return build_maze_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return MazeVisualizer(self)
 
 
 class DiscreteMazePOMDP(BaseMazePOMDP, DiscreteActionsEnvironment):
@@ -995,9 +959,11 @@ class DiscreteMazePOMDP(BaseMazePOMDP, DiscreteActionsEnvironment):
         # pure function of the public parameters.
         self._transitions: Dict[Cell, Dict[str, Cell]] = {
             cell: {
-                action: (cell[0] + offset[0], cell[1] + offset[1])
-                if (cell[0] + offset[0], cell[1] + offset[1]) in self._walkable
-                else cell
+                action: (
+                    (cell[0] + offset[0], cell[1] + offset[1])
+                    if (cell[0] + offset[0], cell[1] + offset[1]) in self._walkable
+                    else cell
+                )
                 for action, offset in ACTION_OFFSETS.items()
             }
             for cell in self._walkable

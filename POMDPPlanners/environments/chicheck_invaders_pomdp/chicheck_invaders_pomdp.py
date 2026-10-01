@@ -69,7 +69,6 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.metrics import MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
@@ -113,7 +112,9 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.simulation import History
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization.chicheck_invaders_visualizer import (  # noqa: E501
+        ChicheckInvadersVisualizer,
+    )
 
 
 #: Log-probability standing in for an impossible observation. ``-inf`` is
@@ -1393,57 +1394,16 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
 
     # -- visualization --------------------------------------------------
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Write the episode's animated GIF into ``output_dir``.
-
-        Args:
-            history: Episode history.
-            output_dir: Directory to write into.
-            episode_index: Zero-based episode index, used to name the file.
-        """
-        # Imported inside the method rather than at module scope so that this
-        # module does not depend on the renderer: the import graph stays
-        # one-way, and a change to the renderer cannot break an environment
-        # that never draws. It buys no memory back in practice -- the package's
-        # ``__init__`` imports the visualizer eagerly, so any worker that
-        # imports the environment by its package name already paid for Pillow.
+    def episode_visualizer(self) -> "ChicheckInvadersVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization import (
+        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization.chicheck_invaders_visualizer import (  # noqa: E501
             ChicheckInvadersVisualizer,
         )
 
-        cache_path = output_dir / f"chicheck_invaders_{episode_index}.gif"
-        ChicheckInvadersVisualizer(self).create_visualization(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``chicheck_invaders.v1``.
-        """
-        # Imported here rather than at module scope for the same reason as the
-        # renderer above: the exporter pulls in the trace schema, and most runs
-        # of this environment never write one.
-        # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_visualization.trace_exporter import (
-            build_chicheck_invaders_trace,
-        )
-
-        return build_chicheck_invaders_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return ChicheckInvadersVisualizer(self)
 
 
 def noiseless_preset(**overrides: Any) -> Dict[str, Any]:

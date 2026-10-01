@@ -1,15 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the CaptureTheFlag episode trace exporter and its visualizer move.
+"""Tests for the CaptureTheFlag episode trace.
 
-Two things are checked here, and they are checked together because the same
-change made both true: the environment now writes a machine-readable trace, and
-its renderer moved into a ``visualizer`` package beside it. The trace tests
-pin what the browser viewer reads; the GIF test pins that the move changed no
-pixel, which is the only thing that could have gone wrong in a move.
+The trace is what the browser viewer reads, so these tests pin its contents.
 """
 
-import hashlib
 import random
 from pathlib import Path
 from typing import List, cast
@@ -32,7 +27,6 @@ from POMDPPlanners.environments.capture_the_flag_pomdp import (
 from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_visualization import (
     CAPTURE_THE_FLAG_PAYLOAD_KIND,
     CaptureTheFlagVisualizer,
-    build_capture_the_flag_trace,
 )
 
 
@@ -109,7 +103,9 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
     Then: The envelope and the payload match the original.
     """
     history = _episode(env)
-    trace = build_capture_the_flag_trace(env, history, episode_index=3, policy_name="PFT_DPW")
+    trace = CaptureTheFlagVisualizer(env).build_trace(
+        history, episode_index=3, policy_name="PFT_DPW"
+    )
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace.json"))
 
     assert restored.payload_kind == CAPTURE_THE_FLAG_PAYLOAD_KIND
@@ -133,7 +129,7 @@ def test_trace_records_both_teams_from_the_recorded_states(env):
         carrier, freeze and score fields follow the same states.
     """
     history = _episode(env)
-    payload = build_capture_the_flag_trace(env, history, 0).payload
+    payload = CaptureTheFlagVisualizer(env).build_trace(history, episode_index=0).payload
     layout = env.layout
 
     assert len(payload["blue_cells"]) == len(history)
@@ -158,7 +154,7 @@ def test_trace_records_the_true_flag_cell_per_step(env):
     the episode rather than from a default.
     """
     history = _episode(env)
-    payload = build_capture_the_flag_trace(env, history, 0).payload
+    payload = CaptureTheFlagVisualizer(env).build_trace(history, episode_index=0).payload
     for step, cell in zip(history, payload["red_flag_cell"]):
         assert tuple(cell) == env.red_flag_cell(step.state)
 
@@ -171,7 +167,7 @@ def test_trace_splits_the_joint_action_per_player(env):
     team size to be assumed rather than read.
     """
     history = _episode(env)
-    trace = build_capture_the_flag_trace(env, history, 0)
+    trace = CaptureTheFlagVisualizer(env).build_trace(history, episode_index=0)
     for step, actions in zip(trace.steps, trace.payload["player_actions"]):
         if step.action is None:
             assert actions is None
@@ -188,7 +184,7 @@ def test_trace_delegates_belief_serialization_to_core(env):
     core's own output is what stops the two drifting.
     """
     history = _episode(env)
-    trace = build_capture_the_flag_trace(env, history, 0)
+    trace = CaptureTheFlagVisualizer(env).build_trace(history, episode_index=0)
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
 
@@ -206,7 +202,7 @@ def test_trace_writes_the_state_layout_the_particles_need(env):
     Then: The payload's layout matches the environment's own, and reading a
         particle at those offsets recovers cells inside the field.
     """
-    payload = build_capture_the_flag_trace(env, _episode(env), 0).payload
+    payload = CaptureTheFlagVisualizer(env).build_trace(_episode(env), episode_index=0).payload
     layout = payload["state_layout"]
 
     assert layout["red_pos"] == env.layout.red_pos
@@ -240,7 +236,11 @@ def test_trace_takes_the_world_from_the_instance():
         blue_flag_cell=(1, 2),
         red_flag_candidates=[(5, 1), (5, 2), (4, 4)],
     )
-    world = build_capture_the_flag_trace(env, _episode(env, length=2), 0).payload["world"]
+    world = (
+        CaptureTheFlagVisualizer(env)
+        .build_trace(_episode(env, length=2), episode_index=0)
+        .payload["world"]
+    )
 
     assert world["grid_size"] == [7, 5]
     assert world["midline"] == 3
@@ -272,20 +272,22 @@ def test_trace_inherits_the_subsampling_cap(env):
             ),
         )
     ]
-    belief = build_capture_the_flag_trace(env, history, 0).payload["beliefs"][0]
+    belief = (
+        CaptureTheFlagVisualizer(env).build_trace(history, episode_index=0).payload["beliefs"][0]
+    )
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
 
 
 def test_environment_writes_a_trace_file(env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index.
+    """The environment's visualizer writes a readable file under the episode's index.
 
-    Purpose: This is the call the simulation path makes beside the GIF. If the
-    environment does not override build_episode_trace, it silently writes
-    nothing and the episode page has no player.
+    Purpose: This is the call the simulation path makes. If the environment
+    does not override episode_visualizer, it silently writes nothing and the
+    episode page has no player.
     """
-    written = env.cache_trace(
+    written = env.episode_visualizer().write(
         history=_episode(env), output_dir=tmp_path, episode_index=2, policy_name="PFT_DPW"
     )
     assert written == tmp_path / "trace_2.json"
@@ -298,26 +300,4 @@ def test_environment_writes_a_trace_file(env, tmp_path: Path):
 def test_trace_rejects_an_empty_history(env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_capture_the_flag_trace(env, [], 0)
-
-
-def test_the_moved_visualizer_still_renders_the_same_bytes(env, tmp_path: Path):
-    """Rendering one episode twice through the moved renderer gives one file.
-
-    Purpose: The GIF's bytes are pinned by a golden hash that only runs inside
-    the project's Docker image, so on any other machine a move that changed the
-    render would pass unnoticed here. Rendering the same history twice through
-    one visualizer instance is the check that does run: it catches art that is
-    seeded from the simulation's random stream, and state a first render leaves
-    behind on the instance -- the two ways a renderer stops being a function of
-    its history.
-    """
-    history = _episode(env, length=3, seed=7)
-    visualizer = CaptureTheFlagVisualizer(env)
-    digests = []
-    for name in ("first.gif", "second.gif"):
-        path = tmp_path / name
-        visualizer.render_episode(history, path)
-        digests.append(hashlib.sha256(path.read_bytes()).hexdigest())
-
-    assert digests[0] == digests[1]
+        CaptureTheFlagVisualizer(env).build_trace([], episode_index=0)

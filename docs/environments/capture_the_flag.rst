@@ -330,20 +330,8 @@ and a per-episode maximum.
 Visualization
 -------------
 
-Runs also write a GIF of each episode through ``cache_visualization``. Its
-camera is isometric and the terrain is one continuous procedural field, so the
-map reads as a section of a larger world rather than a board. Soldiers
-interpolate between cells rather than teleporting, a scan plays its own ping,
-and a tagged player is drawn translucent while frozen.
-
-The belief is a separate overlay, never baked into the world art: coloured
-markers give each red player's position marginal, sized by probability mass,
-and translucent diamonds over the flag candidates carry the marginal over the
-red flag's cell. Drawing only the true trajectory would give an MDP picture of
-a POMDP -- it could not distinguish a planner that handled uncertainty from
-one that got lucky. Particles are drawn rather than summarised by an ellipse,
-because a belief over a hidden pursuer routinely goes multi-modal and an
-ellipse would hide exactly that.
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
 
 Limits
 ------

@@ -96,16 +96,19 @@ from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.carla_pomdp.carla_server_pool import acquire_pool_lease
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.carla_pomdp.carla_visualization import CarlaVisualizer
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
 DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
@@ -1655,23 +1658,17 @@ class CarlaPOMDP(Environment):
             "density. Belief updates must run on the planner's model environment."
         )
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Save the episode as CARLA's own chase-camera MP4 footage.
+    def episode_visualizer(self) -> "CarlaVisualizer":
+        """Return the visualizer that writes CARLA's own chase-camera footage.
 
-        The episode ``history`` is unused: the video is the native camera
-        rendering buffered live while the world was stepped, not a plot
-        reconstructed from the step data. The environment must have been
-        constructed with ``record_camera=True``.
-
-        Args:
-            history: Episode step data (unused; kept for the hook signature).
-            output_dir: Directory into which the ``.mp4`` video is written.
-            episode_index: Zero-based episode index, used to name the file.
+        The video is the native camera rendering buffered live while the world
+        was stepped, not a plot reconstructed from the step data. The
+        environment must have been constructed with ``record_camera=True``.
         """
-        del history
-        self.save_camera_video(output_dir / f"agent_path_{episode_index}.mp4")
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.carla_pomdp.carla_visualization import CarlaVisualizer
+
+        return CarlaVisualizer(self)
 
     def save_camera_video(self, cache_path: Path, fps: int = 20) -> None:
         """Write CARLA's own chase-camera footage to an MP4 video.

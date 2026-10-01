@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from pathlib import Path
 from collections.abc import Hashable
 from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 
@@ -15,15 +14,14 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.utils.numba_kernels import any_point_within_radius_kernel
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
-    LightDarkPOMDPVisualizer,
-)
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
+        LightDarkVisualizer,
+    )
 
 
 class BaseLightDarkPOMDP(Environment, ABC):
@@ -303,73 +301,16 @@ class BaseLightDarkPOMDP(Environment, ABC):
     def initial_observation_dist(self) -> Distribution:
         return DiscreteDistribution(values=[1.0], probs=np.array([1.0]))
 
-    def visualize_path(
-        self,
-        path: List[np.ndarray],
-        agent_belief_path: List[DiscreteDistribution],
-        actions: List[str],
-        cache_path: Path,
-    ) -> None:
-        """Create and save an animated visualization of the agent's path.
-
-        Args:
-            path: List of state positions (2D numpy arrays) along the agent's trajectory.
-            agent_belief_path: List of belief distributions at each step.
-            actions: List of actions taken at each step.
-            cache_path: Path where to save the visualization (must end with .gif).
-
-        Raises:
-            TypeError: If cache_path is not a Path object.
-            ValueError: If cache_path doesn't end with .gif.
-        """
-        visualizer = LightDarkPOMDPVisualizer(self)
-        visualizer.visualize_path(path, agent_belief_path, actions, cache_path)
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache visualization of agent's path and belief.
-
-        Args:
-            history: List of step data from an episode.
-            output_dir: Directory into which the ``.gif`` visualization is written.
-            episode_index: Zero-based episode index, used to name the file.
-
-        Raises:
-            TypeError: If history is not a List or contains non-StepData objects.
-            ValueError: If history is empty or contains invalid data.
-        """
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = LightDarkPOMDPVisualizer(self)
-        visualizer.cache_visualization(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``light_dark.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every Light-Dark run
-        # including ones that never write anything.
+    def episode_visualizer(self) -> "LightDarkVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.trace_exporter import (
-            build_light_dark_trace,
+        from POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization.light_dark_visualizer import (
+            LightDarkVisualizer,
         )
 
-        return build_light_dark_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return LightDarkVisualizer(self)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)

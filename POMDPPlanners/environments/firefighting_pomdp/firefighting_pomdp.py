@@ -53,7 +53,6 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
@@ -80,7 +79,9 @@ from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checkers
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (  # noqa: E501
+        FirefightingVisualizer,
+    )
 
 #: The category an unobserved cell reports. Encoded as a number because the
 #: observation is one flat ``float64`` vector of fixed shape whatever the robots
@@ -1487,56 +1488,16 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
 
     # -- visualization --------------------------------------------------
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Write the episode's animated GIF into ``output_dir``.
-
-        Args:
-            history: Episode history.
-            output_dir: Directory to write into.
-            episode_index: Zero-based episode index, used to name the file.
-        """
-        # Imported lazily: every parallel worker imports this module while
-        # almost none of them render anything, so the renderer's palette
-        # tables and fonts stay out of a planning run's memory.
+    def episode_visualizer(self) -> "FirefightingVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (  # noqa: E501
             FirefightingVisualizer,
         )
 
-        cache_path = output_dir / f"firefighting_{episode_index}.gif"
-        FirefightingVisualizer(self).create_visualization(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: Episode history.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind
-            ``firefighting.v1``.
-        """
-        # Imported here rather than at module scope, for the same reason the
-        # renderer is: the exporter pulls in the trace schema, and this module
-        # is imported by every worker of every run, almost none of which write
-        # anything.
-        # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.trace_exporter import (  # noqa: E501
-            build_firefighting_trace,
-        )
-
-        return build_firefighting_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return FirefightingVisualizer(self)
 
 
 def create_firefighting_state(
@@ -1548,7 +1509,7 @@ def create_firefighting_state(
 ) -> np.ndarray:
     """Build one state vector in ``env``'s layout.
 
-    Exists so tests and the golden-visualization fixtures can state a world
+    Exists so tests can state a world
     directly instead of reproducing the packing by hand in several places.
 
     Args:

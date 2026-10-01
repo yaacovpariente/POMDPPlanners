@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the CartPole episode trace exporter and its scene module.
+"""Tests for the CartPole episode trace and its scene module.
 
-Two things are checked here that nothing else checks. First, that a CartPole
-episode survives the round trip to JSON and back with the numbers a viewer
-reads by index still in the right places. Second, that moving the GIF renderer
-into ``visualizer/`` left the GIF's bytes alone: its hash is pinned by a golden
-file, and this suite's own golden check only runs inside the CI image, so the
-byte comparison is made here too.
+A CartPole episode must survive the round trip to JSON and back with the
+numbers a viewer reads by index still in the right places, and the scene module
+must sit where the payload kind says.
 """
 
-import hashlib
 from pathlib import Path
 from typing import Any, cast
 
@@ -25,16 +21,14 @@ from POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp_gaussian_beliefs i
     GaussianBeliefUpdaterType,
     create_cartpole_gaussian_belief,
 )
-from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.trace_exporter import (
+from POMDPPlanners.environments.cartpole_pomdp.cartpole_visualization.cartpole_visualizer import (
     CARTPOLE_PAYLOAD_KIND,
-    build_cartpole_trace,
+    CartPoleVisualizer,
 )
-from POMDPPlanners.reporting.pages import scene_script_path
+from POMDPPlanners.reporting.scenes import scene_script_url
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
 
-SCENE_MODULE = (
-    Path(__import__("POMDPPlanners").__file__).parent / "reporting/static/viewer/scenes/cartpole.js"
-)
+SCENE_MODULE = CartPoleVisualizer.scene_script()
 
 
 @pytest.fixture(name="env")
@@ -86,7 +80,7 @@ def test_states_survive_the_round_trip(env, tmp_path: Path):
     """
     history = _episode(env, 4)
     written = EpisodeTrace.read(
-        build_cartpole_trace(env, history, episode_index=0).write(tmp_path / "trace.json")
+        CartPoleVisualizer(env).build_trace(history, episode_index=0).write(tmp_path / "trace.json")
     )
 
     assert written.payload_kind == CARTPOLE_PAYLOAD_KIND
@@ -110,7 +104,7 @@ def test_world_block_comes_from_the_instance(env, tmp_path: Path):
     Then: The payload's world reports the instance's value.
     """
     env.x_threshold = 1.75
-    world = build_cartpole_trace(env, _episode(env, 2), 0).payload["world"]
+    world = CartPoleVisualizer(env).build_trace(_episode(env, 2), 0).payload["world"]
 
     assert world["x_threshold"] == 1.75
     assert world["theta_threshold_radians"] == pytest.approx(env.theta_threshold_radians)
@@ -134,7 +128,7 @@ def test_gaussian_belief_is_written_as_a_gaussian(env, tmp_path: Path):
     belief = create_cartpole_gaussian_belief(env, GaussianBeliefUpdaterType.UKF)
     assert isinstance(belief, GaussianBelief)
 
-    trace = build_cartpole_trace(env, _episode(env, 3, belief=belief), 0)
+    trace = CartPoleVisualizer(env).build_trace(_episode(env, 3, belief=belief), 0)
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace.json"))
 
     for payload in restored.payload["beliefs"]:
@@ -153,7 +147,7 @@ def test_particle_belief_keeps_four_component_particles(env):
     When: The trace is built.
     Then: The particles are four-component rows with normalized weights.
     """
-    payload = build_cartpole_trace(env, _episode(env, 2), 0).payload["beliefs"][0]
+    payload = CartPoleVisualizer(env).build_trace(_episode(env, 2), 0).payload["beliefs"][0]
 
     assert payload["kind"] == "particles"
     assert all(len(particle) == 4 for particle in payload["particles"])
@@ -161,8 +155,8 @@ def test_particle_belief_keeps_four_component_particles(env):
 
 
 def test_environment_writes_a_trace_file(env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index."""
-    written = env.cache_trace(
+    """The environment's visualizer writes a readable file under the episode's index."""
+    written = env.episode_visualizer().write(
         history=_episode(env, 3), output_dir=tmp_path, episode_index=2, policy_name="PFT_DPW"
     )
     assert written == tmp_path / "trace_2.json"
@@ -176,7 +170,7 @@ def test_environment_writes_a_trace_file(env, tmp_path: Path):
 def test_rejects_an_empty_history(env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_cartpole_trace(env, [], 0)
+        CartPoleVisualizer(env).build_trace([], 0)
 
 
 def test_rejects_a_state_of_the_wrong_width(env):
@@ -196,7 +190,7 @@ def test_rejects_a_state_of_the_wrong_width(env):
         )
     ]
     with pytest.raises(ValueError, match="4 components"):
-        build_cartpole_trace(env, history, 0)
+        CartPoleVisualizer(env).build_trace(history, 0)
 
 
 def test_scene_module_is_where_the_payload_kind_says(env):
@@ -206,40 +200,6 @@ def test_scene_module_is_where_the_payload_kind_says(env):
     a payload kind and a file name that disagree fail only in the browser,
     where nothing in the test suite would see it.
     """
-    assert scene_script_path(CARTPOLE_PAYLOAD_KIND) == "/static/viewer/scenes/cartpole.js"
+    assert scene_script_url(CARTPOLE_PAYLOAD_KIND) == "/static/scenes/cartpole.js"
     assert SCENE_MODULE.is_file()
     assert 'V.scenes["cartpole.v1"]' in SCENE_MODULE.read_text(encoding="utf-8")
-
-
-def test_gif_bytes_are_unchanged_by_the_visualizer_move(env, tmp_path: Path):
-    """Moving the renderer into visualizer/ did not move one GIF byte.
-
-    Purpose: The golden hash is pinned, and this repository's own golden check
-    for CartPole runs only inside the CI image. Packaging work is exactly the
-    kind of change that can perturb a rendering without anyone looking, so the
-    comparison is made here too, on the same deterministic episode.
-
-    Given: The three-step episode the golden file was generated from.
-    When: It is rendered through the moved visualizer.
-    Then: The bytes equal the golden file's.
-    """
-    rows = [
-        StepData(
-            state=np.asarray(state, dtype=float),
-            action=action,
-            next_state=None if action is None else np.asarray(state, dtype=float),
-            observation=None,
-            reward=None if action is None else 1.0,
-            belief=cast(Any, None),
-        )
-        for state, action in (
-            ([0, 0, 0, 0], 0),
-            ([0.1, -0.1, 0.15, 0.2], 1),
-            ([0.2, 0.1, -0.22, 0.3], None),
-        )
-    ]
-    env.cache_visualization(rows, tmp_path, 0)
-
-    golden = Path(__file__).parent / "golden_visualizations/cartpole_visualization.gif"
-    rendered = (tmp_path / "agent_path_0.gif").read_bytes()
-    assert hashlib.sha256(rendered).hexdigest() == hashlib.sha256(golden.read_bytes()).hexdigest()

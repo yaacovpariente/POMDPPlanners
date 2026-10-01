@@ -4,7 +4,7 @@
 
 Covers the impact / task-completion channels reported through ``step_info``, the
 metric specs derived from them, the config hook used to attach a contact sensor,
-and the frame buffer behind ``cache_visualization``.
+and the frame buffer behind ``episode_visualizer``.
 
 Like the sibling world tests these run against ``FakeIsaacEnv`` through the
 ``_build_isaac_env`` seam, so no Isaac Sim install is required.
@@ -23,7 +23,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction
-from POMDPPlanners.environments.isaac_lab_pomdp import IsaacLabPOMDP
+from POMDPPlanners.environments.isaac_lab_pomdp import IsaacLabPOMDP, IsaacLabPOMDPVisualizer
 from POMDPPlanners.environments.isaac_lab_pomdp import isaac_lab_pomdp as isaac_module
 from POMDPPlanners.tests.test_environments.test_isaac_lab_pomdp.test_isaac_lab_pomdp import (
     FakeIsaacEnv,
@@ -483,19 +483,71 @@ class TestVideoCapture:
                 task_id="Fake-Isaac-v0", discount_factor=0.99, device="cpu", record_video=True
             )
 
-    def test_cache_visualization_requires_recording(self, world: IsaacLabPOMDP) -> None:
+    def test_writing_a_video_requires_recording(self, world: IsaacLabPOMDP) -> None:
         """Test that requesting a video without recording fails loudly.
 
         Purpose: Validates that a silently missing video is impossible
 
         Given: A world constructed without record_video
-        When: cache_visualization() is called
+        When: Its episode visualizer writes an episode
         Then: RuntimeError is raised naming record_video
 
         Test type: unit
         """
         with pytest.raises(RuntimeError, match="record_video=True"):
-            world.cache_visualization([], Path("/tmp"), 0)
+            world.episode_visualizer().write([], Path("/tmp"), 0)
+
+    def test_the_buffered_frames_are_written_as_agent_path_mp4(self, tmp_path: Path) -> None:
+        """Test that the visualizer writes the buffered frames under the episode's name.
+
+        Purpose: Validates the file-naming contract the results site reads, and
+            that the frames written are the ones the world buffered
+
+        Given: A recording world that has stepped once
+        When: Its episode visualizer writes episode 5
+        Then: The encoder receives the buffered frames and agent_path_5.mp4
+
+        Test type: unit
+        """
+        written: Dict[str, Any] = {}
+
+        def _fake_encode(_self: Any, frames: List[np.ndarray], cache_path: Path) -> None:
+            written["frames"] = len(frames)
+            written["path"] = cache_path
+
+        env = FakeIsaacEnv()
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(isaac_module, "_build_isaac_env", lambda *a, **k: env)
+            patch.setattr(IsaacLabPOMDPVisualizer, "frames_to_video", _fake_encode)
+            world = _measuring_world(render_mode="rgb_array", record_video=True)
+            world.sample_next_state(world._live_state, np.zeros(2))
+
+            path = world.episode_visualizer().write([], tmp_path, 5)
+
+        assert path == tmp_path / "agent_path_5.mp4"
+        assert written == {"frames": 2, "path": tmp_path / "agent_path_5.mp4"}
+
+    def test_no_buffered_frames_writes_nothing(self, tmp_path: Path) -> None:
+        """Test that an episode with no frames reports that nothing was written.
+
+        Purpose: Validates that an empty buffer is not passed to the encoder,
+            which would raise, and that the caller is told no file exists
+
+        Given: A recording world whose frame buffer is empty
+        When: Its episode visualizer writes episode 0
+        Then: None is returned and no file is created
+
+        Test type: unit
+        """
+        env = FakeIsaacEnv()
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setattr(isaac_module, "_build_isaac_env", lambda *a, **k: env)
+            world = _measuring_world(render_mode="rgb_array", record_video=True)
+            world.frames.clear()
+
+            assert world.episode_visualizer().write([], tmp_path, 0) is None
+
+        assert not list(tmp_path.iterdir())
 
     def test_frame_buffer_is_dropped_on_pickling(self) -> None:
         """Test that buffered frames do not travel with a pickled world.

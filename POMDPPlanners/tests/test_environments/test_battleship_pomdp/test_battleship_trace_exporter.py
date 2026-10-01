@@ -1,21 +1,14 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Battleship episode trace and for the visualizer's move.
+"""Tests for the Battleship episode trace.
 
 The trace is the interface between Python and the browser viewer: a field that
 does not survive the round trip is a field the viewer silently never sees, and
 a field that carries the wrong thing is a page that lies convincingly. So the
 payload is checked against the episode it was built from rather than against
 itself.
-
-The move of ``battleship_visualizer`` into the ``visualizer`` package is
-checked here too. The GIF's bytes are pinned by a golden hash that only runs
-inside the project's Docker image, so the risk a local suite can still catch is
-the one the move actually created: the environment's own lazy import reaching a
-different renderer from the package export, or reaching none at all.
 """
 
-import hashlib
 from pathlib import Path
 from typing import List, cast
 
@@ -30,11 +23,10 @@ from POMDPPlanners.environments.battleship_pomdp import (
     BattleshipPOMDP,
     BattleshipVisualizer,
 )
-from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.trace_exporter import (
+from POMDPPlanners.environments.battleship_pomdp.battleship_visualization.battleship_visualizer import (
     BATTLESHIP_PAYLOAD_KIND,
     MARGINAL_SOURCE_EXACT,
     MARGINAL_SOURCE_PARTICLES,
-    build_battleship_trace,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import battleship_pinned_kwargs
 from POMDPPlanners.tests.test_utils.particle_belief_typing import particle_belief
@@ -97,7 +89,9 @@ def test_trace_round_trips_through_json(env: BattleshipPOMDP, tmp_path: Path):
     Then: Every field matches, and the payload kind is the one the scene
         module registers itself under.
     """
-    original = build_battleship_trace(env, _episode(env), episode_index=2, policy_name="PFT_DPW")
+    original = BattleshipVisualizer(env).build_trace(
+        _episode(env), episode_index=2, policy_name="PFT_DPW"
+    )
     restored = EpisodeTrace.read(original.write(tmp_path / "trace_2.json"))
 
     assert restored == original
@@ -116,7 +110,7 @@ def test_payload_world_block_comes_from_the_environment(env: BattleshipPOMDP):
     When: A trace is built from one of its episodes.
     Then: Every field of the world block equals the environment's own value.
     """
-    payload = build_battleship_trace(env, _episode(env), episode_index=0).payload
+    payload = BattleshipVisualizer(env).build_trace(_episode(env), episode_index=0).payload
     world = payload["world"]
 
     assert world["board_size"] == env.board_size
@@ -142,7 +136,7 @@ def test_payload_records_the_board_and_what_had_been_probed(env: BattleshipPOMDP
         written per step, and the flags grow by exactly the probed cell.
     """
     history = _episode(env)
-    payload = build_battleship_trace(env, history, episode_index=0).payload
+    payload = BattleshipVisualizer(env).build_trace(history, episode_index=0).payload
 
     assert payload["occupancy"] == [int(v) for v in env.occupancy(history[0].state)]
     assert len(payload["probed"]) == len(history)
@@ -166,7 +160,7 @@ def test_belief_is_serialised_by_core(env: BattleshipPOMDP):
         concrete class it came from.
     """
     history = _episode(env)
-    beliefs = build_battleship_trace(env, history, episode_index=0).payload["beliefs"]
+    beliefs = BattleshipVisualizer(env).build_trace(history, episode_index=0).payload["beliefs"]
 
     assert len(beliefs) == len(history)
     for entry in beliefs:
@@ -190,7 +184,7 @@ def test_marginals_are_the_beliefs_own_exact_posterior(env: BattleshipPOMDP):
         source says the posterior is exact.
     """
     history = _episode(env)
-    payload = build_battleship_trace(env, history, episode_index=0).payload
+    payload = BattleshipVisualizer(env).build_trace(history, episode_index=0).payload
 
     assert payload["marginal_source"] == MARGINAL_SOURCE_EXACT
     for index, step in enumerate(history):
@@ -239,25 +233,27 @@ def test_a_belief_without_an_exact_marginal_is_reported_as_missing(env: Battlesh
         )
         for step in history
     ]
-    payload = build_battleship_trace(env, generic, episode_index=0).payload
+    payload = BattleshipVisualizer(env).build_trace(generic, episode_index=0).payload
 
     assert payload["marginal_source"] == MARGINAL_SOURCE_PARTICLES
     assert all(entry is None for entry in payload["occupancy_marginals"])
     assert all(entry is None for entry in payload["support_sizes"])
 
 
-def test_cache_trace_writes_a_readable_file(env: BattleshipPOMDP, tmp_path: Path):
-    """The environment writes its trace where the reporting site looks.
+def test_the_environment_writes_a_readable_trace(env: BattleshipPOMDP, tmp_path: Path):
+    """The environment's visualizer writes its trace where the reporting site looks.
 
-    Purpose: ``cache_trace`` is the path a real run takes; a
-    ``build_episode_trace`` that works only when called by hand would never
-    produce a file.
+    Purpose: ``episode_visualizer().write`` is the path a real run takes; a
+    ``build_trace`` that works only when called by hand would never produce a
+    file.
 
     Given: A recorded episode and an output directory.
-    When: cache_trace is called for episode 4.
+    When: The environment's visualizer writes episode 4.
     Then: ``trace_4.json`` is written and reads back as a Battleship trace.
     """
-    written = env.cache_trace(history=_episode(env), output_dir=tmp_path, episode_index=4)
+    written = env.episode_visualizer().write(
+        history=_episode(env), output_dir=tmp_path, episode_index=4
+    )
 
     assert written == tmp_path / "trace_4.json"
     assert EpisodeTrace.read(written).payload_kind == BATTLESHIP_PAYLOAD_KIND
@@ -266,37 +262,4 @@ def test_cache_trace_writes_a_readable_file(env: BattleshipPOMDP, tmp_path: Path
 def test_an_empty_episode_is_refused(env: BattleshipPOMDP):
     """There is no trace for an episode that did not happen."""
     with pytest.raises(ValueError):
-        build_battleship_trace(env, [], episode_index=0)
-
-
-def test_the_environment_and_the_package_render_the_same_gif(env: BattleshipPOMDP, tmp_path: Path):
-    """Moving the visualizer left one renderer, reached the same way.
-
-    Purpose: The GIF's bytes are pinned by a golden hash that runs only inside
-    the project's Docker image. What a local suite can still catch is the risk
-    the move created: the environment's lazy import and the package export
-    drifting apart, or the GIF quietly becoming a single still.
-
-    Given: A recorded episode.
-    When: It is rendered through ``cache_visualization`` and through the
-        exported ``BattleshipVisualizer``.
-    Then: Both files are byte-identical and carry more than one frame.
-    """
-    history = _episode(env)
-
-    env.cache_visualization(history=history, output_dir=tmp_path, episode_index=0)
-    through_environment = tmp_path / "battleship_board_0.gif"
-
-    through_package = tmp_path / "direct.gif"
-    BattleshipVisualizer(env).create_visualization(history, through_package)
-
-    assert hashlib.sha256(through_environment.read_bytes()).hexdigest() == (
-        hashlib.sha256(through_package.read_bytes()).hexdigest()
-    )
-
-    from PIL import Image  # pylint: disable=import-outside-toplevel
-
-    with Image.open(through_environment) as image:
-        # n_frames is declared on the multi-frame mixin, not on Image, and a
-        # GIF is only multi-frame at runtime.
-        assert getattr(image, "n_frames") > 1
+        BattleshipVisualizer(env).build_trace([], episode_index=0)

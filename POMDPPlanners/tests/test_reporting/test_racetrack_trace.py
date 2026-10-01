@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Racetrack episode trace exporter.
+"""Tests for the Racetrack episode trace.
 
 None of these need the simulator. That is deliberate and it is also what the
-exporter is for: a forward-only world cannot be re-run from a recorded state,
+visualizer is for: a forward-only world cannot be re-run from a recorded state,
 so the trace has to be buildable from the episode's own record alone, and a
-test that needed a live session would be testing something the exporter never
-does.
+test that needed a live session would be testing something the visualizer
+never does.
 
 Two properties get most of the attention here, because both are ways the file
 could look right and mean something false:
@@ -31,7 +31,7 @@ from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.racetrack_pomdp import (
     RACETRACK_PAYLOAD_KIND,
     RacetrackPOMDP,
-    build_racetrack_trace,
+    RacetrackVisualizer,
 )
 from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     AGENT_SLOT_WIDTH,
@@ -46,7 +46,7 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
     ObservationMode,
     RacetrackObservation,
 )
-from POMDPPlanners.environments.racetrack_pomdp.racetrack_trace_exporter import (
+from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualization.racetrack_visualizer import (
     VEHICLE_LENGTH_M,
     VEHICLE_WIDTH_M,
     track_payload,
@@ -153,7 +153,7 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
 
     Test type: unit
     """
-    trace = build_racetrack_trace(env, _episode(), episode_index=4, policy_name="PFT_DPW")
+    trace = RacetrackVisualizer(env).build_trace(_episode(), episode_index=4, policy_name="PFT_DPW")
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_4.json"))
 
     assert restored.payload_kind == RACETRACK_PAYLOAD_KIND
@@ -173,7 +173,7 @@ def test_world_names_the_arm_and_the_dial(env):
 
     Test type: unit
     """
-    world = build_racetrack_trace(env, _episode(), 0).payload["world"]
+    world = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload["world"]
 
     assert world["observation_mode"] == ObservationMode.POMDP.value
     assert world["max_detection_range_m"] == pytest.approx(env.max_detection_range_m)
@@ -189,8 +189,7 @@ def test_agents_are_placed_in_world_metres(env):
     Purpose: The state holds the other vehicles relative to the ego. A viewer
     that drew those numbers directly would put every car near the origin, and
     one that rotated them with the wrong heading would put them in the
-    infield. The rotation happens once, here, so the GIF and the browser agree
-    by construction.
+    infield. The rotation happens once, here, so the browser never has to.
 
     Given: An ego at the origin facing +x, with a car 20 m ahead and 1.5 m left.
     When: The trace is built.
@@ -198,7 +197,7 @@ def test_agents_are_placed_in_world_metres(env):
 
     Test type: unit
     """
-    payload = build_racetrack_trace(env, _episode(), 0).payload
+    payload = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload
 
     first = payload["agents"][0]
     assert len(first) == 2
@@ -210,7 +209,7 @@ def test_a_rotated_ego_rotates_its_traffic(env):
     """The rotation uses the ego's own heading, not the world axes.
 
     Purpose: This is the failure that looks plausible: with the ego facing
-    along +y, a car "20 m ahead" is at (0, 20), and an exporter that skipped
+    along +y, a car "20 m ahead" is at (0, 20), and a visualizer that skipped
     the rotation would place it at (20, 0) — on the road, in front of nothing,
     and wrong by ninety degrees.
 
@@ -218,7 +217,7 @@ def test_a_rotated_ego_rotates_its_traffic(env):
     """
     turned = [_step(_state(5.0, 5.0, np.pi / 2, agents=((0, 20.0, 0.0, 1.0, 0.0),)), 0, None, 0.1)]
 
-    agents = build_racetrack_trace(env, turned, 0).payload["agents"][0]
+    agents = RacetrackVisualizer(env).build_trace(turned, episode_index=0).payload["agents"][0]
 
     assert (agents[0]["x"], agents[0]["y"]) == pytest.approx((5.0, 25.0))
 
@@ -243,7 +242,7 @@ def test_agent_velocity_is_absolute_not_relative_to_the_ego(env):
     ahead = (0, 20.0, 0.0, 1.0, 0.0)
     episode = [_step(_state(0.0, 0.0, 0.0, speed=8.0, agents=(ahead,)), 0, None, 0.1)]
 
-    agents = build_racetrack_trace(env, episode, 0).payload["agents"][0]
+    agents = RacetrackVisualizer(env).build_trace(episode, episode_index=0).payload["agents"][0]
 
     assert (agents[0]["vx"], agents[0]["vy"]) == pytest.approx((9.0, 0.0))
 
@@ -262,7 +261,7 @@ def test_a_vehicle_matching_the_ego_is_not_left_with_a_zero_velocity(env):
     matched = (0, 25.0, 0.0, 0.0, 0.0)
     episode = [_step(_state(0.0, 0.0, np.pi / 2, speed=8.0, agents=(matched,)), 0, None, 0.1)]
 
-    agents = build_racetrack_trace(env, episode, 0).payload["agents"][0]
+    agents = RacetrackVisualizer(env).build_trace(episode, episode_index=0).payload["agents"][0]
 
     assert (agents[0]["vx"], agents[0]["vy"]) == pytest.approx((0.0, 8.0), abs=1e-9)
     assert np.hypot(agents[0]["vx"], agents[0]["vy"]) == pytest.approx(8.0)
@@ -278,7 +277,7 @@ def test_detection_velocity_is_absolute_too(env):
 
     Test type: unit
     """
-    payload = build_racetrack_trace(env, _episode(), 0).payload
+    payload = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload
 
     # The first step's ego runs along +x at 8 m/s; the detection's relative
     # velocity is +1 m/s forward, so the reported vehicle is doing 9 m/s.
@@ -296,7 +295,7 @@ def test_an_empty_agent_slot_produces_no_vehicle(env):
 
     Test type: unit
     """
-    payload = build_racetrack_trace(env, _episode(), 0).payload
+    payload = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload
 
     assert len(payload["agents"][0]) == 2
     assert len(payload["agents"][-1]) == 1
@@ -313,7 +312,7 @@ def test_detections_stay_separate_from_the_truth(env):
 
     Test type: unit
     """
-    payload = build_racetrack_trace(env, _episode(), 0).payload
+    payload = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload
 
     assert len(payload["agents"][0]) == 2
     assert len(payload["detections"][0]) == 1
@@ -338,7 +337,9 @@ def test_a_step_with_no_reading_is_not_a_step_that_saw_nothing(env):
         _state(2.0, 0.0, 0.0, agents=((0, 30.0, 0.0, 1.0, 0.0),)), 1, _observation([]), 0.5
     )
 
-    payload = build_racetrack_trace(env, [empty_reading] + episode, 0).payload
+    payload = (
+        RacetrackVisualizer(env).build_trace([empty_reading] + episode, episode_index=0).payload
+    )
 
     assert payload["detections"][0] == []
     assert payload["detections"][-1] is None
@@ -348,7 +349,7 @@ def test_vehicle_footprint_matches_the_simulator(env):
     """The exported car size is highway-env's, not a remembered number.
 
     Purpose: ``VEHICLE_LENGTH_M`` and ``VEHICLE_WIDTH_M`` are written down in
-    the exporter because the payload has to carry them and the state does not.
+    the visualizer because the payload has to carry them and the state does not.
     Written down means they can drift from the simulator that actually places
     the cars, and a car drawn at the wrong size misreports every gap in the
     episode — including the one just before a crash.
@@ -361,7 +362,7 @@ def test_vehicle_footprint_matches_the_simulator(env):
     assert VEHICLE_LENGTH_M == pytest.approx(Vehicle.LENGTH)
     assert VEHICLE_WIDTH_M == pytest.approx(Vehicle.WIDTH)
 
-    world = build_racetrack_trace(env, _episode(), 0).payload["world"]
+    world = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload["world"]
     assert world["vehicle_length_m"] == pytest.approx(Vehicle.LENGTH)
     assert world["vehicle_width_m"] == pytest.approx(Vehicle.WIDTH)
 
@@ -371,8 +372,7 @@ def test_the_track_travels_only_with_its_own_scenario(env):
 
     Purpose: ``racetrack-v0``'s lane parameters describe one layout. Shipping
     them with an episode run elsewhere would draw a car cornering through
-    scenery that was not there, and the viewer has no way to tell. The GIF
-    renderer withholds the map on the same test.
+    scenery that was not there, and the viewer has no way to tell.
 
     Test type: unit
     """
@@ -380,8 +380,15 @@ def test_the_track_travels_only_with_its_own_scenario(env):
         discount_factor=0.95, max_tracked_agents=SLOTS, env_id="racetrack-v1"
     )
 
-    assert build_racetrack_trace(env, _episode(), 0).payload["world"]["lanes"]
-    assert build_racetrack_trace(elsewhere, _episode(), 0).payload["world"]["lanes"] is None
+    assert (
+        RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).payload["world"]["lanes"]
+    )
+    assert (
+        RacetrackVisualizer(elsewhere)
+        .build_trace(_episode(), episode_index=0)
+        .payload["world"]["lanes"]
+        is None
+    )
 
 
 def test_the_track_edges_stay_paired_and_keep_their_ends(env):
@@ -419,11 +426,17 @@ def test_the_outcome_is_read_from_the_recorded_channels(env):
     timed_out = _episode()
     timed_out[-1] = _step(timed_out[-1].state, None, None, None, {"time_limit": 1.0})
 
-    assert build_racetrack_trace(env, _episode(), 0).reach_terminal_state is True
-    assert build_racetrack_trace(env, timed_out, 0).reach_terminal_state is False
+    assert (
+        RacetrackVisualizer(env).build_trace(_episode(), episode_index=0).reach_terminal_state
+        is True
+    )
+    assert (
+        RacetrackVisualizer(env).build_trace(timed_out, episode_index=0).reach_terminal_state
+        is False
+    )
 
 
-def test_the_exporter_never_touches_the_live_world(env):
+def test_the_visualizer_never_touches_the_live_world(env):
     """Building a trace asks the session nothing.
 
     Purpose: This world is forward-only. A query during export would either
@@ -433,7 +446,7 @@ def test_the_exporter_never_touches_the_live_world(env):
     """
     env.is_terminal = lambda state: pytest.fail("is_terminal was queried during export")
 
-    trace = build_racetrack_trace(env, _episode(), 0)
+    trace = RacetrackVisualizer(env).build_trace(_episode(), episode_index=0)
 
     assert trace.reach_terminal_state is True
 
@@ -447,20 +460,21 @@ def test_an_empty_history_is_refused(env):
     Test type: unit
     """
     with pytest.raises(ValueError, match="empty history"):
-        build_racetrack_trace(env, [], 0)
+        RacetrackVisualizer(env).build_trace([], episode_index=0)
 
 
 def test_the_environment_hook_produces_the_same_trace(env):
-    """``build_episode_trace`` is the exporter, not a second implementation.
+    """``episode_visualizer()`` is the visualizer, not a second implementation.
 
-    Purpose: The episode loop calls the hook and the tests above call the
-    function. If those diverge, everything above is testing code nothing runs.
+    Purpose: The episode loop calls the hook and the tests above build the
+    visualizer directly. If those diverge, everything above is testing code
+    nothing runs.
 
     Test type: unit
     """
     episode = _episode()
 
-    hooked = env.build_episode_trace(episode, episode_index=7, policy_name="POMCPOW")
-    direct = build_racetrack_trace(env, episode, episode_index=7, policy_name="POMCPOW")
+    hooked = env.episode_visualizer().build_trace(episode, episode_index=7, policy_name="POMCPOW")
+    direct = RacetrackVisualizer(env).build_trace(episode, episode_index=7, policy_name="POMCPOW")
 
     assert hooked.to_dict() == direct.to_dict()

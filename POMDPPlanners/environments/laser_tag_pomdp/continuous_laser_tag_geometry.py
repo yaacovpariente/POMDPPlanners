@@ -38,8 +38,7 @@ import numpy as np
 # ``(i + 2) % 8``.  Never index one variant's observation with the other's beam
 # number.
 #
-# The renderer draws +x rightward and +y upward, which is why the continuous
-# GIF shows beam 0 pointing up and why the discrete-action variant names
+# Drawn with +x rightward and +y upward, beam 0 points up, which is why the discrete-action variant names
 # ``[0, 1]`` "up" -- those are screen directions, not grid compass directions.
 LASER_DIRECTIONS = np.array(
     [

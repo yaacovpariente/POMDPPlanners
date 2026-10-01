@@ -161,7 +161,9 @@ from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
 )
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualization.racetrack_visualizer import (
+        RacetrackVisualizer,
+    )
 
 
 _ROLE_NEXT_STATE = "next_state"
@@ -645,49 +647,20 @@ class RacetrackPOMDP(Environment):
             return None
         return self._session.render_frame()
 
-    def cache_visualization(self, history: List[Any], output_dir: Path, episode_index: int) -> None:
-        """Save a recorded episode without querying or advancing the live simulator."""
-        from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualizer import (
+    def episode_visualizer(self) -> "RacetrackVisualizer":
+        """Return the visualizer that writes this environment's traces.
+
+        The visualizer reads only the recorded episode, so it never queries or
+        advances the live simulator.
+        """
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualization.racetrack_visualizer import (
             RacetrackVisualizer,
         )
 
-        from POMDPPlanners.environments.racetrack_pomdp.racetrack_visualizer_track import (
-            reference_track_lanes,
-        )
-
-        # racetrack-v0's layout is fixed. Unknown scenarios must not inherit its road.
-        lanes = reference_track_lanes() if self.env_id == DEFAULT_ENV_ID else None
-        RacetrackVisualizer(self.max_tracked_agents, self.action_presets, lanes).save(
-            history, output_dir / f"agent_path_{episode_index}.gif"
-        )
-
-    def build_episode_trace(
-        self, history: List[Any], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``racetrack.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema and the reference track, and this module is imported by
-        # every Racetrack run including ones that never write anything.
-        # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.racetrack_pomdp.racetrack_trace_exporter import (
-            build_racetrack_trace,
-        )
-
-        return build_racetrack_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return RacetrackVisualizer(self)
 
     def _reset(self) -> np.ndarray:
         session = self._get_session()

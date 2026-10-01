@@ -25,6 +25,7 @@ import os
 
 from POMDPPlanners.reporting import pages
 from POMDPPlanners.reporting.artifacts import media_type_for
+from POMDPPlanners.reporting.scenes import scene_script_file
 from POMDPPlanners.reporting.store import RunIndex
 
 STATIC_ROOT = Path(__file__).resolve().parent / "static"
@@ -114,11 +115,22 @@ class Router:
     def _static(self, rest: Sequence[str]) -> Tuple[int, str, Union[bytes, Path]]:
         if not rest:
             return self._not_found("No static file named")
+        if rest[0] == "scenes":
+            return self._scene(rest[1:])
         target = (STATIC_ROOT / Path(*rest)).resolve()
         # A path that escapes the static root is a traversal attempt, not a
         # typo; it is refused rather than normalised.
         if not target.is_file() or STATIC_ROOT not in target.parents:
             return self._not_found("/".join(rest))
+        return HTTPStatus.OK, media_type_for(target), target
+
+    def _scene(self, rest: Sequence[str]) -> Tuple[int, str, Union[bytes, Path]]:
+        # Scene scripts live in the environments' folders, not under the
+        # static root; they are looked up by name, so a path cannot escape.
+        name = rest[0][: -len(".js")] if len(rest) == 1 and rest[0].endswith(".js") else ""
+        target = scene_script_file(name) if name else None
+        if target is None:
+            return self._not_found("scenes/" + "/".join(rest))
         return HTTPStatus.OK, media_type_for(target), target
 
     def _experiment(self, rest: Sequence[str]) -> Tuple[int, str, bytes]:

@@ -620,15 +620,15 @@ def test_save_camera_video_forwards_session_frames_and_fps(
     assert written["fps"] == 30
 
 
-def test_cache_visualization_writes_agent_path_named_mp4(
+def test_episode_visualizer_writes_agent_path_named_mp4(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """cache_visualization names the camera clip agent_path_<episode>.mp4.
+    """The episode visualizer names the camera clip agent_path_<episode>.mp4.
 
     Purpose: Validates the environment-owned visualization file-naming contract.
 
     Given: A record_camera=True world with buffered frames and an output directory
-    When: cache_visualization is called for episode index 7
+    When: The environment's episode visualizer writes episode index 7
     Then: The encoder is asked to write <output_dir>/agent_path_7.mp4
 
     Test type: unit
@@ -644,8 +644,9 @@ def test_cache_visualization_writes_agent_path_named_mp4(
     env = CarlaPOMDP(discount_factor=0.95, record_camera=True)
     env._session = _FakeCameraSession(frame_count=2)
 
-    env.cache_visualization(history=[], output_dir=tmp_path, episode_index=7)
+    path = env.episode_visualizer().write(history=[], output_dir=tmp_path, episode_index=7)
 
+    assert path == tmp_path / "agent_path_7.mp4"
     assert written["path"] == tmp_path / "agent_path_7.mp4"
 
 

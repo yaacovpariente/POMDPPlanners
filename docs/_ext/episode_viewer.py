@@ -7,7 +7,7 @@ Usage, in any page::
 
        Optional caption, parsed as reStructuredText.
 
-The argument is a trace JSON written by ``Environment.cache_trace``, relative
+The argument is a trace JSON written by an environment's ``TraceVisualizer``, relative
 to the page (or to the docs root when it starts with ``/``). The page gets an
 ``<iframe>`` onto a small generated page that runs the same viewer the results
 site runs: three.js, ``renderer-core.js``, the trace's scene module and
@@ -58,14 +58,15 @@ def _package_static() -> Path:
     return Path(pages.__file__).resolve().parent / "static"
 
 
-def _scene_file(payload_kind: str) -> Path:
-    """The scene module that draws ``payload_kind``, by the results site's rule."""
-    from POMDPPlanners.reporting.pages import (  # pylint: disable=import-outside-toplevel
-        scene_script_path,
+def _scene_file(payload_kind: str) -> Path | None:
+    """The scene module that draws ``payload_kind``, from its environment's folder."""
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.core.simulation.episode_visualizers import scene_name
+    from POMDPPlanners.reporting.scenes import (  # pylint: disable=import-outside-toplevel
+        scene_script_file,
     )
 
-    relative = scene_script_path(payload_kind, static_root="").lstrip("/")
-    return _package_static() / relative
+    return scene_script_file(scene_name(payload_kind))
 
 
 class episode_viewer(nodes.General, nodes.Element):  # pylint: disable=invalid-name
@@ -118,10 +119,10 @@ class EpisodeViewerDirective(SphinxDirective):
         kind = trace.get("payload_kind") if isinstance(trace, dict) else None
         if not isinstance(kind, str) or not kind:
             raise ExtensionError(f"{where}: {relative} has no payload_kind; not a trace.")
-        if not _scene_file(kind).is_file():
+        if _scene_file(kind) is None:
             raise ExtensionError(
-                f"{where}: {relative} has payload kind {kind!r}, and no scene module "
-                f"draws it ({_scene_file(kind).name} is missing)."
+                f"{where}: {relative} has payload kind {kind!r}, and no environment "
+                "ships a scene module that draws it."
             )
 
         stem = source.stem
@@ -217,6 +218,15 @@ def _write_assets(app: Sphinx, exception: Exception | None) -> None:
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(static / "viewer", out / "viewer")
+    # Scene modules live in the environments' folders; they are served under
+    # one flat directory, as the results site serves them.
+    from POMDPPlanners.reporting.scenes import (  # pylint: disable=import-outside-toplevel
+        scene_scripts,
+    )
+
+    (out / "scenes").mkdir()
+    for name, path in scene_scripts().items():
+        shutil.copy2(path, out / "scenes" / f"{name}.js")
     (out / "vendor").mkdir(parents=True)
     shutil.copy2(static / "vendor" / "three.min.js", out / "vendor" / "three.min.js")
     shutil.copy2(static / "site.css", out / "site.css")

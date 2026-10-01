@@ -33,7 +33,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
@@ -41,7 +41,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
 )
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
+        TigerVisualizer,
+    )
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
@@ -278,45 +280,16 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def cache_history_artifacts(self, history: History, cache_path: Path) -> None:
         pass
 
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``tiger.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every Tiger run
-        # including ones that never write anything.
+    def episode_visualizer(self) -> "TigerVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.trace_exporter import (
-            build_tiger_trace,
-        )
-
-        return build_tiger_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Save the recorded episode without sampling the Tiger model."""
         from POMDPPlanners.environments.tiger_pomdp.tiger_visualization.tiger_visualizer import (
             TigerVisualizer,
         )
 
-        TigerVisualizer().create_visualization(
-            history, output_dir / f"agent_path_{episode_index}.gif"
-        )
+        return TigerVisualizer(self)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2

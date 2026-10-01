@@ -37,6 +37,11 @@ from POMDPPlanners.core.simulation.traces import (
     envelope_steps,
     to_jsonable,
 )
+from POMDPPlanners.core.simulation.episode_visualizers import (
+    EpisodeVisualizer,
+    TraceVisualizer,
+    VideoVisualizer,
+)
 from POMDPPlanners.core.simulation.visualizers import ExperimentVisualizer
 
 __all__ = [
@@ -64,5 +69,8 @@ __all__ = [
     "TaskManager",
     "TaskManagerExternalDB",
     "ExperimentVisualizer",
+    "EpisodeVisualizer",
+    "TraceVisualizer",
+    "VideoVisualizer",
     "history_to_discounted_return_value",
 ]

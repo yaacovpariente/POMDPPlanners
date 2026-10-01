@@ -1,20 +1,14 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the T-Maze episode trace exporter and its viewer wiring.
+"""Tests for the T-Maze episode visualizer and its viewer wiring.
 
-Two things are checked here that no other environment's trace has to check:
-
-* the **cue phase** survives into the payload, named rather than left as the
-  model's float. It is the one field the browser viewer cannot do without —
-  T-Maze is a memory task, and a replay that does not say when the single
-  reading happened shows an agent walking a corridor for no reason;
-* the exporter does not disturb the GIF. The renderer is shared with the rest
-  of the Maze family and its output is pinned by a golden hash, so the check is
-  that rendering the same episode before and after a trace is built produces
-  byte-identical bytes.
+The one thing checked here that no other environment's trace has to check is
+that the **cue phase** survives into the payload, named rather than left as the
+model's float. It is the one field the browser viewer cannot do without —
+T-Maze is a memory task, and a replay that does not say when the single
+reading happened shows an agent walking a corridor for no reason.
 """
 
-import hashlib
 from pathlib import Path
 from typing import List
 
@@ -24,7 +18,6 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
-from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     CUE_EMITTING,
     GOAL_LEFT,
@@ -36,21 +29,14 @@ from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     TMazePOMDP,
     create_t_maze_state,
 )
-from POMDPPlanners.environments.maze_pomdp.maze_visualization.t_maze_trace_exporter import (
+from POMDPPlanners.environments.maze_pomdp.maze_visualization.t_maze_visualizer import (
     T_MAZE_PAYLOAD_KIND,
-    build_t_maze_trace,
+    TMazeVisualizer,
 )
-from POMDPPlanners.reporting.pages import scene_script_path
+from POMDPPlanners.reporting.scenes import scene_script_url
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import t_maze_pinned_kwargs
 
-SCENE_MODULE = (
-    Path(__file__).resolve().parents[1].parent
-    / "reporting"
-    / "static"
-    / "viewer"
-    / "scenes"
-    / "t-maze.js"
-)
+SCENE_MODULE = TMazeVisualizer.scene_script()
 
 
 def _belief(state: np.ndarray, left_weight: float) -> WeightedParticleBelief:
@@ -140,7 +126,7 @@ def test_trace_world_comes_from_the_environment_instance(env: TMazePOMDP):
     configured = TMazePOMDP(
         discount_factor=0.95, **t_maze_pinned_kwargs(stem_length=5, arm_length=2)
     )
-    trace = build_t_maze_trace(configured, _episode(configured), episode_index=0)
+    trace = TMazeVisualizer(configured).build_trace(_episode(configured), episode_index=0)
 
     world = trace.payload["world"]
     assert trace.payload_kind == T_MAZE_PAYLOAD_KIND
@@ -169,7 +155,7 @@ def test_trace_carries_the_cue_phase_of_every_state(env: TMazePOMDP):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_t_maze_trace(env, history, episode_index=0)
+    trace = TMazeVisualizer(env).build_trace(history, episode_index=0)
 
     phases = trace.payload["cue_phases"]
     assert len(phases) == len(history)
@@ -199,7 +185,7 @@ def test_cue_reading_is_the_observation_received_not_the_true_side(env: TMazePOM
     Test type: unit
     """
     history = _episode(env, goal_side=GOAL_LEFT, cue_observation=OBSERVATION_RIGHT_CUE)
-    trace = build_t_maze_trace(env, history, episode_index=0)
+    trace = TMazeVisualizer(env).build_trace(history, episode_index=0)
 
     assert trace.payload["cue_reading"] == "right"
     assert trace.payload["goal_side"] == "left"
@@ -208,7 +194,7 @@ def test_cue_reading_is_the_observation_received_not_the_true_side(env: TMazePOM
 def test_belief_is_serialized_by_core_and_sums_to_the_goal_side(env: TMazePOMDP):
     """The belief comes back as core's particle payload, keeping the goal side.
 
-    Purpose: The exporter writes nothing about belief itself. What it must not
+    Purpose: The visualizer writes nothing about belief itself. What it must not
     do is lose the slot the viewer sums over: P(goal = left) is read out of the
     particles, so a payload without them would leave the page with no belief.
 
@@ -219,7 +205,7 @@ def test_belief_is_serialized_by_core_and_sums_to_the_goal_side(env: TMazePOMDP)
 
     Test type: unit
     """
-    trace = build_t_maze_trace(env, _episode(env), episode_index=0)
+    trace = TMazeVisualizer(env).build_trace(_episode(env), episode_index=0)
     slot = trace.payload["world"]["state_slots"]["goal_side"]
     left_value = trace.payload["world"]["goal_left_value"]
 
@@ -239,25 +225,25 @@ def test_belief_is_serialized_by_core_and_sums_to_the_goal_side(env: TMazePOMDP)
 
 
 def test_environment_writes_the_trace_and_it_round_trips(env: TMazePOMDP, tmp_path: Path):
-    """cache_trace writes a file the schema reads back unchanged.
+    """The environment's visualizer writes a file the schema reads back unchanged.
 
     Purpose: The file is the interface between Python and the browser viewer,
     so a field that does not survive JSON is a field the viewer never sees.
 
     Given: An episode on a T-Maze.
-    When: cache_trace writes it and EpisodeTrace reads it back.
+    When: The visualizer writes it and EpisodeTrace reads it back.
     Then: The envelope and the T-Maze payload match what was built.
 
     Test type: integration
     """
     history = _episode(env)
-    written = env.cache_trace(
+    written = env.episode_visualizer().write(
         history=history, output_dir=tmp_path, episode_index=3, policy_name="a_policy"
     )
 
     assert written is not None
     reloaded = EpisodeTrace.read(written)
-    original = build_t_maze_trace(env, history, episode_index=3, policy_name="a_policy")
+    original = TMazeVisualizer(env).build_trace(history, episode_index=3, policy_name="a_policy")
 
     assert reloaded.payload_kind == T_MAZE_PAYLOAD_KIND
     assert reloaded.episode_index == 3
@@ -281,35 +267,7 @@ def test_empty_history_is_refused(env: TMazePOMDP):
     Test type: unit
     """
     with pytest.raises(ValueError):
-        build_t_maze_trace(env, [], episode_index=0)
-
-
-def test_building_a_trace_leaves_the_gif_bytes_unchanged(env: TMazePOMDP, tmp_path: Path):
-    """The GIF renders byte-identically either side of a trace export.
-
-    Purpose: The Maze renderer's output is pinned by a golden hash, and the
-    exporter reads the same histories and the same belief objects. An exporter
-    that normalised a belief in place, or consumed an iterator, would move that
-    hash and nothing else would say so.
-
-    Given: One deterministic T-Maze episode.
-    When: The GIF is rendered, a trace is built from the same history, and the
-        GIF is rendered again.
-    Then: The two GIFs are byte-identical.
-
-    Test type: integration
-    """
-    history = _episode(env)
-
-    before = tmp_path / "before.gif"
-    MazeVisualizer(env).create_visualization(history, before)
-    first = hashlib.sha256(before.read_bytes()).hexdigest()
-
-    build_t_maze_trace(env, history, episode_index=0)
-
-    after = tmp_path / "after.gif"
-    MazeVisualizer(env).create_visualization(history, after)
-    assert hashlib.sha256(after.read_bytes()).hexdigest() == first
+        TMazeVisualizer(env).build_trace([], episode_index=0)
 
 
 def test_the_scene_module_is_where_the_payload_kind_resolves():
@@ -325,7 +283,7 @@ def test_the_scene_module_is_where_the_payload_kind_resolves():
 
     Test type: unit
     """
-    assert scene_script_path(T_MAZE_PAYLOAD_KIND) == "/static/viewer/scenes/t-maze.js"
+    assert scene_script_url(T_MAZE_PAYLOAD_KIND) == "/static/scenes/t_maze.js"
     assert SCENE_MODULE.is_file()
     source = SCENE_MODULE.read_text(encoding="utf-8")
     assert f'V.scenes["{T_MAZE_PAYLOAD_KIND}"]' in source

@@ -12,12 +12,10 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_po
 from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
     SAFETY_ANT_VELOCITY_PAYLOAD_KIND,
     SafeAntVelocityVisualizer,
-    build_safety_ant_velocity_trace,
 )
 
 __all__ = [
     "SAFETY_ANT_VELOCITY_PAYLOAD_KIND",
     "SafeAntVelocityPOMDP",
     "SafeAntVelocityVisualizer",
-    "build_safety_ant_velocity_trace",
 ]
