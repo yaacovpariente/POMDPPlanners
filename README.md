@@ -9,11 +9,37 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
 <p align="center">
   <img src="docs/images/carla_chase_camera.png" alt="CARLA autonomous driving environment rendered by CarlaPOMDP's chase camera" width="49%">
   <img src="docs/images/isaac_lab_franka_reach.png" alt="Isaac Sim Franka reach task rendered by IsaacLabPOMDP's viewport camera" width="49%">
-  <img src="docs/images/classic_environments.jpg" alt="3D episode replays of the Firefighting, Capture the Flag, Light-Dark and Push environments" width="98.5%">
+  <img src="docs/images/firefighting.jpg" alt="3D episode replay of the Firefighting environment" width="49%">
+  <img src="docs/images/capture_the_flag.jpg" alt="3D episode replay of the Capture the Flag environment" width="49%">
+  <img src="docs/images/light_dark.jpg" alt="3D episode replay of the Light-Dark environment" width="49%">
+  <img src="docs/images/push.jpg" alt="3D episode replay of the Push environment" width="49%">
 </p>
 <p align="center">
   <em>Rendered by the package itself. First row: the <a href="POMDPPlanners/environments/carla_pomdp">CARLA</a> driving environment (left) and the <a href="POMDPPlanners/environments/isaac_lab_pomdp">Isaac Sim / IsaacLab</a> Franka reach environment (right). Realistic environments are integrated from the open-source simulators <a href="https://github.com/carla-simulator/carla">CARLA</a> and <a href="https://github.com/isaac-sim/IsaacLab">NVIDIA Isaac Lab</a> — credit to their authors. Below: environments implemented by the package: <a href="POMDPPlanners/environments/firefighting_pomdp">Firefighting</a> and <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a> (second row), <a href="POMDPPlanners/environments/light_dark_pomdp">Light-Dark</a> and <a href="POMDPPlanners/environments/push_pomdp">Push</a> (third row).</em>
 </p>
+<details>
+<summary>Show more environments</summary>
+<br>
+<p align="center">
+  <img src="docs/images/tiger.jpg" alt="3D episode replay of the Tiger environment" width="49%">
+  <img src="docs/images/rock_sample.jpg" alt="3D episode replay of the RockSample environment" width="49%">
+  <img src="docs/images/laser_tag.jpg" alt="3D episode replay of the LaserTag environment" width="49%">
+  <img src="docs/images/pacman.jpg" alt="3D episode replay of the PacMan environment" width="49%">
+  <img src="docs/images/battleship.jpg" alt="3D episode replay of the Battleship environment" width="49%">
+  <img src="docs/images/maze.jpg" alt="3D episode replay of the Maze environment" width="49%">
+  <img src="docs/images/t_maze.jpg" alt="3D episode replay of the T-Maze environment" width="49%">
+  <img src="docs/images/snake.jpg" alt="3D episode replay of the Snake environment" width="49%">
+  <img src="docs/images/chicheck_invaders.jpg" alt="3D episode replay of the Chicheck Invaders environment" width="49%">
+  <img src="docs/images/occupancy_grid_mapping.jpg" alt="3D episode replay of the Occupancy Grid Mapping environment" width="49%">
+  <img src="docs/images/cartpole.jpg" alt="3D episode replay of the CartPole environment" width="49%">
+  <img src="docs/images/mountain_car.jpg" alt="3D episode replay of the Mountain Car environment" width="49%">
+  <img src="docs/images/safety_ant_velocity.jpg" alt="3D episode replay of the Safety Ant Velocity environment" width="49%">
+  <img src="docs/images/racetrack.jpg" alt="3D episode replay of the Racetrack environment" width="49%">
+</p>
+<p align="center">
+  <em>Row by row: <a href="POMDPPlanners/environments/tiger_pomdp">Tiger</a> and <a href="POMDPPlanners/environments/rock_sample_pomdp">RockSample</a>; <a href="POMDPPlanners/environments/laser_tag_pomdp">LaserTag</a> and <a href="POMDPPlanners/environments/pacman_pomdp">PacMan</a>; <a href="POMDPPlanners/environments/battleship_pomdp">Battleship</a> and <a href="POMDPPlanners/environments/maze_pomdp">Maze</a>; <a href="POMDPPlanners/environments/t_maze_pomdp">T-Maze</a> and <a href="POMDPPlanners/environments/snake_pomdp">Snake</a>; <a href="POMDPPlanners/environments/chicheck_invaders_pomdp">Chicheck Invaders</a> and <a href="POMDPPlanners/environments/occupancy_grid_mapping_pomdp">Occupancy Grid Mapping</a>; <a href="POMDPPlanners/environments/cartpole_pomdp">CartPole</a> and <a href="POMDPPlanners/environments/mountain_car_pomdp">Mountain Car</a>; <a href="POMDPPlanners/environments/safety_ant_velocity_pomdp">Safety Ant Velocity</a> and <a href="POMDPPlanners/environments/racetrack_pomdp">Racetrack</a>.</em>
+</p>
+</details>
 
 ## Main Features
 
