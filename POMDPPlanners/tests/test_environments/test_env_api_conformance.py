@@ -12,7 +12,7 @@ to this file, were tested for at most a handful of environments:
   observations that ``is_equal_observation`` considers equal.
 * batch/single agreement — ``reward_batch`` must agree with a loop over
   ``reward``, ``sample_next_state_batch`` must produce the same state
-  type/shape as ``sample_next_state``, and
+  type/shape as ``sample_next_state`` and sample the same distribution, and
   ``observation_log_probability_single`` must agree with the batched
   ``observation_log_probability``. Planners mix the two paths freely
   (particle filters take the batch path, tree expansion the single
@@ -108,6 +108,9 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_environments._sample_distribution_checks import (
+    assert_same_distribution,
+)
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     battleship_pinned_kwargs,
     capture_the_flag_pinned_kwargs,
@@ -336,8 +339,9 @@ HASH_OBSERVATION_BROKEN_ENVS = frozenset(
 
 
 # Envs whose ``sample_next_state_batch`` disagrees with the per-state
-# ``sample_next_state`` on the *type* of the states it produces. Marked
-# ``xfail(strict=True)`` so the gap is documented until the fix lands.
+# ``sample_next_state`` on the *type* of the states it produces or on their
+# distribution. Marked ``xfail(strict=True)`` so the gap is documented until
+# the fix lands.
 SAMPLE_NEXT_STATE_BATCH_BROKEN_ENVS: frozenset = frozenset()
 
 
@@ -842,56 +846,115 @@ def test_reward_batch_agrees_with_looped_reward(env_builder: EnvBuilder) -> None
     )
 
 
+# Draws per source state in the batch/single distribution comparison. Enough to
+# see a slip or noise term of a few percent; small enough that the scalar loop
+# over every registered env stays in the low seconds.
+_BATCH_DISTRIBUTION_DRAWS = 400
+
+
+def _states_as_rows(batched: List[Any], singles: List[Any]) -> Tuple[np.ndarray, np.ndarray]:
+    """Encode two lists of states as numeric rows for a distribution comparison.
+
+    Numeric states (arrays, ints) become their flattened values. Any other
+    state -- a Tiger label, a tuple of mixed types -- becomes a category index
+    shared by both lists, so the comparison needs nothing from the env.
+    """
+    try:
+        return (
+            np.stack([np.asarray(s, dtype=np.float64).ravel() for s in batched]),
+            np.stack([np.asarray(s, dtype=np.float64).ravel() for s in singles]),
+        )
+    except (TypeError, ValueError):
+        labels = {
+            key: index for index, key in enumerate(sorted({repr(s) for s in batched + singles}))
+        }
+        return (
+            np.array([[labels[repr(s)]] for s in batched], dtype=np.float64),
+            np.array([[labels[repr(s)]] for s in singles], dtype=np.float64),
+        )
+
+
 @pytest.mark.parametrize(
     "env_builder",
     _params_with_xfail(
         SAMPLE_NEXT_STATE_BATCH_BROKEN_ENVS,
-        "sample_next_state_batch produces states of a different shape or "
-        "dtype than sample_next_state",
+        "sample_next_state_batch samples a different state type or a different "
+        "transition distribution than sample_next_state",
     ),
 )
 def test_sample_next_state_batch_matches_single_sample(env_builder: EnvBuilder) -> None:
-    """``sample_next_state_batch`` produces the same state type as ``sample_next_state``.
+    """``sample_next_state_batch`` samples the same law as ``sample_next_state``.
 
     Purpose: Particle filters take the batch path while tree expansion
-        takes the single path, and the two feed the same belief. If the
-        batch path returns a different shape or dtype the belief silently
-        holds two incompatible kinds of particle.
+        takes the single path, and the two feed the same belief. Several
+        envs route the batch path through a native kernel or a vectorized
+        updater -- a second implementation of the dynamics. If it returns a
+        different shape or dtype the belief silently holds two incompatible
+        kinds of particle; if it samples a different distribution, the belief
+        and the search model two different worlds.
 
-    Given: Four states from the initial state distribution and one valid
-        action, with all RNGs re-seeded identically before each path.
-    When: ``sample_next_state_batch(states, action)`` and a loop over
-        ``sample_next_state(state, action)`` are both evaluated.
-    Then: The two results have the same length, and the first element of
-        each has the same shape and dtype. Values are not compared — the
-        two paths legitimately consume randomness differently.
+    Given: A state from the initial distribution and states reached by a
+        short random rollout, each with a random valid action, each state
+        repeated ``_BATCH_DISTRIBUTION_DRAWS`` times.
+    When: ``sample_next_state_batch`` runs once on the repeated block and
+        ``sample_next_state`` runs once per row, from independent seeds.
+    Then: The first elements share shape and dtype, and the two samples have
+        the same distribution: deterministic components agree exactly, the
+        rest pass a chi-square or Kolmogorov-Smirnov test at a fixed
+        family-wise level. Values are not compared draw for draw -- the two
+        paths legitimately consume randomness differently.
 
     Test type: integration
     """
     env = env_builder()
     _seed_all(0)
-    states = env.initial_state_dist().sample(4)
-    action = _sample_action(env)
+    action_rng = np.random.default_rng(0)
+    sources = []
+    state = env.initial_state_dist().sample()[0]
+    for _ in range(4):
+        if env.is_terminal(state):
+            break
+        sources.append((state, _random_action(env, action_rng)))
+        state = env.sample_next_state(state=deepcopy(state), action=_random_action(env, action_rng))
 
-    _seed_all(1)
-    batched = env.sample_next_state_batch(states, action)
-    _seed_all(1)
-    singles = [env.sample_next_state(state=state, action=action) for state in states]
+    for source, action in sources[::2]:
+        block = [deepcopy(source) for _ in range(_BATCH_DISTRIBUTION_DRAWS)]
+        if isinstance(source, np.ndarray):
+            block = np.stack(block)
+        _seed_all(1)
+        batched = list(env.sample_next_state_batch(block, action))
+        _seed_all(2)
+        singles = [
+            env.sample_next_state(state=deepcopy(source), action=action)
+            for _ in range(_BATCH_DISTRIBUTION_DRAWS)
+        ]
 
-    assert len(batched) == len(singles), (
-        f"{type(env).__name__}.sample_next_state_batch returned {len(batched)} states "
-        f"for {len(singles)} input particles"
-    )
-    batched_first = np.asarray(batched[0])
-    single_first = np.asarray(singles[0])
-    assert batched_first.shape == single_first.shape, (
-        f"{type(env).__name__}: batch state shape {batched_first.shape} != "
-        f"single state shape {single_first.shape}"
-    )
-    assert batched_first.dtype == single_first.dtype, (
-        f"{type(env).__name__}: batch state dtype {batched_first.dtype} != "
-        f"single state dtype {single_first.dtype}"
-    )
+        assert len(batched) == len(singles), (
+            f"{type(env).__name__}.sample_next_state_batch returned {len(batched)} states "
+            f"for {len(singles)} input particles"
+        )
+        batched_first = np.asarray(batched[0])
+        single_first = np.asarray(singles[0])
+        assert batched_first.shape == single_first.shape, (
+            f"{type(env).__name__}: batch state shape {batched_first.shape} != "
+            f"single state shape {single_first.shape}"
+        )
+        # A string state's dtype carries its length ("<U10" vs "<U11"), so only
+        # the kind is compared there; numeric dtypes must match exactly.
+        string_kinds = "USO"
+        assert (
+            batched_first.dtype.kind == single_first.dtype.kind
+            if batched_first.dtype.kind in string_kinds
+            else batched_first.dtype == single_first.dtype
+        ), (
+            f"{type(env).__name__}: batch state dtype {batched_first.dtype} != "
+            f"single state dtype {single_first.dtype}"
+        )
+        batched_rows, single_rows = _states_as_rows(batched, singles)
+        try:
+            assert_same_distribution(batched_rows, single_rows, label_a="batch", label_b="single")
+        except AssertionError as error:
+            raise AssertionError(f"{type(env).__name__} action={action!r}: {error}") from None
 
 
 @pytest.mark.parametrize("env_builder", _all_env_params())
