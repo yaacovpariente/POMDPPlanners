@@ -174,16 +174,10 @@ The run writes its results under `results/`. Open them in the local results
 site:
 
 ```bash
-pomdp-report serve results
+pomdp-report serve results --port 9000
 ```
 
-Then browse to http://127.0.0.1:8765. To serve on another port, pass `--port`
-and browse to that port instead:
-
-```bash
-pomdp-report serve results --port 9000  # then open http://127.0.0.1:9000
-```
-
+Then browse to http://127.0.0.1:9000, using the port you passed to `--port`.
 Open the `LightDark_Evaluation` experiment to compare the two planners side by
 side on expected return and task completion rate, and replay any episode in 3D.
 
