@@ -73,7 +73,9 @@
 
     if (entry.card.hidden) {
       entry.card.hidden = false;
-      var recorded = entry.card.parentNode.querySelector(".thumb-recorded");
+      // An episode with no recording was served a "No recording" placeholder
+      // instead; the drawn scene replaces that too.
+      var recorded = entry.card.parentNode.querySelector(".thumb-recorded, .thumb-empty");
       if (recorded) recorded.hidden = true;
     }
   }
