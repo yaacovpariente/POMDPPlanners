@@ -1392,10 +1392,20 @@ inline double reward_batch_base_row(const double *state, const double *next_stat
     double reward = step_penalty;
     const int new_pac_row = static_cast<int>(next_state[idx_pac_row]);
     const int new_pac_col = static_cast<int>(next_state[idx_pac_col]);
+    const int prev_pac_row = static_cast<int>(state[idx_pac_row]);
+    const int prev_pac_col = static_cast<int>(state[idx_pac_col]);
+    // Same-cell collision OR pacman-ghost swap, as in apply_transition and
+    // simulate_rollout: a ghost that was on pacman's new cell and ends the
+    // step on pacman's old cell has passed through pacman.
     for (int g = 0; g < num_ghosts; ++g) {
         const int gr = static_cast<int>(next_state[idx_ghosts_start + 2 * g]);
         const int gc = static_cast<int>(next_state[idx_ghosts_start + 2 * g + 1]);
-        if (gr == new_pac_row && gc == new_pac_col) {
+        const int prev_gr = static_cast<int>(state[idx_ghosts_start + 2 * g]);
+        const int prev_gc = static_cast<int>(state[idx_ghosts_start + 2 * g + 1]);
+        const bool same_cell = (gr == new_pac_row && gc == new_pac_col);
+        const bool swap = (prev_gr == new_pac_row && prev_gc == new_pac_col &&
+                           gr == prev_pac_row && gc == prev_pac_col);
+        if (same_cell || swap) {
             reward += ghost_collision_penalty;
             break;
         }

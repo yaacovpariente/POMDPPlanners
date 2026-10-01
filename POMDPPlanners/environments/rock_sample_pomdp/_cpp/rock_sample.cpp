@@ -737,10 +737,16 @@ class RockSampleObservationCpp {
     py::array_t<double> batch_log_likelihood(
         const py::array_t<double, py::array::c_style | py::array::forcecast> &next_particles,
         int observation) const {
-        const std::size_t state_dim = static_cast<std::size_t>(2 + env_.num_rocks);
-        if (next_particles.ndim() != 2 ||
-            static_cast<std::size_t>(next_particles.shape(1)) != state_dim) {
-            throw std::invalid_argument("next_particles must have shape (N, 2 + num_rocks)");
+        // Accepts the canonical (N, 2 + num_rocks) shape or, for hazard-terminal
+        // envs, (N, 2 + num_rocks + 1) with a trailing terminal slot. The slot
+        // is not read: the scalar ``probability`` path ignores it too, so a
+        // hazard-terminated particle is scored like a live one at its position.
+        const std::size_t base_dim = static_cast<std::size_t>(2 + env_.num_rocks);
+        const std::size_t state_dim =
+            (next_particles.ndim() == 2) ? static_cast<std::size_t>(next_particles.shape(1)) : 0;
+        if (next_particles.ndim() != 2 || (state_dim != base_dim && state_dim != base_dim + 1)) {
+            throw std::invalid_argument(
+                "next_particles must have shape (N, 2 + num_rocks) or (N, 2 + num_rocks + 1)");
         }
         const auto n_rows = static_cast<std::size_t>(next_particles.shape(0));
         auto out = py::array_t<double>(static_cast<py::ssize_t>(n_rows));

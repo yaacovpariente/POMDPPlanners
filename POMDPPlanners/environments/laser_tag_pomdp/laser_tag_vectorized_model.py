@@ -193,7 +193,9 @@ class LaserTagVectorizedModel:
         tag_success = (actions == _TAG_ACTION) & self._same_cell(robot, opp)
         opp_next = torch.where(tag_success[:, None], opp, opp_next)
         terminal = tag_success.to(self.dtype)[:, None]
-        return torch.cat([robot_next, opp_next, terminal], dim=1)
+        stepped = torch.cat([robot_next, opp_next, terminal], dim=1)
+        # A terminal row is absorbing, as in the scalar env and the updater.
+        return torch.where((states[:, 4] > 0.5)[:, None], states, stepped)
 
     def sample_observations(self, next_states: Tensor, actions: Tensor) -> Tensor:
         del actions  # observations do not depend on the action in LaserTag.

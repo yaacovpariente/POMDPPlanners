@@ -54,7 +54,7 @@ import importlib
 import random
 from copy import deepcopy
 from enum import Enum
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 import pytest
@@ -108,6 +108,10 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import TMazePOMDP
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakePOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_environments._env_config_variants import (
+    base_id_of,
+    config_variant_builders,
+)
 from POMDPPlanners.tests.test_environments._sample_distribution_checks import (
     assert_same_distribution,
 )
@@ -143,44 +147,46 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
 EnvBuilder = Callable[[], Environment]
 
 
-def _build_tiger() -> TigerPOMDP:
-    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs())
+def _build_tiger(**overrides: Any) -> TigerPOMDP:
+    return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs(**overrides))
 
 
-def _build_sanity() -> SanityPOMDP:
-    return SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs())
+def _build_sanity(**overrides: Any) -> SanityPOMDP:
+    return SanityPOMDP(discount_factor=0.95, **sanity_pinned_kwargs(**overrides))
 
 
-def _build_cartpole() -> CartPolePOMDP:
+def _build_cartpole(**overrides: Any) -> CartPolePOMDP:
     return CartPolePOMDP(
-        discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs()
+        discount_factor=0.95, noise_cov=np.eye(4) * 0.1, **cartpole_pinned_kwargs(**overrides)
     )
 
 
-def _build_mountain_car() -> MountainCarPOMDP:
-    return MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
+def _build_mountain_car(**overrides: Any) -> MountainCarPOMDP:
+    return MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs(**overrides))
 
 
-def _build_push() -> PushPOMDP:
-    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs())
+def _build_push(**overrides: Any) -> PushPOMDP:
+    return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(**overrides))
 
 
-def _build_continuous_push() -> ContinuousPushPOMDP:
-    return ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs())
+def _build_continuous_push(**overrides: Any) -> ContinuousPushPOMDP:
+    return ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs(**overrides))
 
 
-def _build_continuous_push_discrete() -> ContinuousPushPOMDPDiscreteActions:
+def _build_continuous_push_discrete(**overrides: Any) -> ContinuousPushPOMDPDiscreteActions:
     return ContinuousPushPOMDPDiscreteActions(
-        discount_factor=0.95, **continuous_push_discrete_actions_pinned_kwargs()
+        discount_factor=0.95, **continuous_push_discrete_actions_pinned_kwargs(**overrides)
     )
 
 
-def _build_battleship() -> BattleshipPOMDP:
-    return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs())
+def _build_battleship(**overrides: Any) -> BattleshipPOMDP:
+    return BattleshipPOMDP(discount_factor=0.99, **battleship_pinned_kwargs(**overrides))
 
 
-def _build_chicheck_invaders() -> ChicheckInvadersPOMDP:
-    return ChicheckInvadersPOMDP(discount_factor=0.95, **chicheck_invaders_pinned_kwargs())
+def _build_chicheck_invaders(**overrides: Any) -> ChicheckInvadersPOMDP:
+    return ChicheckInvadersPOMDP(
+        discount_factor=0.95, **chicheck_invaders_pinned_kwargs(**overrides)
+    )
 
 
 def _build_chicheck_invaders_fully_observable() -> ChicheckInvadersPOMDP:
@@ -193,8 +199,10 @@ def _build_chicheck_invaders_fully_observable() -> ChicheckInvadersPOMDP:
     )
 
 
-def _build_occupancy_grid_mapping() -> OccupancyGridMappingPOMDP:
-    return OccupancyGridMappingPOMDP(discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs())
+def _build_occupancy_grid_mapping(**overrides: Any) -> OccupancyGridMappingPOMDP:
+    return OccupancyGridMappingPOMDP(
+        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs(**overrides)
+    )
 
 
 def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMDP:
@@ -209,8 +217,8 @@ def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMD
     )
 
 
-def _build_firefighting() -> FirefightingPOMDP:
-    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
+def _build_firefighting(**overrides: Any) -> FirefightingPOMDP:
+    return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs(**overrides))
 
 
 def _build_firefighting_three_robots() -> FirefightingPOMDP:
@@ -223,69 +231,84 @@ def _build_firefighting_three_robots() -> FirefightingPOMDP:
     )
 
 
-def _build_snake() -> SnakePOMDP:
-    return SnakePOMDP(discount_factor=0.98, **snake_pinned_kwargs())
+def _build_snake(**overrides: Any) -> SnakePOMDP:
+    return SnakePOMDP(discount_factor=0.98, **snake_pinned_kwargs(**overrides))
 
 
-def _build_rock_sample() -> RockSamplePOMDP:
-    return RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
+def _build_rock_sample(**overrides: Any) -> RockSamplePOMDP:
+    return RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs(**overrides))
 
 
-def _build_discrete_light_dark() -> DiscreteLightDarkPOMDP:
-    return DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
+def _build_discrete_light_dark(**overrides: Any) -> DiscreteLightDarkPOMDP:
+    return DiscreteLightDarkPOMDP(
+        discount_factor=0.95, **discrete_light_dark_pinned_kwargs(**overrides)
+    )
 
 
-def _build_continuous_light_dark() -> ContinuousLightDarkPOMDP:
-    return ContinuousLightDarkPOMDP(discount_factor=0.95, **continuous_light_dark_pinned_kwargs())
+def _build_continuous_light_dark(**overrides: Any) -> ContinuousLightDarkPOMDP:
+    return ContinuousLightDarkPOMDP(
+        discount_factor=0.95, **continuous_light_dark_pinned_kwargs(**overrides)
+    )
 
 
-def _build_continuous_light_dark_discrete() -> ContinuousLightDarkPOMDPDiscreteActions:
+def _build_continuous_light_dark_discrete(
+    **overrides: Any,
+) -> ContinuousLightDarkPOMDPDiscreteActions:
     return ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs()
+        discount_factor=0.95, **continuous_light_dark_discrete_actions_pinned_kwargs(**overrides)
     )
 
 
-def _build_pacman() -> PacManPOMDP:
-    return PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs())
+def _build_pacman(**overrides: Any) -> PacManPOMDP:
+    return PacManPOMDP(discount_factor=0.95, **pacman_pinned_kwargs(**overrides))
 
 
-def _build_capture_the_flag() -> CaptureTheFlagPOMDP:
-    return CaptureTheFlagPOMDP(discount_factor=0.95, **capture_the_flag_pinned_kwargs())
+def _build_capture_the_flag(**overrides: Any) -> CaptureTheFlagPOMDP:
+    return CaptureTheFlagPOMDP(discount_factor=0.95, **capture_the_flag_pinned_kwargs(**overrides))
 
 
-def _build_laser_tag() -> LaserTagPOMDP:
-    return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs())
+def _build_laser_tag(**overrides: Any) -> LaserTagPOMDP:
+    return LaserTagPOMDP(discount_factor=0.95, **laser_tag_pinned_kwargs(**overrides))
 
 
-def _build_continuous_laser_tag() -> ContinuousLaserTagPOMDP:
-    return ContinuousLaserTagPOMDP(discount_factor=0.95, **continuous_laser_tag_pinned_kwargs())
+def _build_continuous_laser_tag(**overrides: Any) -> ContinuousLaserTagPOMDP:
+    return ContinuousLaserTagPOMDP(
+        discount_factor=0.95, **continuous_laser_tag_pinned_kwargs(**overrides)
+    )
 
 
-def _build_continuous_laser_tag_discrete() -> ContinuousLaserTagPOMDPDiscreteActions:
+def _build_continuous_laser_tag_discrete(
+    **overrides: Any,
+) -> ContinuousLaserTagPOMDPDiscreteActions:
     return ContinuousLaserTagPOMDPDiscreteActions(
-        discount_factor=0.95, **continuous_laser_tag_discrete_actions_pinned_kwargs()
+        discount_factor=0.95, **continuous_laser_tag_discrete_actions_pinned_kwargs(**overrides)
     )
 
 
-def _build_t_maze() -> TMazePOMDP:
-    return TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs())
+def _build_t_maze(**overrides: Any) -> TMazePOMDP:
+    return TMazePOMDP(discount_factor=0.95, **t_maze_pinned_kwargs(**overrides))
 
 
-def _build_discrete_maze() -> DiscreteMazePOMDP:
-    return DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs())
+def _build_discrete_maze(**overrides: Any) -> DiscreteMazePOMDP:
+    return DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs(**overrides))
 
 
-def _build_continuous_maze() -> ContinuousMazePOMDP:
-    return ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs())
+def _build_continuous_maze(**overrides: Any) -> ContinuousMazePOMDP:
+    return ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs(**overrides))
 
 
-def _build_safety_ant() -> SafeAntVelocityPOMDP:
-    return SafeAntVelocityPOMDP(discount_factor=0.95, **safety_ant_velocity_pinned_kwargs())
+def _build_safety_ant(**overrides: Any) -> SafeAntVelocityPOMDP:
+    return SafeAntVelocityPOMDP(
+        discount_factor=0.95, **safety_ant_velocity_pinned_kwargs(**overrides)
+    )
 
 
-# Registry of (env_id, builder). New envs added here are automatically
-# covered by every parametrized test below.
-ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
+# Hand-written registry of (env_id, builder): each environment's pinned
+# configuration, plus the variants that need more than one changed argument.
+# New envs added here are automatically covered by every parametrized test
+# below, and so is one variant per configuration switch of each (see
+# ENV_BUILDERS).
+HAND_WRITTEN_ENV_BUILDERS: List[Tuple[str, Callable[..., Environment]]] = [
     ("BattleshipPOMDP", _build_battleship),
     ("CaptureTheFlagPOMDP", _build_capture_the_flag),
     ("CartPolePOMDP", _build_cartpole),
@@ -316,6 +339,33 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
     ("TigerPOMDP", _build_tiger),
 ]
 
+# What every parametrized test below runs on: the hand-written entries and one
+# swept variant per configuration switch of each pinned configuration (see
+# _env_config_variants). An id without brackets is a pinned configuration.
+ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = sorted(
+    [
+        *HAND_WRITTEN_ENV_BUILDERS,
+        *config_variant_builders(
+            [
+                (env_id, builder)
+                for env_id, builder in HAND_WRITTEN_ENV_BUILDERS
+                if "[" not in env_id
+            ]
+        ),
+    ],
+    key=lambda entry: entry[0],
+)
+
+
+def _with_variants(*base_ids: str) -> frozenset:
+    """Every registered id whose pinned configuration is one of ``base_ids``.
+
+    The contract lists below name a class-level gap -- a missing override, a
+    bound defined over part of the state space -- which every variant of the
+    class inherits.
+    """
+    return frozenset(env_id for env_id, _ in ENV_BUILDERS if base_id_of(env_id) in base_ids)
+
 
 # Envs whose ``hash_observation`` override is missing — observations are
 # unhashable ndarrays and the base class's default ``hash(observation)``
@@ -327,14 +377,12 @@ ENV_BUILDERS: List[Tuple[str, EnvBuilder]] = [
 # *not* from ``PushPOMDP``, so the override that PushPOMDP carries does
 # not apply here. ``ContinuousPushPOMDPDiscreteActions`` inherits from
 # ``ContinuousPushPOMDP`` and is broken transitively.
-HASH_OBSERVATION_BROKEN_ENVS = frozenset(
-    {
-        "CartPolePOMDP",
-        "MountainCarPOMDP",
-        "SafeAntVelocityPOMDP",
-        "ContinuousPushPOMDP",
-        "ContinuousPushPOMDPDiscreteActions",
-    }
+HASH_OBSERVATION_BROKEN_ENVS = _with_variants(
+    "CartPolePOMDP",
+    "MountainCarPOMDP",
+    "SafeAntVelocityPOMDP",
+    "ContinuousPushPOMDP",
+    "ContinuousPushPOMDPDiscreteActions",
 )
 
 
@@ -347,6 +395,43 @@ SAMPLE_NEXT_STATE_BATCH_BROKEN_ENVS: frozenset = frozenset()
 
 # No env is known to break the ``to_dict`` / ``from_dict`` round trip.
 SERIALIZATION_ROUND_TRIP_BROKEN_ENVS: frozenset = frozenset()
+
+# No env is known to rebuild into one that compares unequal to the original.
+#
+# Continuous light-dark used to: its reward model type is not a public
+# attribute, so the base ``to_dict`` did not write it and ``from_dict`` rebuilt
+# the default constant-penalty model. The env's own ``to_dict`` now adds it.
+SERIALIZATION_EQUALITY_BROKEN_ENVS: frozenset = frozenset()
+
+# Envs that declare ``reward_requires_next_state`` although, on the registered
+# configuration, the reward is fixed by ``(state, action)``.
+#
+# LaserTagPOMDP sets the flag whenever hazard-hit termination is on. The pinned
+# robot never slips (``transition_error_prob == 0``), so whether a step ends in
+# a dangerous area does not depend on the draw, and no next state changes the
+# reward. The flag only costs the driver its reordering here; with a slip the
+# reward does read the realised next state.
+REWARD_NEXT_STATE_FLAG_VACUOUS_ENVS: frozenset = frozenset(
+    {"LaserTagPOMDP[is_dangerous_area_hit_terminal=True]"}
+)
+
+# Envs whose ``reward_batch(states, action)`` and ``reward(state, action)``
+# disagree when neither is given the next state.
+#
+# ContinuousLaserTagPOMDP with hazard-hit termination: ``reward`` draws a next
+# state of its own and charges the dangerous-area penalty when that draw ends
+# in one (-6 on about two draws in three from a state beside an area).
+# ``reward_batch`` returns the base term (-1) -- its code calls this "the
+# belief-expectation estimation path". The env asks for the next state
+# (``reward_requires_next_state``), and with it the two paths agree; but the
+# belief-level cost calls ``reward_batch`` without one, so on this
+# configuration it never sees the hazard penalty.
+REWARD_BATCH_WITHOUT_NEXT_STATE_BROKEN_ENVS: frozenset = frozenset(
+    {"ContinuousLaserTagPOMDP[is_dangerous_area_hit_terminal=True]"}
+)
+
+# No env's ``observation_log_probability_per_state`` is known to raise.
+OBSERVATION_LOG_PROBABILITY_PER_STATE_BROKEN_ENVS: frozenset = frozenset()
 
 
 # No env is known to change its ``config_id`` once it has been used.
@@ -451,7 +536,7 @@ def _all_env_params() -> List[pytest.param]:  # type: ignore[valid-type]
 
 
 def _params_with_xfail(  # type: ignore[valid-type]
-    broken: frozenset, contract: str
+    broken: frozenset, contract: str, may_break: frozenset = frozenset()
 ) -> List[pytest.param]:
     """Env-builder param list with ``xfail(strict=True)`` on ``broken`` envs.
 
@@ -459,15 +544,18 @@ def _params_with_xfail(  # type: ignore[valid-type]
         broken: Env ids known to violate ``contract`` today.
         contract: Human-readable description of the violated contract,
             used verbatim in the xfail reason.
+        may_break: Env ids that violate ``contract`` only when a seeded
+            rollout happens to reach the violating state. Marked
+            ``xfail(strict=False)``: for these, passing proves nothing.
 
     Returns:
         One ``pytest.param`` per registry entry, marked where applicable.
     """
     params: List[pytest.param] = []  # type: ignore[valid-type]
     for env_id, builder in ENV_BUILDERS:
-        if env_id in broken:
+        if env_id in broken or env_id in may_break:
             mark = pytest.mark.xfail(
-                strict=True,
+                strict=env_id in broken,
                 reason=(
                     f"{env_id} violates the contract: {contract}. "
                     "Remove this xfail when the fix lands."
@@ -811,39 +899,171 @@ def test_hash_observation_consistent_with_equality(env_builder: EnvBuilder) -> N
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("env_builder", _all_env_params())
+# Copies of each source state in the reward batch/single comparison: enough to
+# see a hazard roll of a few percent.
+_REWARD_DRAWS_PER_SOURCE = 400
+
+
+def _interleaved_block(sources: List[Any], draws: int) -> Any:
+    """``draws`` copies of each source, interleaved, in the env's batch form.
+
+    Row ``i`` holds ``sources[i % len(sources)]``, so a batch path that scores
+    a row against another row's state shows up per source. Array states are
+    stacked into one array, as a particle belief hands them over; anything else
+    stays a list.
+    """
+    block = [deepcopy(sources[i % len(sources)]) for i in range(draws * len(sources))]
+    return np.stack(block) if isinstance(sources[0], np.ndarray) else block
+
+
+def _assert_reward_batch_matches_reward(
+    env: Environment,
+    sources: List[Any],
+    action: Any,
+    next_sources: Any = None,
+    draw_next_states: Optional[bool] = None,
+) -> None:
+    """Assert ``reward_batch`` and a loop over ``reward`` score ``sources`` alike.
+
+    Args:
+        env: The environment.
+        sources: The states to score, each repeated ``_REWARD_DRAWS_PER_SOURCE``
+            times in one interleaved batch.
+        action: The action scored at every state.
+        next_sources: The realised next state of each source, to score one
+            given transition.
+        draw_next_states: Used when ``next_sources`` is ``None``. ``True``
+            draws one next state per row and hands it to both paths;
+            ``False`` hands over none. ``None`` does what a driver does: an
+            env that asks for the realised next state gets one, any other env
+            gets none.
+
+    Raises:
+        AssertionError: If the shapes differ or the rewards disagree. Where
+            ``reward`` is a function of its arguments -- scoring the same rows
+            twice from two seeds gives the same numbers -- the two paths are
+            compared row by row, so a row scored against another row's state
+            or next state shows. Where ``reward`` draws, they are compared as
+            a law per source state, because the two paths need not draw in the
+            same order.
+    """
+    block = _interleaved_block(sources, _REWARD_DRAWS_PER_SOURCE)
+    next_block: Any = None
+    if next_sources is not None:
+        next_block = _interleaved_block(next_sources, _REWARD_DRAWS_PER_SOURCE)
+    elif env.reward_requires_next_state if draw_next_states is None else draw_next_states:
+        _seed_all(3)
+        drawn = [env.sample_next_state(state=deepcopy(state), action=action) for state in block]
+        next_block = np.stack(drawn) if isinstance(drawn[0], np.ndarray) else drawn
+
+    def looped_rewards(seed: int) -> np.ndarray:
+        _seed_all(seed)
+        if next_block is None:
+            return np.array([float(env.reward(deepcopy(state), action)) for state in block])
+        return np.array(
+            [
+                float(env.reward(deepcopy(state), action, deepcopy(next_state)))
+                for state, next_state in zip(block, next_block)
+            ]
+        )
+
+    # The batch path gets copies: a path that writes into its input must not
+    # be able to change the rows the loop then scores.
+    _seed_all(1)
+    batched = np.asarray(
+        env.reward_batch(deepcopy(block), action, deepcopy(next_block)), dtype=float
+    )
+    looped = looped_rewards(2)
+
+    assert batched.shape == looped.shape, (
+        f"{type(env).__name__}.reward_batch returned shape {batched.shape} for "
+        f"{len(block)} states"
+    )
+    context = f"{type(env).__name__} action={action!r}"
+    if np.array_equal(looped, looped_rewards(4)):
+        mismatched = np.flatnonzero(~np.isclose(batched, looped))
+        assert mismatched.size == 0, (
+            f"{context}: reward_batch disagrees with reward on {mismatched.size} of "
+            f"{len(looped)} rows, first at state={sources[mismatched[0] % len(sources)]!r}: "
+            f"reward_batch={batched[mismatched[0]]} reward={looped[mismatched[0]]}"
+        )
+        return
+    for index, source in enumerate(sources):
+        try:
+            assert_same_distribution(
+                batched[index :: len(sources), None],
+                looped[index :: len(sources), None],
+                label_a="reward_batch",
+                label_b="reward",
+            )
+        except AssertionError as error:
+            raise AssertionError(f"{context} state={source!r}: {error}") from None
+
+
+@pytest.mark.parametrize(
+    "env_builder",
+    _params_with_xfail(
+        REWARD_BATCH_WITHOUT_NEXT_STATE_BROKEN_ENVS,
+        "reward_batch(states, action) and reward(state, action) disagree when "
+        "neither is given the next state",
+    ),
+)
 def test_reward_batch_agrees_with_looped_reward(env_builder: EnvBuilder) -> None:
     """``reward_batch`` matches a plain loop over ``reward``.
 
     Purpose: ``reward_batch`` exists so vectorized envs can skip the
         Python loop, and several envs override it with a numpy
         implementation. Any divergence means a particle filter and a
-        tree-search rollout score the same transition differently.
+        tree-search rollout score the same transition differently. This
+        is the call the belief-level cost makes: states and an action,
+        no next state.
 
     Given: Four states drawn from the initial state distribution and one
-        valid action, with numpy and every native RNG re-seeded
-        identically before each of the two paths (some reward models
-        draw — probabilistic hazard hits, for instance — so an unseeded
-        comparison would compare draws rather than code paths).
-    When: ``reward_batch(states, action)`` and
-        ``[reward(s, action) for s in states]`` are both evaluated.
-    Then: The two reward vectors agree elementwise.
+        valid action. The states are interleaved into one batch, each
+        repeated ``_REWARD_DRAWS_PER_SOURCE`` times.
+    When: ``reward_batch(states, action)`` scores the batch once and
+        ``reward(state, action)`` scores it row by row.
+    Then: A reward that is a function of its arguments is the same on
+        every row. A reward that draws -- a probabilistic hazard hit --
+        has the same distribution per source state on both paths.
 
     Test type: integration
     """
     env = env_builder()
     _seed_all(0)
-    states = env.initial_state_dist().sample(4)
-    action = _sample_action(env)
+    sources = list(env.initial_state_dist().sample(4))
+    _assert_reward_batch_matches_reward(env, sources, _sample_action(env), draw_next_states=False)
 
-    _seed_all(1)
-    batched = np.asarray(env.reward_batch(states, action), dtype=float)
-    _seed_all(1)
-    looped = np.array([float(env.reward(state, action)) for state in states])
 
-    assert np.allclose(batched, looped), (
-        f"{type(env).__name__}.reward_batch disagrees with looped reward: " f"{batched} vs {looped}"
-    )
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_reward_batch_agrees_with_looped_reward_given_next_states(
+    env_builder: EnvBuilder,
+) -> None:
+    """``reward_batch`` matches a loop over ``reward`` when both get the next state.
+
+    Purpose: A simulation driver threads the realised next state into the
+        reward so the trajectory and its reward share one draw, and for
+        an env whose ``reward_requires_next_state`` is true that is the
+        only call that is fully specified. The batch path has to read
+        each row's own next state: one that pairs a row with another
+        row's next state scores transitions that never happened.
+
+    Given: Four states drawn from the initial state distribution, one
+        valid action, and one next state drawn per row of the interleaved
+        batch.
+    When: ``reward_batch(states, action, next_states)`` scores the batch
+        once and ``reward(state, action, next_state)`` scores it row by
+        row.
+    Then: A reward that is a function of the transition is the same on
+        every row. A reward that still draws has the same distribution
+        per source state on both paths.
+
+    Test type: integration
+    """
+    env = env_builder()
+    _seed_all(0)
+    sources = list(env.initial_state_dist().sample(4))
+    _assert_reward_batch_matches_reward(env, sources, _sample_action(env), draw_next_states=True)
 
 
 # Draws per source state in the batch/single distribution comparison. Enough to
@@ -872,6 +1092,64 @@ def _states_as_rows(batched: List[Any], singles: List[Any]) -> Tuple[np.ndarray,
             np.array([[labels[repr(s)]] for s in batched], dtype=np.float64),
             np.array([[labels[repr(s)]] for s in singles], dtype=np.float64),
         )
+
+
+def _assert_next_state_batch_matches_single(
+    env: Environment, sources: List[Any], action: Any
+) -> None:
+    """Assert ``sample_next_state_batch`` samples ``sample_next_state``'s law from ``sources``.
+
+    Args:
+        env: The environment.
+        sources: The states to step from, each repeated
+            ``_BATCH_DISTRIBUTION_DRAWS`` times in one interleaved batch.
+        action: The action applied to every row.
+
+    Raises:
+        AssertionError: If the batch returns another number of states, a state
+            of another shape or dtype, or for some source a different
+            distribution. Values are not compared draw for draw: the two paths
+            legitimately consume randomness differently.
+    """
+    block = _interleaved_block(sources, _BATCH_DISTRIBUTION_DRAWS)
+    # The batch path gets a copy: a path that writes into its input must not
+    # be able to change the states the single draws start from.
+    _seed_all(1)
+    batched = list(env.sample_next_state_batch(deepcopy(block), action))
+    _seed_all(2)
+    singles = [env.sample_next_state(state=deepcopy(state), action=action) for state in block]
+
+    assert len(batched) == len(singles), (
+        f"{type(env).__name__}.sample_next_state_batch returned {len(batched)} states "
+        f"for {len(singles)} input particles"
+    )
+    batched_first = np.asarray(batched[0])
+    single_first = np.asarray(singles[0])
+    assert batched_first.shape == single_first.shape, (
+        f"{type(env).__name__}: batch state shape {batched_first.shape} != "
+        f"single state shape {single_first.shape}"
+    )
+    # A string state's dtype carries its length ("<U10" vs "<U11"), so only
+    # the kind is compared there; numeric dtypes must match exactly.
+    string_kinds = "USO"
+    assert (
+        batched_first.dtype.kind == single_first.dtype.kind
+        if batched_first.dtype.kind in string_kinds
+        else batched_first.dtype == single_first.dtype
+    ), (
+        f"{type(env).__name__}: batch state dtype {batched_first.dtype} != "
+        f"single state dtype {single_first.dtype}"
+    )
+    for index, source in enumerate(sources):
+        batched_rows, single_rows = _states_as_rows(
+            batched[index :: len(sources)], singles[index :: len(sources)]
+        )
+        try:
+            assert_same_distribution(batched_rows, single_rows, label_a="batch", label_b="single")
+        except AssertionError as error:
+            raise AssertionError(
+                f"{type(env).__name__} action={action!r} state={source!r}: {error}"
+            ) from None
 
 
 @pytest.mark.parametrize(
@@ -918,43 +1196,7 @@ def test_sample_next_state_batch_matches_single_sample(env_builder: EnvBuilder) 
         state = env.sample_next_state(state=deepcopy(state), action=_random_action(env, action_rng))
 
     for source, action in sources[::2]:
-        block = [deepcopy(source) for _ in range(_BATCH_DISTRIBUTION_DRAWS)]
-        if isinstance(source, np.ndarray):
-            block = np.stack(block)
-        _seed_all(1)
-        batched = list(env.sample_next_state_batch(block, action))
-        _seed_all(2)
-        singles = [
-            env.sample_next_state(state=deepcopy(source), action=action)
-            for _ in range(_BATCH_DISTRIBUTION_DRAWS)
-        ]
-
-        assert len(batched) == len(singles), (
-            f"{type(env).__name__}.sample_next_state_batch returned {len(batched)} states "
-            f"for {len(singles)} input particles"
-        )
-        batched_first = np.asarray(batched[0])
-        single_first = np.asarray(singles[0])
-        assert batched_first.shape == single_first.shape, (
-            f"{type(env).__name__}: batch state shape {batched_first.shape} != "
-            f"single state shape {single_first.shape}"
-        )
-        # A string state's dtype carries its length ("<U10" vs "<U11"), so only
-        # the kind is compared there; numeric dtypes must match exactly.
-        string_kinds = "USO"
-        assert (
-            batched_first.dtype.kind == single_first.dtype.kind
-            if batched_first.dtype.kind in string_kinds
-            else batched_first.dtype == single_first.dtype
-        ), (
-            f"{type(env).__name__}: batch state dtype {batched_first.dtype} != "
-            f"single state dtype {single_first.dtype}"
-        )
-        batched_rows, single_rows = _states_as_rows(batched, singles)
-        try:
-            assert_same_distribution(batched_rows, single_rows, label_a="batch", label_b="single")
-        except AssertionError as error:
-            raise AssertionError(f"{type(env).__name__} action={action!r}: {error}") from None
+        _assert_next_state_batch_matches_single(env, [source], action)
 
 
 @pytest.mark.parametrize("env_builder", _all_env_params())
@@ -1005,13 +1247,20 @@ def test_observation_log_probability_single_agrees_with_batched(
 # ---------------------------------------------------------------------------
 
 
-# How far the reward probe may walk from the initial state before declaring a
-# ``reward_requires_next_state=True`` flag vacuous. Long enough to leave a quiet
-# opening position, short enough that a genuinely vacuous flag still fails fast.
+# How far the reward probe's first walk may go from the initial state. Long
+# enough to leave a quiet opening position, short enough that a genuinely
+# vacuous flag still fails fast. The second, random walk gets three times this
+# before the ``reward_requires_next_state=True`` flag is declared vacuous.
 _REWARD_PROBE_STEPS = 200
 
 
-@pytest.mark.parametrize("env_builder", _all_env_params())
+@pytest.mark.parametrize(
+    "env_builder",
+    _params_with_xfail(
+        REWARD_NEXT_STATE_FLAG_VACUOUS_ENVS,
+        "reward_requires_next_state is True but no reachable next state changes the reward",
+    ),
+)
 def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
     """A ``True`` ``reward_requires_next_state`` really means the reward uses it.
 
@@ -1049,33 +1298,48 @@ def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
     if not env.reward_requires_next_state:
         pytest.skip(f"{type(env).__name__}.reward_requires_next_state is False")
 
-    _seed_all(0)
-    state = env.initial_state_dist().sample()[0]
-    action = _sample_action(env)
-
+    # Two walks. One repeats a single action, which is what separates the draws
+    # where one action bears the reward (firing, in ChicheckInvaders). The other
+    # takes random actions: a walk in one direction stops at the first wall and
+    # never enters a hazard region, which is where a hazard-terminal reward
+    # reads the next state.
+    action_rng = np.random.default_rng(0)
     rewards: set = set()
-    for probe_step in range(_REWARD_PROBE_STEPS):
-        rewards = set()
-        for draw_seed in range(8):
-            _seed_all(draw_seed)
-            next_state = env.sample_next_state(state=state, action=action)
-            _seed_all(100)
-            rewards.add(
-                round(float(env.reward(state=state, action=action, next_state=next_state)), 9)
-            )
+    state: Any = None
+    action: Any = None
+    # The random walk gets three times the steps: how soon it meets a hazard
+    # depends on the RNG stream, which differs between platforms.
+    for pick_action, walk_steps in (
+        (lambda: _sample_action(env), _REWARD_PROBE_STEPS),
+        (lambda: _random_action(env, action_rng), 3 * _REWARD_PROBE_STEPS),
+    ):
+        _seed_all(0)
+        state = env.initial_state_dist().sample()[0]
+        action = pick_action()
+        for probe_step in range(walk_steps):
+            rewards = set()
+            for draw_seed in range(8):
+                _seed_all(draw_seed)
+                next_state = env.sample_next_state(state=state, action=action)
+                _seed_all(100)
+                rewards.add(
+                    round(float(env.reward(state=state, action=action, next_state=next_state)), 9)
+                )
+            if len(rewards) > 1:
+                break
+            _seed_all(1000 + probe_step)
+            advanced = env.sample_next_state(state=state, action=action)
+            # Restart rather than break on termination: breaking would leave the
+            # last single-valued `rewards` in place and fail claiming the flag is
+            # vacuous, when in fact the walk just ran out of episode.
+            state = env.initial_state_dist().sample()[0] if env.is_terminal(advanced) else advanced
+            action = pick_action()
         if len(rewards) > 1:
             break
-        _seed_all(1000 + probe_step)
-        advanced = env.sample_next_state(state=state, action=action)
-        # Restart rather than break on termination: breaking would leave the
-        # last single-valued `rewards` in place and fail claiming the flag is
-        # vacuous, when in fact the walk just ran out of episode.
-        state = env.initial_state_dist().sample()[0] if env.is_terminal(advanced) else advanced
-        action = _sample_action(env)
     assert len(rewards) > 1, (
         f"{type(env).__name__} declares reward_requires_next_state=True but no state "
-        f"reached in {_REWARD_PROBE_STEPS} steps separated eight drawn next states "
-        f"({rewards}) — the flag is vacuous"
+        f"reached in two walks from the initial state separated eight drawn next "
+        f"states ({rewards}) — the flag is vacuous"
     )
 
     fallback = float(env.reward(state=state, action=action))
@@ -1135,7 +1399,13 @@ def test_serialization_round_trip_preserves_config_id(env_builder: EnvBuilder) -
     )
 
 
-@pytest.mark.parametrize("env_builder", _all_env_params())
+@pytest.mark.parametrize(
+    "env_builder",
+    _params_with_xfail(
+        SERIALIZATION_EQUALITY_BROKEN_ENVS,
+        "the env rebuilt by from_dict(to_dict(env)) does not compare equal to the original",
+    ),
+)
 def test_serialization_round_trip_preserves_equality(env_builder: EnvBuilder) -> None:
     """``from_dict(to_dict(env))`` compares equal to the env it came from.
 
@@ -1308,9 +1578,10 @@ def test_config_id_is_stable_across_identical_constructions(env_builder: EnvBuil
 @pytest.mark.parametrize(
     "env_builder",
     _params_with_xfail(
-        CONFIG_ID_UNSTABLE_AFTER_USE_ENVS,
+        CONFIG_ID_UNSTABLE_AFTER_USE_ENVS | OBSERVATION_LOG_PROBABILITY_PER_STATE_BROKEN_ENVS,
         "config_id changes once the env has been used, because a lazily "
-        "populated cache attribute is hashed into it",
+        "populated cache attribute is hashed into it -- or the env cannot be "
+        "used at all, because observation_log_probability_per_state raises",
     ),
 )
 def test_config_id_survives_using_the_environment(env_builder: EnvBuilder) -> None:
@@ -1548,6 +1819,10 @@ def test_declared_metric_names_are_emitted(env_builder: EnvBuilder) -> None:
         "its declared reward_range is defined over in-grid states and this rollout "
         "reaches an out-of-grid state, which is a recorded decision rather than a "
         "wrong bound",
+        # Every variant of the two classes inherits the decision, but the
+        # seeds are pinned for the default configuration only: whether a
+        # variant's rollout leaves the grid is luck.
+        may_break=_with_variants(*REWARD_RANGE_IN_GRID_ONLY_ENVS) - REWARD_RANGE_IN_GRID_ONLY_ENVS,
     ),
 )
 def test_declared_reward_range_bounds_observed_rewards(env_builder: EnvBuilder) -> None:
