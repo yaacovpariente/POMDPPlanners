@@ -716,6 +716,13 @@
     // The rover
     var rover = new THREE.Group();
     scene.add(rover);
+
+    /* Smoke, only when a hazard ended the episode. A separate group, not part
+       of the rover, so it rises straight up however the hull is tipped. */
+    var smoke = payload.ended_in_danger_zone
+      ? V.createSmoke({ exposure: EXPOSURE, base: 0.45, tone: 0.35, seed: 1311 })
+      : null;
+    if (smoke) scene.add(smoke.group);
     var hull = new THREE.Group();
     rover.add(hull);
 
@@ -1320,6 +1327,16 @@
       }
       rover.position.set(rx, 0, rz);
       rover.rotation.y = -heading;
+
+      /* A hazard that ends the episode wrecks the rover: through the last step
+         the smoke builds and the struggle dies away, so it comes to rest
+         smoking on the rubble rather than still fighting it. */
+      var wreck = smoke ? clamp((t - (payload.states.length - 1.6)) / 0.6, 0, 1) : 0;
+      if (smoke) {
+        smoke.group.position.set(rx, 0, rz);
+        smoke.update(reduceMotion ? 1.7 : elapsed, wreck);
+      }
+      sm.rough *= 1 - wreck;
 
       var gap = Math.hypot(sm.rx - sm.ox, sm.ry - sm.oy);
       var inRange = gap < PUSH;
