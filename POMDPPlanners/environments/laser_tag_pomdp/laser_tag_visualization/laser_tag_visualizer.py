@@ -207,6 +207,32 @@ class _LaserTagTraceVisualizer(TraceVisualizer):
     def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
         """The variant's laser ranges and which beams the opponent stopped."""
 
+    @abstractmethod
+    def tag_succeeded(self, state: Any, action: Any) -> bool:
+        """Whether ``action`` from ``state`` is a successful tag, by the variant's rule."""
+
+    def _ended_in_danger_zone(self, history: List[StepData], terminals: List[bool]) -> bool:
+        """Whether the episode ended because the robot was hit in a hazard.
+
+        The terminal slot is shared by a successful tag and a hazard hit, so
+        this applies the environment's own reward rule: a terminal transition
+        that is not a successful tag is the hazard's.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+            terminals: The terminal slot at every recorded step.
+
+        Returns:
+            ``True`` only for an episode a hazard ended.
+        """
+        environment: Any = self.environment
+        if not environment.is_dangerous_area_hit_terminal or not terminals[-1]:
+            return False
+        if len(history) < 2:
+            return False
+        last = history[-2]
+        return not self.tag_succeeded(last.state, last.action)
+
     def metadata(self) -> Dict[str, Any]:
         """The environment's class name and which LaserTag variant it is."""
         return {**super().metadata(), "variant": self.variant}
@@ -251,6 +277,7 @@ class _LaserTagTraceVisualizer(TraceVisualizer):
             "robots": robots,
             "opponents": opponents,
             "terminals": terminals,
+            "ended_in_danger_zone": self._ended_in_danger_zone(history, terminals),
             "laser_ranges": laser_ranges,
             "observed_ranges": _paired_observations(history),
             "hit_opponent": hit_opponent,
@@ -295,6 +322,11 @@ class LaserTagVisualizer(_LaserTagTraceVisualizer):
     def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
         """Discrete ranges, from the environment's own cell walk."""
         return _discrete_scan(self.environment, robot, opponent)
+
+    def tag_succeeded(self, state: Any, action: Any) -> bool:
+        """Tag action 4 with the robot on the opponent's cell, as the reward rule has it."""
+        array = np.asarray(state, dtype=float).reshape(-1)
+        return action is not None and int(action) == 4 and bool(np.all(array[0:2] == array[2:4]))
 
 
 class ContinuousLaserTagVisualizer(_LaserTagTraceVisualizer):
@@ -341,3 +373,22 @@ class ContinuousLaserTagVisualizer(_LaserTagTraceVisualizer):
     def scan(self, robot: List[float], opponent: List[float]) -> Tuple[List[float], List[bool]]:
         """Continuous ranges, from the environment's own ray cast."""
         return _continuous_scan(self.environment, robot, opponent)
+
+    def tag_succeeded(self, state: Any, action: Any) -> bool:
+        """Tag flag up with the opponent within ``tag_radius``, as the reward rule has it.
+
+        The discrete-action wrapper records a label, which its own table turns
+        into the ``[dx, dy, tag_flag]`` vector the rule is written against.
+        """
+        if action is None:
+            return False
+        environment: Any = self.environment
+        table = getattr(environment, "action_to_vector", None)
+        if table is not None and not isinstance(action, (list, tuple, np.ndarray)):
+            action = table[action]
+        vector = np.asarray(action, dtype=float).reshape(-1)
+        if vector.shape[0] < 3 or vector[2] <= 0.5:
+            return False
+        array = np.asarray(state, dtype=float).reshape(-1)
+        gap = array[0:2] - array[2:4]
+        return float(gap @ gap) <= float(environment.tag_radius) ** 2

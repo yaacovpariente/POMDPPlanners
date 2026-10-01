@@ -88,6 +88,7 @@ class LightDarkVisualizer(TraceVisualizer):
                 "obstacle_hit_probability": float(environment.obstacle_hit_probability),
                 "fuel_cost": float(environment.fuel_cost),
             },
+            "ended_in_danger_zone": self._ended_in_danger_zone(history),
             "states": states,
             "next_states": next_states,
             "observations": observations,
@@ -95,3 +96,40 @@ class LightDarkVisualizer(TraceVisualizer):
         }
 
         return payload
+
+    def _ended_in_danger_zone(self, history: List[StepData]) -> bool:
+        """Whether the episode ended because the rover was hit in a hazard.
+
+        With the hazard-terminal flag on, the transition appends a terminal slot
+        that only a hazard hit sets; reaching the goal leaves it at 0. With the
+        flag off, the discrete world still ends on an obstacle cell, so standing
+        exactly on one at the end, away from the goal, is a hazard ending too.
+        The continuous world with the flag off ends only at the goal.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            ``True`` only for an episode a hazard ended.
+        """
+        if not self.reached_terminal_state(history):
+            return False
+        environment: Any = self.environment
+        final = np.asarray(history[-1].state, dtype=float).reshape(-1)
+        if environment.is_obstacle_hit_terminal:
+            return final.shape[0] > 2 and float(final[2]) > 0.5
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+            DiscreteLightDarkPOMDP,
+        )
+
+        if not isinstance(environment, DiscreteLightDarkPOMDP):
+            return False
+        obstacles = np.asarray(environment.obstacles, dtype=float)
+        if not obstacles.size:
+            return False
+        on_obstacle = bool(np.any(np.all(obstacles.T == final[:2], axis=1)))
+        at_goal = bool(
+            np.all(np.asarray(environment.goal_state, dtype=float).reshape(-1)[:2] == final[:2])
+        )
+        return on_obstacle and not at_goal
