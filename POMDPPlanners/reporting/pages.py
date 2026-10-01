@@ -20,7 +20,7 @@ from urllib.parse import quote
 from POMDPPlanners.core.simulation import tuning_run_layout as run_layout
 from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.simulation.traces import ArtifactKind
-from POMDPPlanners.reporting import charts, tuning
+from POMDPPlanners.reporting import charts, tuning, tuning_charts
 from POMDPPlanners.reporting.artifacts import EpisodeArtifact, preferred
 from POMDPPlanners.reporting.scenes import scene_script_url
 from POMDPPlanners.reporting.store import (
@@ -1364,17 +1364,88 @@ def _trial_table(study: tuning.TuningStudy) -> str:
     )
 
 
-def _plot_gallery(run: RunView, study: tuning.TuningStudy) -> str:
-    if not study.plots:
-        return '<p class="empty">This run carries no diagnostic plots.</p>'
-    figures = "".join(
-        f'<figure><a href="{html(artifact_url(run, path))}">'
-        f'<img loading="lazy" src="{html(artifact_url(run, path))}" alt="{html(path)}"></a>'
-        f"<figcaption>{html(path.rsplit('/', 1)[-1][: -len('.png')].replace('_', ' '))}"
-        "</figcaption></figure>"
+def _chart_grid(svgs: Sequence[str]) -> str:
+    cards = "".join(f'<figure class="chart-card">{svg}</figure>' for svg in svgs if svg)
+    return f'<div class="charts">{cards}</div>' if cards else ""
+
+
+def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
+    """The study's diagnostic charts, drawn here from its trial records.
+
+    The PNGs the optimizer drew stay in the run for reading offline; they are
+    linked, not shown, because a picture cannot say which trial a point is or
+    follow the page's theme.
+    """
+    if not study.trials:
+        return (
+            '<p class="empty">This run carries no trial records, so there is nothing to '
+            "chart.</p>"
+        )
+    sections = [
+        (
+            "Objectives over the trials",
+            "Each dot is a trial; the line is the best value found so far. A line still "
+            "climbing at the last trial means the budget ran out before the search settled.",
+            tuning_charts.objective_history(study)
+            + [tuning_charts.pareto_front(study), tuning_charts.front_quality(study)],
+            True,
+        ),
+        (
+            "Objectives ranked, with their intervals",
+            "Trials ordered best first. Where the intervals overlap, the ranking is "
+            "within the noise of the episodes behind each score.",
+            tuning_charts.objective_confidence_intervals(study),
+            True,
+        ),
+        (
+            "Parameters over the trials",
+            "What the sampler drew, trial by trial.",
+            tuning_charts.parameter_history(study),
+            True,
+        ),
+        (
+            "Objective against each parameter",
+            "A slope running into the edge of a range says the range stops short.",
+            tuning_charts.parameter_slices(study),
+            False,
+        ),
+        (
+            "Metrics the study did not optimize",
+            "What the chosen parameters cost on everything else the episodes measured.",
+            tuning_charts.secondary_metrics(study),
+            False,
+        ),
+        ("Trial durations", "", [tuning_charts.trial_durations(study)], False),
+    ]
+    blocks = []
+    for heading, note, svgs, open_ in sections:
+        grid = _chart_grid(svgs)
+        if not grid:
+            continue
+        count = sum(1 for svg in svgs if svg)
+        blocks.append(
+            f'<details class="chart-group"{" open" if open_ else ""}>'
+            f"<summary>{html(heading)} ({count})</summary>"
+            + (f'<p class="note">{html(note)}</p>' if note else "")
+            + grid
+            + "</details>"
+        )
+    pngs = ", ".join(
+        f'<a href="{html(artifact_url(run, path))}">{html(path.rsplit("/", 1)[-1])}</a>'
         for path in study.plots
     )
-    return f'<section class="gallery">{figures}</section>'
+    return (
+        '<p class="note">Hover a point to see its trial and parameters. Green marks the '
+        "Pareto trials, red the chosen one. Parameter importances are not drawn: Optuna "
+        "computes them from the live study, which the run does not keep.</p>"
+        + "".join(blocks)
+        + (
+            f'<p class="note">The optimizer\'s own matplotlib versions are in the run: {pngs}.</p>'
+            if pngs
+            else ""
+        )
+        + '<script src="/static/chart-tips.js"></script>'
+    )
 
 
 def _evaluation_section(
@@ -1499,8 +1570,8 @@ def tuning_page(
         + _parameter_table(study)
         + "<h2>Trials</h2>"
         + _trial_table(study)
-        + "<h2>Diagnostic plots</h2>"
-        + _plot_gallery(run, study)
+        + "<h2>Diagnostic charts</h2>"
+        + _diagnostic_charts(run, study)
         + "<h2>Evaluation</h2>"
         + _evaluation_section(study, evaluation)
         + f"<details><summary>Run parameters</summary>{params}</details>",

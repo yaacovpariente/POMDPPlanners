@@ -94,6 +94,8 @@ class TuningStudy:
         early_stopping: The early-stopping settings, or ``None`` when off.
         early_stopping_fired: Whether it ended the study, or ``None`` when unknown.
         stopped_at_trial: The completed-trial count it stopped at.
+        front_quality_history: ``(completed trials, front quality)`` pairs,
+            the curve early stopping watched; empty when it was off.
         episodes_per_trial: Episodes behind each trial's score.
         steps_per_episode: Step cap per episode.
         optimization_time_seconds: Wall-clock time of the study.
@@ -117,6 +119,7 @@ class TuningStudy:
     early_stopping: Optional[Dict[str, Any]] = None
     early_stopping_fired: Optional[bool] = None
     stopped_at_trial: Optional[int] = None
+    front_quality_history: List[tuple] = field(default_factory=list)
     episodes_per_trial: Optional[int] = None
     steps_per_episode: Optional[int] = None
     optimization_time_seconds: Optional[float] = None
@@ -277,6 +280,11 @@ def load_study(run: RunView) -> TuningStudy:
             early_stopping=summary.get("early_stopping"),
             early_stopping_fired=summary.get("early_stopping_fired"),
             stopped_at_trial=_int_or_none(summary.get("stopped_at_trial")),
+            front_quality_history=[
+                (int(n), float(q))
+                for n, q in (summary.get("front_quality_history") or [])
+                if n is not None and q is not None
+            ],
             episodes_per_trial=_int_or_none(summary.get("episodes_per_trial")),
             steps_per_episode=_int_or_none(summary.get("steps_per_episode")),
             optimization_time_seconds=summary.get("optimization_time_seconds"),

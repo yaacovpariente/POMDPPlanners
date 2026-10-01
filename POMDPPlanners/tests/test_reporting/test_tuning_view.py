@@ -55,6 +55,7 @@ SUMMARY = {
     "early_stopping": {"patience": 1, "min_trials": 2, "min_relative_improvement": 0.001},
     "early_stopping_fired": True,
     "stopped_at_trial": 3,
+    "front_quality_history": [[2, 1.0], [3, 1.0]],
     "episodes_per_trial": 5,
     "steps_per_episode": 20,
     "optimization_time_seconds": 42.0,
@@ -221,9 +222,13 @@ def test_the_tuning_view_shows_the_study_and_its_fresh_evaluation(router: Router
     assert "<tr class=best>" in page
     assert ">Best<" in page and ">Pareto<" in page
     assert "4.75" in page and "1.25" in page
-    # The plot is served from the run.
-    assert f"/artifact/0/{router.index.experiments[0].experiment_id}/" in page
+    # The diagnostics are drawn on the page from the records, not shown as
+    # the PNGs; those stay in the run and are only linked.
+    assert 'class="chart tuning-chart"' in page
+    assert "/static/chart-tips.js" in page
+    assert "<img" not in page.split("Diagnostic charts", 1)[1].split("<h2>Evaluation", 1)[0]
     assert "tuning/pareto_front.png" in page
+    assert "Pareto-front quality (early stopping)" in page
     # Tuning score beside the fresh evaluation, each with its interval.
     assert "Best trial (5 episodes)" in page and "Evaluation (1 episodes)" in page
     assert "9.5" in page and "6.25" in page and "5 – 7.5" in page

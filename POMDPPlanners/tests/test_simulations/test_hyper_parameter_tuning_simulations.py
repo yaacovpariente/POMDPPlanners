@@ -3200,6 +3200,9 @@ class TestTuningStudyRecordInMlflow:
         assert summary["n_trials_completed"] == 3
         assert summary["early_stopping_fired"] is True
         assert summary["stopped_at_trial"] == 3
+        # The curve early stopping watched, one point per completed trial
+        # from min_trials on, so the site can redraw it.
+        assert [n for n, _ in summary["front_quality_history"]] == [2, 3]
         assert summary["best_parameters"] == result.chosen_hyper_parameters
         assert result.optimization_metadata["n_trials_completed"] == 3
 

@@ -176,6 +176,40 @@ span.ci { color: var(--dim); font-size: 13px; }
    range, because a value pinned to an end means the range was too narrow. */
 .trials tr.best td { background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .trials .chip { margin-left: 4px; }
+
+/* Tuning charts. Marks carry a <title>, which the browser shows on hover; the
+   hover rule makes the mark under the pointer obvious in a crowd. */
+.chart-grid { stroke: var(--line); stroke-width: 1; opacity: .6; }
+.chart-line { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.chart-front { stroke: #009E73; stroke-dasharray: 4 3; }
+.chart-marker { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 3 3; }
+.pt circle, .legend-dot { stroke: var(--panel); stroke-width: 1; }
+.pt-trial circle, .legend-dot.pt-trial { fill: #0072B2; fill-opacity: .75; }
+.pt-pareto circle, .legend-dot.pt-pareto { fill: #009E73; }
+.pt-best circle, .legend-dot.pt-best { fill: var(--accent); }
+.pt { cursor: default; }
+.pt:hover circle { r: 6; fill-opacity: 1; stroke: var(--ink); }
+.pt:hover .chart-ci { stroke: var(--ink); stroke-width: 2; }
+.chart-group { margin: 6px 0 14px; }
+.chart-group > summary { font-size: 14px; color: var(--ink); font-weight: 600; }
+.pt:focus { outline: none; }
+.pt:focus circle { r: 6; stroke: var(--ink); }
+.chart-tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 360px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.legend-line { stroke-width: 2; }
 .range-bar {
   position: relative;
   display: inline-block;

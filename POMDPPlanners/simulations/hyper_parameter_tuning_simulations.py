@@ -1002,6 +1002,9 @@ class HyperParameterOptimizer:
             ),
             "early_stopping_fired": metadata.get("early_stopping_fired"),
             "stopped_at_trial": metadata.get("stopped_at_trial"),
+            # (completed trials, Pareto-front quality) after each trial, the
+            # curve early stopping watched; empty when early stopping was off.
+            "front_quality_history": metadata.get("front_quality_history") or [],
             "episodes_per_trial": config.num_episodes,
             "steps_per_episode": config.num_steps,
             "optimization_time_seconds": metadata.get("optimization_time"),

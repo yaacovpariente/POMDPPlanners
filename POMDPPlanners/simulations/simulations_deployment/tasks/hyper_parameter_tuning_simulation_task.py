@@ -833,6 +833,17 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             if isinstance(early_stopping_callback, EarlyStoppingCallback)
             else None
         )
+        # The curve early stopping watched, kept so a report can redraw it:
+        # it depends on normalization bounds frozen mid-study, which cannot be
+        # recomputed from the trial records afterwards without repeating the
+        # callback's own logic.
+        self._front_quality_history: List[
+            Tuple[int, float]
+        ] = (  # pylint: disable=attribute-defined-outside-init
+            [(int(n), float(q)) for n, q in early_stopping_callback.history]
+            if isinstance(early_stopping_callback, EarlyStoppingCallback)
+            else []
+        )
         self._write_tuning_diagnostics(study, early_stopping_callback)
 
         return study
@@ -1051,6 +1062,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             ),
             "early_stopping_fired": stopped_at_trial is not None,
             "stopped_at_trial": stopped_at_trial,
+            "front_quality_history": [
+                [n, q] for n, q in getattr(self, "_front_quality_history", [])
+            ],
             "optimization_time": optimization_time,
             "config_id": self.get_config_id(),
             "best_trial_number": best_trial_num,
