@@ -395,15 +395,11 @@ It is not a unique-cell count.
 Visualization
 -------------
 
-Runs also write a GIF of each episode through ``cache_visualization``. Its left
-panel shows the observation-derived inverse map. The middle shows weighted
-occupancy marginals over whole-map particles. The right shows the hidden true
-map for review. Panels depict the state before the captioned action; the
-caption's reward is the realised inverse-map entropy reduction.
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
 
-Sensor contract versions 2 and 3 each changed cache identity; old results and
-GIFs describe the earlier behavior. The golden GIF is rendered in the default Gaussian mode
-and is unchanged by the truncated option.
+Sensor contract versions 2 and 3 each changed cache identity; old results
+describe the earlier behavior.
 
 Minimal example
 ---------------

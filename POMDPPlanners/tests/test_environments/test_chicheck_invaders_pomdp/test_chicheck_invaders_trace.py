@@ -2,43 +2,98 @@
 
 """Tests for the Chicheck Invaders episode trace.
 
-Two things are checked here, and they are the two things the migration could
-break.
-
-* The payload round-trips and means what it says: a viewer decoding a state
-  vector with the layout the trace carries gets the flock the episode had, and
-  the shot record agrees with the environment's own ``fires`` and
-  ``shot_target`` rather than with a second rule written in the exporter.
-* The GIF is untouched. Its bytes are pinned by a golden hash, so moving the
-  renderer into a package and adding an exporter beside it must leave the
-  rendered episode identical, including when the trace is written from the same
-  history first.
+The payload must round-trip and mean what it says: a viewer decoding a state
+vector with the layout the trace carries gets the flock the episode had, and
+the shot record agrees with the environment's own ``fires`` and
+``shot_target`` rather than with a second rule written in the visualizer.
 """
 
+import random
 from pathlib import Path
+from typing import List
 
+import numpy as np
 import pytest
 
+from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     CHICHECK_INVADERS_PAYLOAD_KIND,
+    ChicheckInvadersPOMDP,
     ChicheckInvadersVisualizer,
-    build_chicheck_invaders_trace,
+    create_chicheck_invaders_belief,
 )
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    build_chicheck_invaders_env,
-    create_deterministic_chicheck_invaders_episode,
-)
+from POMDPPlanners.tests.test_utils.env_pinned_kwargs import chicheck_invaders_pinned_kwargs
+
+
+def build_chicheck_invaders_env() -> ChicheckInvadersPOMDP:
+    """Build the environment the trace tests run on."""
+    return ChicheckInvadersPOMDP(discount_factor=0.95, **chicheck_invaders_pinned_kwargs())
+
+
+def create_deterministic_chicheck_invaders_episode(seed: int = 11) -> List[StepData]:
+    """Create a deterministic Chicheck Invaders episode.
+
+    The belief attached to each step is a real
+    :class:`ChicheckInvadersBelief` rather than a mock, so the trace's belief
+    payload is tested on what a run actually records. Both RNGs are seeded,
+    not just NumPy, because ``conftest`` seeds the stdlib ``random`` once at
+    import and the episode would otherwise depend on which tests ran first.
+
+    Args:
+        seed: Random seed pinning the flock, the dives, the sensor noise and the
+            filter's resampling.
+
+    Returns:
+        List of StepData objects representing the episode history.
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    env = build_chicheck_invaders_env()
+    belief = create_chicheck_invaders_belief(env, n_particles=60)
+    state = env.initial_state_dist().sample()[0]
+    history: List[StepData] = []
+
+    # Shoot, sidestep, shoot again. Indices follow ChicheckInvadersAction:
+    # 0 stay, 1 left, 2 right, 3 fire.
+    action_sequence = [1, 3, 0, 2, 3, 2, 0, 3, 1, 3, 0, 3]
+
+    for action in action_sequence:
+        if env.is_terminal(state):
+            break
+        next_state, observation, reward = env.sample_next_step(state, action)
+        history.append(
+            StepData(
+                state=state,
+                action=action,
+                next_state=next_state,
+                observation=observation,
+                reward=float(reward),
+                belief=belief,
+                info=env.step_info(state, action, next_state),
+            )
+        )
+        belief = belief.update(action=action, observation=observation, pomdp=env)
+        state = next_state
+
+    history.append(
+        StepData(
+            state=state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=belief,
+            info=env.step_info(state, None, None),
+        )
+    )
+    return history
 
 
 @pytest.fixture(name="episode")
 def episode_fixture():
-    """A real, deterministic Chicheck Invaders episode.
-
-    The same fixture the golden GIF is rendered from, so a trace test and a
-    picture test are talking about one episode rather than two.
-    """
+    """A real, deterministic Chicheck Invaders episode."""
     return create_deterministic_chicheck_invaders_episode(seed=11)
 
 
@@ -76,7 +131,9 @@ def test_trace_round_trips_through_json(env, episode, tmp_path: Path):
     When: Its trace is written and read back.
     Then: The envelope and the whole payload compare equal.
     """
-    trace = build_chicheck_invaders_trace(env, episode, episode_index=2, policy_name="PFT_DPW")
+    trace = ChicheckInvadersVisualizer(env).build_trace(
+        episode, episode_index=2, policy_name="PFT_DPW"
+    )
     path = trace.write(tmp_path / "trace_2.json")
 
     reloaded = EpisodeTrace.read(path)
@@ -101,7 +158,7 @@ def test_trace_layout_decodes_the_recorded_states(env, episode):
     When: Each recorded state is decoded with the payload's own layout.
     Then: The ship's column and every chicken slot match the episode's states.
     """
-    trace = build_chicheck_invaders_trace(env, episode, episode_index=0)
+    trace = ChicheckInvadersVisualizer(env).build_trace(episode, episode_index=0)
     layout = trace.payload["layout"]["state"]
 
     assert len(trace.payload["states"]) == len(episode)
@@ -128,7 +185,7 @@ def test_trace_shots_come_from_the_environment(env, episode):
         ``shot_target`` for that step, and at least one step fired. The terminal
         bookkeeping step carries no action and therefore never fires.
     """
-    trace = build_chicheck_invaders_trace(env, episode, episode_index=0)
+    trace = ChicheckInvadersVisualizer(env).build_trace(episode, episode_index=0)
     shots = trace.payload["shots"]
 
     assert len(shots) == len(episode)
@@ -145,7 +202,7 @@ def test_trace_shots_come_from_the_environment(env, episode):
 
 
 def test_trace_delegates_belief_serialization_to_core(env, episode):
-    """The exporter writes no belief format of its own.
+    """The visualizer writes no belief format of its own.
 
     Purpose: Belief is a core abstraction with a closed family of
     implementations. Serializing it per environment would mean a copy of the
@@ -156,7 +213,7 @@ def test_trace_delegates_belief_serialization_to_core(env, episode):
     Then: Each step's belief payload equals ``belief_to_payload`` of that step's
         belief, field for field.
     """
-    trace = build_chicheck_invaders_trace(env, episode, episode_index=0)
+    trace = ChicheckInvadersVisualizer(env).build_trace(episode, episode_index=0)
 
     for step, written in zip(episode, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -177,7 +234,7 @@ def test_trace_takes_the_sensor_parameters_from_the_instance(episode):
     env.camera_slope = 0.5
     env.radar_radius = 3.25
 
-    world = build_chicheck_invaders_trace(env, episode, episode_index=0).payload["world"]
+    world = ChicheckInvadersVisualizer(env).build_trace(episode, episode_index=0).payload["world"]
 
     assert world["camera_slope"] == pytest.approx(0.5)
     assert world["radar_radius"] == pytest.approx(3.25)
@@ -194,7 +251,7 @@ def test_trace_rejects_an_empty_history(env):
     Then: ValueError.
     """
     with pytest.raises(ValueError):
-        build_chicheck_invaders_trace(env, [], 0)
+        ChicheckInvadersVisualizer(env).build_trace([], episode_index=0)
 
 
 def test_environment_writes_a_trace_file(env, episode, tmp_path: Path):
@@ -202,37 +259,13 @@ def test_environment_writes_a_trace_file(env, episode, tmp_path: Path):
 
     Purpose: The reporting site finds traces by a fixed file name across
     environments it has never heard of, so the environment must go through
-    ``cache_trace`` rather than name its own file.
+    its visualizer's ``write`` rather than name its own file.
 
     Given: A Chicheck Invaders episode.
-    When: cache_trace is called.
+    When: The environment's visualizer writes episode 3.
     Then: ``trace_3.json`` appears and reads back with this payload kind.
     """
-    written = env.cache_trace(history=episode, output_dir=tmp_path, episode_index=3)
+    written = env.episode_visualizer().write(history=episode, output_dir=tmp_path, episode_index=3)
 
     assert written == tmp_path / "trace_3.json"
     assert EpisodeTrace.read(written).payload_kind == CHICHECK_INVADERS_PAYLOAD_KIND
-
-
-def test_writing_a_trace_does_not_change_the_gif(env, episode, tmp_path: Path):
-    """The GIF is byte-identical whether or not a trace was written first.
-
-    Purpose: The GIF's bytes are pinned by a golden hash. This migration moved
-    the renderer and put an exporter beside it, and both read the same history
-    and the same belief objects; a trace that consumed or mutated either would
-    move the golden hash, which the migration may not do.
-
-    Given: One deterministic episode.
-    When: The GIF is rendered alone, and again after the trace is exported from
-        the same history.
-    Then: The two files are byte-identical.
-    """
-    before = tmp_path / "before.gif"
-    ChicheckInvadersVisualizer(env).create_visualization(episode, before)
-
-    env.cache_trace(history=episode, output_dir=tmp_path, episode_index=0)
-
-    after = tmp_path / "after.gif"
-    ChicheckInvadersVisualizer(env).create_visualization(episode, after)
-
-    assert after.read_bytes() == before.read_bytes()

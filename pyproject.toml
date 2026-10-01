@@ -104,23 +104,6 @@ where = ["."]
 include = ["POMDPPlanners*"]
 
 [tool.setuptools.package-data]
-"POMDPPlanners.environments.tiger_pomdp" = ["tiger_visualization_assets/*.png"]
-"POMDPPlanners.environments.cartpole_pomdp" = ["visualization_assets/*.png"]
-"POMDPPlanners.environments.mountain_car_pomdp" = ["assets/*.png", "assets/*.jpg"]
-"POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization" = ["laser_tag_sprite_sheet.png"]
-"POMDPPlanners.environments.light_dark_pomdp.light_dark_visualization" = ["art/*.png"]
-"POMDPPlanners.environments.rock_sample_pomdp" = ["visualization_assets/*.png"]
-"POMDPPlanners.environments.push_pomdp.push_visualization" = ["push_sprite_sheet.png"]
-# PacMan visualizer loads these sprites at runtime via
-# visualizer/pacman_visualizer.py: `Path(__file__).with_name("img")`. The
-# directory moved into the visualizer package with the renderer that reads it,
-# so the path still resolves. Bundle them so PyPI installs include the assets,
-# not just the .py files.
-"POMDPPlanners.environments.pacman_pomdp.pacman_visualization" = ["img/*"]
-# Golden visualization GIFs used by the bundled test suite to validate
-# environment renderings. ~1.2MB total; ships so installed-package smoke
-# tests can run without re-downloading fixtures.
-"POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
 # The results site serves these itself; the vendored three.js build is why
 # the viewer works with no network.
 "POMDPPlanners.reporting" = [
@@ -128,8 +111,10 @@ include = ["POMDPPlanners*"]
     "static/*.js",
     "static/vendor/*.js",
     "static/viewer/*.js",
-    "static/viewer/scenes/*.js",
 ]
+# Each environment's three.js scene lives next to the visualizer that writes
+# its traces; the results site finds them by this suffix.
+"*" = ["*.scene.js"]
 
 # ---------------------------------------------------------------------------
 # Tool configuration

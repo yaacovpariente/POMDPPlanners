@@ -153,14 +153,16 @@ def test_render_writes_comparison_histogram(output_dir):
 
 
 def test_render_with_cache_visualizations_invokes_environment_cache(output_dir):
-    """cache_visualizations=True triggers per-episode environment.cache_visualization.
+    """cache_visualizations=True writes each episode through the environment's visualizer.
 
-    Purpose: Validates the per-episode env-side cache hook is wired through.
+    Purpose: Validates the per-episode visualizer is wired through.
 
     Given: One policy with two histories and an environment whose
-        ``cache_visualization`` is mocked.
+        ``episode_visualizer`` is mocked.
     When: ``render`` is called with cache_visualizations=True.
-    Then: ``environment.cache_visualization`` is invoked twice (once per episode).
+    Then: The visualizer's ``write`` is invoked twice (once per episode), into
+        the policy's ``visualizations`` directory, with the episode index and
+        the policy name.
 
     Test type: unit
     """
@@ -188,17 +190,59 @@ def test_render_with_cache_visualizations_invokes_environment_cache(output_dir):
             cache_visualizations=True,
         )
 
-    assert env.cache_visualization.call_count == 2
+    write = env.episode_visualizer.return_value.write
+    assert write.call_count == 2
+    assert [call.kwargs["episode_index"] for call in write.call_args_list] == [0, 1]
+    assert write.call_args.kwargs["output_dir"] == output_dir / "pol_a" / "visualizations"
+    assert write.call_args.kwargs["policy_name"] == "pol_a"
+
+
+def test_render_skips_environments_without_a_visualizer(output_dir):
+    """An environment with no visualizer gets no visualizations directory.
+
+    Purpose: ``episode_visualizer()`` returning ``None`` is the default, and
+        must not fail the render or leave an empty directory behind.
+
+    Given: An environment whose ``episode_visualizer`` returns ``None``.
+    When: ``render`` is called with cache_visualizations=True.
+    Then: No ``visualizations`` directory is created.
+
+    Test type: unit
+    """
+    visualizer = EpisodeReturnsVisualizer()
+    env = _environment()
+    env.episode_visualizer.return_value = None
+
+    with (
+        patch(
+            "POMDPPlanners.simulations.simulator.episode_returns_visualizer."
+            "plot_discounted_returns_histogram"
+        ),
+        patch(
+            "POMDPPlanners.simulations.simulator.episode_returns_visualizer."
+            "plot_discounted_returns_histogram_multiple_policies"
+        ),
+    ):
+        visualizer.render(
+            env_name="env_a",
+            environment=env,
+            policy_results={"pol_a": [_history()]},
+            policies=[_policy("pol_a")],
+            output_dir=output_dir,
+            cache_visualizations=True,
+        )
+
+    assert not (output_dir / "pol_a" / "visualizations").exists()
 
 
 def test_render_swallows_per_episode_cache_errors_and_logs_warning(output_dir):
-    """Per-episode environment.cache_visualization failures are caught and logged.
+    """Per-episode visualizer failures are caught and logged.
 
     Purpose: Validates the visualizer's per-episode try/except so that one
         broken episode never aborts a whole render call.
 
     Given: One policy with one history and an environment whose
-        ``cache_visualization`` raises.
+        visualizer's ``write`` raises.
     When: ``render`` is called with ``cache_visualizations=True``.
     Then: ``render`` returns the output directory without raising and the
         module-level logger emits a warning that names the failed episode.
@@ -208,7 +252,7 @@ def test_render_swallows_per_episode_cache_errors_and_logs_warning(output_dir):
     visualizer = EpisodeReturnsVisualizer()
     pol = _policy("pol_a")
     env = _environment()
-    env.cache_visualization.side_effect = RuntimeError("boom")
+    env.episode_visualizer.return_value.write.side_effect = RuntimeError("boom")
 
     from POMDPPlanners.simulations.simulator import (  # pylint: disable=import-outside-toplevel
         episode_returns_visualizer as _erv,

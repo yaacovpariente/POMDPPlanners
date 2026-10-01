@@ -5,7 +5,7 @@
 Exports:
     OccupancyGridMappingPOMDP: The environment.
     OccupancyGridAction: Its three action indices.
-    OccupancyGridMappingVisualizer: Episode renderer.
+    OccupancyGridMappingVisualizer: Writes episodes as traces for the 3D viewer.
     OccupancyGridInitialStateDistribution: The per-episode map prior.
     OccupancyGridMappingBelief: The scalar conditional whole-map filter.
     OccupancyGridMappingVectorizedBelief: Its batched twin.
@@ -71,6 +71,7 @@ __all__ = [
     "OccupancyGridMappingPOMDP",
     "OccupancyGridMappingVectorizedBelief",
     "OccupancyGridMappingVectorizedUpdater",
+    "OccupancyGridMappingVisualizer",
     "OccupancyGridState",
     "OccupancyGridStepChannel",
     "OccupancyUpdateRule",
@@ -100,3 +101,4 @@ from .occupancy_grid_mapping_beliefs import (
     OccupancyGridMappingVectorizedUpdater,
     create_occupancy_grid_mapping_belief,
 )
+from .occupancy_grid_mapping_visualization import OccupancyGridMappingVisualizer

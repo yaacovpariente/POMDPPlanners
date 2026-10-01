@@ -2,9 +2,9 @@
 
 """What an episode produced, classified by kind rather than by environment.
 
-This is the site's load-bearing abstraction. Light-Dark writes a trace and a
-GIF; CARLA, Isaac Lab and nuPlan write an MP4 and nothing else, because there
-is no compact state to replay — the render *is* the episode. If the site
+This is the site's load-bearing abstraction. Environments implemented in
+this repo write a trace; CARLA and Isaac Lab write an MP4, because there is no
+compact state to replay — the render *is* the episode. If the site
 dispatched on the environment it would need a branch per environment and a
 release to add one. It dispatches on the artifact's kind instead, so a new
 environment that writes an MP4 is a first-class episode on the day it lands,
@@ -30,7 +30,6 @@ _EXTENSION_KINDS: Dict[str, ArtifactKind] = {
     ".mp4": ArtifactKind.VIDEO,
     ".webm": ArtifactKind.VIDEO,
     ".mov": ArtifactKind.VIDEO,
-    ".gif": ArtifactKind.GIF,
     ".png": ArtifactKind.PLOT,
     ".jpg": ArtifactKind.PLOT,
     ".jpeg": ArtifactKind.PLOT,
@@ -41,16 +40,14 @@ _EXTENSION_KINDS: Dict[str, ArtifactKind] = {
 PLAYER_FOR_KIND: Dict[ArtifactKind, str] = {
     ArtifactKind.TRACE: "trace-viewer",
     ArtifactKind.VIDEO: "video",
-    ArtifactKind.GIF: "image",
     ArtifactKind.PLOT: "image",
 }
 
 # Which kind a page prefers when an episode produced several. A trace beats a
-# video because it is interactive; a video beats a GIF because it seeks.
+# video because it is interactive.
 _KIND_PRIORITY: Sequence[ArtifactKind] = (
     ArtifactKind.TRACE,
     ArtifactKind.VIDEO,
-    ArtifactKind.GIF,
     ArtifactKind.PLOT,
 )
 
@@ -69,9 +66,9 @@ MEDIA_TYPES: Dict[str, str] = {
     ".html": "text/html; charset=utf-8",
 }
 
-# Environments name their per-episode files differently — agent_path_3.gif,
-# battleship_board_3.gif, trace_3.json — so the index is taken from the
-# trailing number rather than from a fixed prefix.
+# Per-episode files are named differently by kind — trace_3.json,
+# agent_path_3.mp4 — so the index is taken from the trailing number rather
+# than from a fixed prefix.
 _EPISODE_INDEX = re.compile(r"(\d+)(?=\.[A-Za-z0-9]+$)")
 
 
@@ -79,7 +76,7 @@ def episode_index_from_name(name: str) -> Optional[int]:
     """Read the episode index out of an artifact's file name.
 
     Args:
-        name: The file's base name, e.g. ``agent_path_3.gif``.
+        name: The file's base name, e.g. ``agent_path_3.mp4``.
 
     Returns:
         The trailing integer, or ``None`` when the name carries none — which

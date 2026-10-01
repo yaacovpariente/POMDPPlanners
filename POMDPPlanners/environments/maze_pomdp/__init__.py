@@ -6,7 +6,8 @@ Classes:
     DiscreteMazePOMDP: Generated maze with cell actions.
     ContinuousMazePOMDP: The same generated maze with real displacement actions.
     TMazePOMDP: Compatibility class preserving the original T-shaped geometry.
-    MazeVisualizer: Renderer shared by every class above.
+    MazeVisualizer: Writes Maze episodes, discrete or continuous, as traces.
+    TMazeVisualizer: Writes T-Maze episodes as traces.
 
 The package was previously called ``t_maze_pomdp``. That name still imports, so
 saved configurations keep loading, but new code should import from here.
@@ -22,7 +23,10 @@ from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     StepOutcome,
     create_maze_state,
 )
-from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
+from POMDPPlanners.environments.maze_pomdp.maze_visualization import (
+    MazeVisualizer,
+    TMazeVisualizer,
+)
 from POMDPPlanners.environments.maze_pomdp.t_maze_pomdp import (
     ACTIONS,
     CUE_CONSUMED,
@@ -72,6 +76,7 @@ __all__ = [
     "TMazeMetric",
     "TMazePOMDP",
     "TMazeStepChannel",
+    "TMazeVisualizer",
     "create_maze_state",
     "create_t_maze_state",
 ]

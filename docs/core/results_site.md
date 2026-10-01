@@ -43,8 +43,7 @@ results/my-study/
           statistics/comparison_results.json
           <environment>/policy_comparison_histogram.png
           <environment>/<planner>/plots/discounted_returns_histogram.png
-          <environment>/<planner>/visualizations/agent_path_<i>.gif
-          <environment>/<planner>/visualizations/trace_<i>.json
+          <environment>/<planner>/visualizations/trace_<i>.json      <- or agent_path_<i>.mp4
   logs/, env_policy/, joblib_cache/, cache.db  <- run plumbing, not read by the site
 ```
 
@@ -74,23 +73,41 @@ and picks a player from the classification:
 | --- | --- | --- |
 | `trace` | `trace_<i>.json` | the interactive 3D viewer |
 | `video` | `.mp4`, `.webm`, `.mov` | a `<video>` element |
-| `gif` | `.gif` | an image |
 | `plot` | `.png`, `.jpg`, `.svg` | an image |
 
-That indirection is the point. CARLA, Isaac Lab and nuPlan have no compact state
-to replay — the render *is* the episode — so they write an MP4 and no trace, and
+That indirection is the point. CARLA and Isaac Lab have no compact state to
+replay — the render *is* the episode — so they write an MP4 and no trace, and
 they appear in the site as first-class episodes with a video player without a
 line of environment-specific code. When an episode produced several artifacts,
 the page plays the most useful one: a trace beats a video because it is
-interactive, and a video beats a GIF because it seeks.
+interactive.
+
+GIFs are not episode artifacts. Runs made before the GIF renderers were removed
+still hold `agent_path_<i>.gif` files; the site ignores them.
+
+## How an environment shows its episodes
+
+Each environment shows its episodes in exactly one way, through the visualizer
+`Environment.episode_visualizer()` returns
+(`POMDPPlanners.core.simulation.episode_visualizers`):
+
+- **`TraceVisualizer`**, for environments implemented in this repo. It writes
+  `trace_<i>.json`, and a three.js scene replays it. The scene script lives in
+  the environment's own visualization package next to the visualizer, as
+  `<scene>.scene.js` — `battleship.scene.js` draws `battleship.v1`. The site
+  serves every scene at `/static/scenes/<scene>.js`.
+- **`VideoVisualizer`**, for worlds that wrap an external simulator (CARLA,
+  Isaac Lab). It saves the simulator's own camera footage as
+  `agent_path_<i>.mp4`.
+- **`None`**, the default, for an environment with no visualization.
+
+The simulator calls the visualizer's `write` once per episode, under the rule
+that a failure loses the file and not the run.
 
 ## Episode traces
 
-`Environment.cache_visualization` writes a picture. That picture is the end of
-the line: nothing can read a position, a reward or a belief back out of a GIF.
-`Environment.cache_trace` writes the same episode as data, beside the GIF, in
-the same directory and under the same rule that a failure loses the artifact and
-not the run.
+A picture is the end of the line: nothing can read a position, a reward or a
+belief back out of it. A trace is the episode written as data.
 
 A trace file has two halves:
 
@@ -104,11 +121,10 @@ A trace file has two halves:
   `light_dark.v1` payload carries the world's geometry, the states, the
   observations, and the belief at each step.
 
-Writing a trace is opt-in. `Environment.build_episode_trace` returns `None` by
-default, so an environment that has not implemented it writes nothing and is
-unaffected. To add one, override `build_episode_trace`, build the shared half
-with `POMDPPlanners.core.simulation.traces.envelope_steps`, and put whatever is
-specific to your environment in the payload.
+To add a trace to an environment, subclass `TraceVisualizer` in the
+environment's `<env>_visualization/` package, set `payload_kind`, implement
+`build_payload(history)`, add the scene script beside it, and return the
+visualizer from `episode_visualizer()`. The base class fills in the envelope.
 
 ### The belief
 
@@ -120,7 +136,7 @@ actually held.
 Serializing it is **not** an environment's job. `Belief` is a core abstraction
 with a closed family of implementations, so
 `POMDPPlanners.core.simulation.belief_payloads.belief_to_payload` writes any of
-them, dispatching on the class. An environment's exporter hands it a `Belief`
+them, dispatching on the class. An environment's visualizer hands it a `Belief`
 and gets a payload back, and is left with only what is genuinely its own: its
 world and its states.
 

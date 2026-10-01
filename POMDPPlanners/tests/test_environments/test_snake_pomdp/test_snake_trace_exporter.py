@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""The Snake episode trace, and the GIF the move beside it must not have changed.
+"""The Snake episode trace.
 
-Two things are worth pinning here. The first is that the payload says what the
-episode said: the body, the apple, the readings and the belief, aligned to the
-step a reader will see them under. The second is that moving the renderer into
-``visualizer/`` changed nothing about what it renders -- the golden hash covers
-that inside the project's Docker image, and this covers the part of it that can
-run anywhere.
+What is worth pinning here is that the payload says what the episode said: the
+body, the apple, the readings and the belief, aligned to the step a reader will
+see them under.
 """
 
-import hashlib
 import random
 from pathlib import Path
 
@@ -24,11 +20,8 @@ from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.snake_pomdp import SnakeBelief, SnakePOMDP
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import SnakeAction, SnakeTermination
 from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
-    SnakeVisualizer,
-)
-from POMDPPlanners.environments.snake_pomdp.snake_visualization.trace_exporter import (
     SNAKE_PAYLOAD_KIND,
-    build_snake_trace,
+    SnakeVisualizer,
 )
 
 
@@ -117,7 +110,7 @@ def test_snake_trace_round_trips_through_json(env, history, tmp_path: Path):
 
     Purpose: The viewer reads a file, not an object. A payload that held a
     numpy scalar would serialize and then come back as something the scene
-    cannot index, and nothing in the exporter would have failed.
+    cannot index, and nothing in the visualizer would have failed.
 
     Given: One recorded Snake episode.
     When: Its trace is written to disk and read back.
@@ -125,7 +118,7 @@ def test_snake_trace_round_trips_through_json(env, history, tmp_path: Path):
 
     Test type: unit
     """
-    trace = build_snake_trace(env, history, episode_index=3, policy_name="POMCP")
+    trace = SnakeVisualizer(env).build_trace(history, episode_index=3, policy_name="POMCP")
     written = trace.write(tmp_path / "trace_3.json")
     restored = EpisodeTrace.read(written)
 
@@ -145,7 +138,7 @@ def test_snake_trace_writes_one_entry_per_step(env, history):
 
     Test type: unit
     """
-    payload = build_snake_trace(env, history, 0).payload
+    payload = SnakeVisualizer(env).build_trace(history, 0).payload
     for field in (
         "bodies",
         "foods",
@@ -166,11 +159,11 @@ def test_snake_trace_bodies_and_apples_come_from_the_recorded_state(env, history
 
     Purpose: A viewer that drew the successor's body would show the snake one
     cell ahead of the belief and the reading beside it, which is exactly the
-    off-by-one the GIF renderer documents avoiding.
+    off-by-one the visualizer's module docstring documents avoiding.
 
     Test type: unit
     """
-    payload = build_snake_trace(env, history, 0).payload
+    payload = SnakeVisualizer(env).build_trace(history, 0).payload
     for index, step in enumerate(history):
         expected = [[int(r), int(c)] for r, c in env.body(step.state)]
         assert payload["bodies"][index] == expected
@@ -194,7 +187,7 @@ def test_snake_trace_shifts_the_reading_by_one_step(env, history):
 
     Test type: unit
     """
-    payload = build_snake_trace(env, history, 0).payload
+    payload = SnakeVisualizer(env).build_trace(history, 0).payload
 
     assert payload["sightings"][0] is None
     assert payload["scents"][0] is None
@@ -222,7 +215,7 @@ def test_snake_trace_reports_what_each_turn_would_do(env, history):
 
     Test type: unit
     """
-    payload = build_snake_trace(env, history, 0).payload
+    payload = SnakeVisualizer(env).build_trace(history, 0).payload
     for index, step in enumerate(history):
         outcomes = payload["turn_outcomes"][index]
         if env.is_terminal(step.state):
@@ -235,7 +228,7 @@ def test_snake_trace_reports_what_each_turn_would_do(env, history):
 
 
 def test_snake_trace_delegates_belief_serialization_to_core(env, history):
-    """The exporter writes no belief format of its own.
+    """The visualizer writes no belief format of its own.
 
     Purpose: Belief is a core abstraction with a closed family of
     implementations. An environment that serialized its own would be a
@@ -244,7 +237,7 @@ def test_snake_trace_delegates_belief_serialization_to_core(env, history):
 
     Test type: unit
     """
-    payload = build_snake_trace(env, history, 0).payload
+    payload = SnakeVisualizer(env).build_trace(history, 0).payload
     for step, written in zip(history, payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
 
@@ -268,9 +261,11 @@ def test_snake_belief_is_serialized_as_particles_not_as_unsupported(env):
     assert payload["belief_class"] == "SnakeBelief"
     # The viewer reads the apple cell out of these slots, so they have to be
     # the ones the payload's state_layout names.
-    layout = build_snake_trace(env, rollout(env, [SnakeAction.GO_STRAIGHT]), 0).payload[
-        "state_layout"
-    ]
+    layout = (
+        SnakeVisualizer(env)
+        .build_trace(rollout(env, [SnakeAction.GO_STRAIGHT]), 0)
+        .payload["state_layout"]
+    )
     row, col = layout["food_row"], layout["food_col"]
     for particle in payload["particles"]:
         assert env.in_grid((int(round(particle[row])), int(round(particle[col]))))
@@ -286,7 +281,7 @@ def test_snake_trace_takes_the_world_from_the_instance():
     Test type: unit
     """
     env = build_env(grid_size=9, target_length=5, starvation_limit=13, scent_accuracy=0.8)
-    payload = build_snake_trace(env, rollout(env, STRAIGHT_RUN), 0).payload
+    payload = SnakeVisualizer(env).build_trace(rollout(env, STRAIGHT_RUN), 0).payload
     assert payload["world"] == {
         "grid_size": 9,
         "target_length": 5,
@@ -309,14 +304,14 @@ def test_snake_trace_reports_the_episode_outcome(env):
     """
     # Straight west from the centre is the shortest way into a wall.
     history = rollout(env, [SnakeAction.TURN_LEFT] + [SnakeAction.GO_STRAIGHT] * 8)
-    trace = build_snake_trace(env, history, 0)
+    trace = SnakeVisualizer(env).build_trace(history, 0)
     assert trace.reach_terminal_state is True
     assert trace.payload["terminations"][-1] != int(SnakeTermination.RUNNING)
 
 
 def test_snake_environment_writes_a_trace_file(env, history, tmp_path: Path):
-    """``cache_trace`` writes the file the reporting site looks for."""
-    written = env.cache_trace(
+    """The environment's visualizer writes the file the reporting site looks for."""
+    written = env.episode_visualizer().write(
         history=history, output_dir=tmp_path, episode_index=2, policy_name="POMCPOW"
     )
     assert written == tmp_path / "trace_2.json"
@@ -326,36 +321,4 @@ def test_snake_environment_writes_a_trace_file(env, history, tmp_path: Path):
 def test_snake_trace_rejects_an_empty_history(env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_snake_trace(env, [], 0)
-
-
-def test_moving_the_renderer_did_not_change_what_cache_visualization_renders(
-    env, history, tmp_path: Path
-):
-    """The GIF ``cache_visualization`` writes is the moved renderer's own output.
-
-    Purpose: The renderer moved into ``visualizer/`` and its bytes are pinned
-    by a golden hash that only runs inside the project's Docker image. The one
-    thing the move could have broken anywhere is the lazy import in
-    ``cache_visualization``: pointed at a stale module it would still render a
-    GIF, just not this one. Hashing both and comparing is what catches that
-    without needing the pinned image.
-
-    Given: One recorded Snake episode.
-    When: It is rendered through ``cache_visualization`` and again through
-        :class:`SnakeVisualizer` taken from its new home.
-    Then: The two files are byte-identical.
-
-    Test type: unit
-    """
-    env.cache_visualization(history=history, output_dir=tmp_path, episode_index=0)
-    through_environment = tmp_path / "snake_board_0.gif"
-    assert through_environment.exists()
-
-    direct = tmp_path / "direct.gif"
-    SnakeVisualizer(env).create_visualization(history, direct)
-
-    assert (
-        hashlib.sha256(through_environment.read_bytes()).hexdigest()
-        == hashlib.sha256(direct.read_bytes()).hexdigest()
-    )
+        SnakeVisualizer(env).build_trace([], 0)

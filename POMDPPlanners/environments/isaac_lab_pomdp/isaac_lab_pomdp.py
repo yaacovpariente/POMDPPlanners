@@ -55,7 +55,9 @@ from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation import StepData
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_visualizer import (
+        IsaacLabPOMDPVisualizer,
+    )
 
 
 class IsaacLabStepChannel(Enum):
@@ -377,7 +379,7 @@ class IsaacLabPOMDP(Environment):
                 ``env.step`` covers several physics substeps and the force buffer
                 is read only at the end.
             record_video: Buffer an RGB frame per step so
-                :meth:`cache_visualization` can write an episode video. Requires
+                :meth:`episode_visualizer` can write an episode video. Requires
                 ``render_mode="rgb_array"``. Defaults to False.
             name: Environment identifier. Defaults to ``"IsaacLabPOMDP-<task_id>"``.
             reward_range: Optional ``(min, max)`` reward bounds. Defaults to None.
@@ -835,33 +837,13 @@ class IsaacLabPOMDP(Environment):
             )
         return specs
 
-    def cache_visualization(
-        self, history: "List[StepData]", output_dir: Path, episode_index: int
-    ) -> None:
-        """Write the buffered simulator frames as an episode video.
+    def episode_visualizer(self) -> "IsaacLabPOMDPVisualizer":
+        """Return the visualizer that writes the buffered simulator frames.
 
-        Args:
-            history: Unused. Frames are captured live during the episode because
-                the simulator viewport cannot be reconstructed from recorded
-                states.
-            output_dir: Directory to write into.
-            episode_index: Zero-based episode index, used to name the file.
-
-        Raises:
-            RuntimeError: If the world was not constructed with
-                ``record_video=True``.
+        Frames are captured live during the episode because the simulator
+        viewport cannot be reconstructed from recorded states, so writing a
+        video requires ``record_video=True``.
         """
-        del history
-        if not self.record_video:
-            raise RuntimeError(
-                "IsaacLabPOMDP.cache_visualization requires record_video=True; "
-                "construct the world with record_video=True (and "
-                "render_mode='rgb_array') to capture an episode video."
-            )
-        if not self._frames:
-            self.logger.warning("No frames buffered for episode %s; skipping video", episode_index)
-            return
-
         # Imported lazily: the visualizer module is only needed when a video is
         # actually written, and importing it pulls in matplotlib.
         # pylint: disable-next=import-outside-toplevel
@@ -869,10 +851,7 @@ class IsaacLabPOMDP(Environment):
             IsaacLabPOMDPVisualizer,
         )
 
-        output_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = output_dir / f"agent_path_{episode_index}.mp4"
-        IsaacLabPOMDPVisualizer(self).frames_to_video(list(self._frames), cache_path)
-        self.logger.info("Cached episode video to %s", cache_path)
+        return IsaacLabPOMDPVisualizer(self)
 
     @property
     def frames(self) -> List[np.ndarray]:

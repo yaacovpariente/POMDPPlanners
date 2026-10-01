@@ -29,14 +29,18 @@ def _run_single_episode(
         num_steps=num_steps,
         logger=logger,
     )
-    # The environment owns the output file name/extension; keep each planner's
+    # The visualizer owns the output file name; keep each planner's
     # visualizations separated by writing them into a per-planner subdirectory.
+    visualizer = environment.episode_visualizer()
+    if visualizer is None:
+        return
     planner_output_dir = cache_dir / planner.name
     planner_output_dir.mkdir(parents=True, exist_ok=True)
-    environment.cache_visualization(
+    visualizer.write(
         history=episode_result.history,
         output_dir=planner_output_dir,
         episode_index=episode_id,
+        policy_name=planner.name,
     )
 
 

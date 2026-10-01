@@ -38,16 +38,15 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
-    SafeAntVelocityVisualizer,
-)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.simulation.traces import EpisodeTrace
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.safety_ant_velocity_visualizer import (
+        SafeAntVelocityVisualizer,
+    )
 
 DEFAULT_FORCE_SCALES: np.ndarray = np.array([0.0, 0.33, 0.67, 1.0])
 
@@ -286,53 +285,16 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (force levels); already hashable.
         return action
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache animated visualization of the safety ant velocity episode.
-
-        Creates an animated GIF showing the ant's movement trajectory with velocity vectors,
-        safety zones, force applications, and safety constraint violations.
-
-        Args:
-            history: Episode history containing states, actions, and rewards
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
-
-        Raises:
-            ValueError: If history is empty
-        """
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = SafeAntVelocityVisualizer(self)
-        visualizer.create_animation(history, cache_path)
-
-    def build_episode_trace(
-        self, history: List[StepData], episode_index: int, policy_name: Optional[str] = None
-    ) -> "EpisodeTrace":
-        """Write this episode as data, beside the GIF.
-
-        Args:
-            history: List of step data from an episode.
-            episode_index: Zero-based episode index within its run.
-            policy_name: Name of the policy that produced the episode.
-
-        Returns:
-            The episode's trace, with payload kind ``safety_ant_velocity.v1``.
-        """
-        # Imported here rather than at module scope: the exporter pulls in the
-        # trace schema, and this module is imported by every Safety Ant run
-        # including ones that never write anything.
+    def episode_visualizer(self) -> "SafeAntVelocityVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
         # pylint: disable-next=import-outside-toplevel
-        from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.trace_exporter import (
-            build_safety_ant_velocity_trace,
+        from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.safety_ant_velocity_visualizer import (
+            SafeAntVelocityVisualizer,
         )
 
-        return build_safety_ant_velocity_trace(
-            environment=self,
-            history=history,
-            episode_index=episode_index,
-            policy_name=policy_name,
-        )
+        return SafeAntVelocityVisualizer(self)
 
     def get_metric_names(self) -> List[str]:
         """Get names of Safety Ant Velocity POMDP specific metrics.

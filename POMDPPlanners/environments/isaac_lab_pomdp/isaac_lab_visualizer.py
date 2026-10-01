@@ -2,13 +2,14 @@
 
 """IsaacLab POMDP episode video visualizer.
 
-Renders an episode as an ``.mp4`` video of the simulator viewport: each frame is
+This is the visualizer :meth:`IsaacLabPOMDP.episode_visualizer` returns. It
+renders an episode as an ``.mp4`` video of the simulator viewport: each frame is
 the RGB image the IsaacLab simulator produced for that step (captured via
 :meth:`~POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp.IsaacLabPOMDP.render`),
 so the video shows *what is seen in the simulator* rather than an abstract plot
 of the state or observation.
 
-Video (rather than GIF) output is used because IsaacLab frames are full-colour,
+Video output is used because IsaacLab frames are full-colour,
 high-resolution renders where an animated GIF would be large and heavily
 quantized; ``.mp4`` keeps the file small and the colours faithful. Encoding pipes
 the raw RGB frames straight into the system ``ffmpeg`` binary (located via
@@ -27,13 +28,15 @@ from typing import Any, List
 import numpy as np
 from matplotlib.animation import FFMpegWriter
 
+from POMDPPlanners.core.simulation.episode_visualizers import VideoVisualizer
 
-class IsaacLabPOMDPVisualizer:
+
+class IsaacLabPOMDPVisualizer(VideoVisualizer):
     """RGB-frame-to-``.mp4`` video writer for an IsaacLabPOMDP episode.
 
-    The visualizer needs only the list of RGB frames captured while an episode was
-    rolled forward; it stores the environment for parity with the other
-    environment visualizers but does not require any geometry from it.
+    :meth:`write_video` writes the frames the environment buffered during the
+    episode. :meth:`frames_to_video` encodes any list of RGB frames and needs no
+    environment.
 
     Example:
         Rendering is driven from the RGB frames captured during an episode::
@@ -47,9 +50,39 @@ class IsaacLabPOMDPVisualizer:
 
         Args:
             environment: The IsaacLabPOMDP instance the frames were produced by.
-                Optional; retained for parity with other visualizers.
+                Optional; only :meth:`write_video` needs it.
         """
-        self.environment = environment
+        super().__init__(environment)
+
+    def write_video(self, path: Path) -> bool:
+        """Write the frames the environment buffered for this episode.
+
+        Args:
+            path: Destination ``.mp4``.
+
+        Returns:
+            ``True`` when a video was written, ``False`` when no frames were
+            buffered.
+
+        Raises:
+            RuntimeError: If the world was not constructed with
+                ``record_video=True``.
+        """
+        # The environment is typed as the base class; only IsaacLabPOMDP
+        # returns this visualizer.
+        environment: Any = self.environment
+        if not environment.record_video:
+            raise RuntimeError(
+                "IsaacLabPOMDP.episode_visualizer requires record_video=True; "
+                "construct the world with record_video=True (and "
+                "render_mode='rgb_array') to capture an episode video."
+            )
+        if not environment.frames:
+            environment.logger.warning("No frames buffered for %s; skipping video", path.name)
+            return False
+        self.frames_to_video(list(environment.frames), path)
+        environment.logger.info("Cached episode video to %s", path)
+        return True
 
     def frames_to_video(self, frames: List[np.ndarray], cache_path: Path, fps: int = 10) -> None:
         """Write a sequence of RGB frames to an ``.mp4`` video.

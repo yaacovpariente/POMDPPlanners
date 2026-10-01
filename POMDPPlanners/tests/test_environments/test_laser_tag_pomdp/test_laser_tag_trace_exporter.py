@@ -1,25 +1,14 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the LaserTag episode trace exporter and the visualizer move.
+"""Tests for the LaserTag episode trace.
 
-Two things are worth testing here and nothing else is.
-
-The first is that the exported beams are the observation model's beams. In
-this environment the eight ranges *are* the observation, and the package
-already carries two implementations of them: the model the agent is given, and
-the ray walk the discrete GIF draws, which ignores the opponent. A viewer fed
-re-derived ranges would be a third. These tests pin the exported ranges to the
-environment's own functions and, specifically, to the fact that a beam stops
-at the opponent.
-
-The second is that moving the renderers into ``visualizer/`` changed nothing
-about the GIFs. The byte-level pin lives in the golden-file suite, which only
-runs inside the project's Docker image; what is checked here is what can be
-checked anywhere — that the renderers still resolve from the new package, that
-the sprite sheet travels with them, and that a render is reproducible.
+The main thing worth testing is that the exported beams are the observation
+model's beams. In this environment the eight ranges *are* the observation, and
+a viewer fed re-derived ranges would be a second, drifting copy of them. These
+tests pin the exported ranges to the environment's own functions and,
+specifically, to the fact that a beam stops at the opponent.
 """
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, List
@@ -41,14 +30,10 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     _LASER_DIRECTIONS,
     LaserTagPOMDP,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization import (
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+    LASER_TAG_PAYLOAD_KIND,
     ContinuousLaserTagVisualizer,
     LaserTagVisualizer,
-)
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.trace_exporter import (
-    LASER_TAG_PAYLOAD_KIND,
-    build_continuous_laser_tag_trace,
-    build_laser_tag_trace,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_laser_tag_pinned_kwargs,
@@ -127,7 +112,7 @@ def test_discrete_ranges_are_the_environments_own(discrete_env):
     Test type: unit
     """
     history = _rollout(discrete_env, [0, 1, 2, 3, 0, 1])
-    payload = build_laser_tag_trace(discrete_env, history, 0).payload
+    payload = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload
 
     for index, step in enumerate(history):
         robot = (int(step.state[0]), int(step.state[1]))
@@ -154,7 +139,7 @@ def test_continuous_ranges_are_the_environments_own(continuous_env):
     """
     actions = [np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0]), np.array([1.0, 1.0, 0.0])]
     history = _rollout(continuous_env, actions)
-    payload = build_continuous_laser_tag_trace(continuous_env, history, 0).payload
+    payload = ContinuousLaserTagVisualizer(continuous_env).build_trace(history, 0).payload
 
     for index, step in enumerate(history):
         expected = compute_laser_measurements(
@@ -172,18 +157,13 @@ def test_discrete_beam_stops_at_the_opponent(discrete_env):
 
     Purpose: The exported range must follow the observation model, because
         that is what the agent is given and what the viewer claims to be
-        drawing. This test used to assert the opposite of its last clause: the
-        GIF renderer discarded the opponent and walked on to the next wall
-        while ``sample_observation`` stopped at it, and the test pinned that
-        divergence. The renderer was fixed to stop at the opponent too, so the
-        assertion is now that the two AGREE — which is the property actually
-        worth protecting.
+        drawing.
 
     Given: A state with the opponent in clear line of sight due east, with
         free cells behind it
     When: The trace is built
-    Then: The east range stops one cell short of the opponent, is flagged as
-        an opponent hit, and equals the length the GIF renderer draws
+    Then: The east range stops one cell short of the opponent and is flagged
+        as an opponent hit
 
     Test type: unit
     """
@@ -191,26 +171,11 @@ def test_discrete_beam_stops_at_the_opponent(discrete_env):
     # the opponent at (0, 3) and would otherwise run to the arena edge.
     state = [0.0, 0.0, 0.0, 3.0, 0.0]
     history = [_step(state, 2, state, tuple([1.0] * 8))]
-    payload = build_laser_tag_trace(discrete_env, history, 0).payload
+    payload = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload
 
     east = _LASER_DIRECTIONS.index((0, 1))
     assert payload["laser_ranges"][0][east] == pytest.approx(2.0)
     assert payload["hit_opponent"][0][east] is True
-
-    visualizer = LaserTagVisualizer(
-        floor_shape=discrete_env.floor_shape,
-        walls=discrete_env.walls,
-        dangerous_areas=list(discrete_env.dangerous_areas),
-        dangerous_area_radius=discrete_env.dangerous_area_radius,
-    )
-    # pylint: disable-next=protected-access
-    drawn = visualizer._laser_segments(np.asarray(state[:2]), np.asarray(state[2:4]))
-    drawn_east = float(np.linalg.norm(drawn[east][1] - drawn[east][0]))
-    assert drawn_east == pytest.approx(payload["laser_ranges"][0][east]), (
-        "The drawn beam and the measured range must end in the same place: "
-        "the renderer stops at the opponent now, as the observation model "
-        "always did"
-    )
 
 
 def test_continuous_beam_stops_at_the_opponent(continuous_env):
@@ -235,7 +200,7 @@ def test_continuous_beam_stops_at_the_opponent(continuous_env):
     opponent = robot + direction * 2.0
     state = [robot[0], robot[1], opponent[0], opponent[1], 0.0]
     history = [_step(state, np.array([0.0, 1.0, 0.0]), state, np.ones(8))]
-    payload = build_continuous_laser_tag_trace(continuous_env, history, 0).payload
+    payload = ContinuousLaserTagVisualizer(continuous_env).build_trace(history, 0).payload
 
     assert payload["laser_ranges"][0][beam] == pytest.approx(
         2.0 - continuous_env.opponent_radius, abs=1e-6
@@ -258,7 +223,7 @@ def test_a_clear_beam_is_not_flagged_as_an_opponent_hit(discrete_env):
     """
     state = [0.0, 0.0, 0.0, 3.0, 0.0]
     history = [_step(state, 2, state, tuple([1.0] * 8))]
-    payload = build_laser_tag_trace(discrete_env, history, 0).payload
+    payload = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload
 
     east = _LASER_DIRECTIONS.index((0, 1))
     flags = payload["hit_opponent"][0]
@@ -282,7 +247,7 @@ def test_observed_ranges_are_paired_with_the_state_they_were_taken_at(discrete_e
     Test type: unit
     """
     history = _rollout(discrete_env, [0, 1, 2, 3])
-    observed = build_laser_tag_trace(discrete_env, history, 0).payload["observed_ranges"]
+    observed = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload["observed_ranges"]
 
     assert observed[0] is None
     for index in range(1, len(history)):
@@ -308,7 +273,7 @@ def test_a_terminal_state_reports_no_measurement(discrete_env):
         _step(live, 4, dead, tuple([-1.0] * 8), reward=10.0),
         _step(dead, None, None, None, reward=None),
     ]
-    payload = build_laser_tag_trace(discrete_env, history, 0).payload
+    payload = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload
 
     assert payload["terminals"] == [False, True]
     assert payload["laser_ranges"][1] == []
@@ -334,7 +299,7 @@ def test_the_world_block_comes_from_the_instance():
         discount_factor=0.9, **laser_tag_pinned_kwargs(walls={(2, 2)}, dangerous_areas={(4, 4)})
     )
     history = _rollout(env, [0, 1])
-    world = build_laser_tag_trace(env, history, 0).payload["world"]
+    world = LaserTagVisualizer(env).build_trace(history, 0).payload["world"]
 
     assert world["variant"] == "discrete"
     assert world["walls"] == [[2, 2]]
@@ -357,9 +322,9 @@ def test_the_two_variants_keep_their_own_direction_tables(discrete_env, continuo
 
     Test type: unit
     """
-    discrete = build_laser_tag_trace(discrete_env, _rollout(discrete_env, [0]), 0)
-    continuous = build_continuous_laser_tag_trace(
-        continuous_env, _rollout(continuous_env, [np.array([1.0, 0.0, 0.0])]), 0
+    discrete = LaserTagVisualizer(discrete_env).build_trace(_rollout(discrete_env, [0]), 0)
+    continuous = ContinuousLaserTagVisualizer(continuous_env).build_trace(
+        _rollout(continuous_env, [np.array([1.0, 0.0, 0.0])]), 0
     )
 
     assert discrete.payload["world"]["laser_directions"] == [list(d) for d in _LASER_DIRECTIONS]
@@ -384,7 +349,7 @@ def test_the_belief_is_serialized_by_core(discrete_env):
     Test type: unit
     """
     history = _rollout(discrete_env, [0, 1])
-    belief = build_laser_tag_trace(discrete_env, history, 0).payload["beliefs"][0]
+    belief = LaserTagVisualizer(discrete_env).build_trace(history, 0).payload["beliefs"][0]
 
     assert belief["kind"] == "particles"
     assert belief["belief_class"] == "WeightedParticleBelief"
@@ -405,7 +370,7 @@ def test_the_trace_round_trips_through_json(discrete_env, tmp_path: Path):
     Test type: unit
     """
     history = _rollout(discrete_env, [0, 1, 2, 4])
-    trace = build_laser_tag_trace(discrete_env, history, 3, policy_name="POMCPOW")
+    trace = LaserTagVisualizer(discrete_env).build_trace(history, 3, policy_name="POMCPOW")
     written = trace.write(tmp_path / "trace.json")
     restored = EpisodeTrace.read(written)
 
@@ -417,22 +382,22 @@ def test_the_trace_round_trips_through_json(discrete_env, tmp_path: Path):
 
 
 def test_both_environments_write_a_trace_file(discrete_env, continuous_env, tmp_path: Path):
-    """Test that ``cache_trace`` produces a file for either variant.
+    """Test that each environment's visualizer writes a file for either variant.
 
     Purpose: The exporter is only wired in if the environment's own hook calls
         it. A helper nobody calls would pass every test above and still leave
         every real run without a trace.
 
     Given: One recorded episode of each variant
-    When: ``cache_trace`` is called
+    When: ``episode_visualizer().write`` is called
     Then: Each writes a ``trace_<index>.json`` carrying the LaserTag kind
 
     Test type: integration
     """
-    discrete_path = discrete_env.cache_trace(
+    discrete_path = discrete_env.episode_visualizer().write(
         history=_rollout(discrete_env, [0, 1]), output_dir=tmp_path, episode_index=0
     )
-    continuous_path = continuous_env.cache_trace(
+    continuous_path = continuous_env.episode_visualizer().write(
         history=_rollout(continuous_env, [np.array([1.0, 0.0, 0.0])]),
         output_dir=tmp_path,
         episode_index=1,
@@ -458,67 +423,4 @@ def test_an_empty_history_is_refused(discrete_env):
     Test type: unit
     """
     with pytest.raises(ValueError, match="empty history"):
-        build_laser_tag_trace(discrete_env, [], 0)
-
-
-@pytest.mark.parametrize("variant", ["discrete", "continuous"])
-def test_the_moved_renderers_still_produce_identical_gifs(variant, tmp_path: Path):
-    """Test that the GIF renderers survived the move into ``visualizer/``.
-
-    Purpose: The migration is supposed to change where these modules live and
-        nothing else. The byte-level pin against the checked-in golden GIFs
-        runs in the project's Docker image, where the font and PIL versions
-        are fixed; what is checked here, and runs anywhere, is that the
-        renderers and their sprite sheet still resolve from the new package
-        and that a render is reproducible.
-
-    Given: One deterministic episode per variant
-    When: It is rendered twice through the moved visualizer
-    Then: Both renders exist and are byte-for-byte identical
-
-    Test type: integration
-    """
-    # Imported here: this module is the golden suite's neighbour, not its
-    # dependency, and importing every environment it registers at module scope
-    # would make this file's collection cost the whole package.
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.tests.test_environments import (
-        test_environment_visualizations_golden_files as golden,
-    )
-
-    if variant == "discrete":
-        env = LaserTagPOMDP(
-            discount_factor=0.95, **laser_tag_pinned_kwargs(transition_error_prob=0.0)
-        )
-        history = golden.create_deterministic_laser_tag_episode(seed=42)
-        render = LaserTagVisualizer(
-            floor_shape=env.floor_shape,
-            walls=env.walls,
-            dangerous_areas=list(env.dangerous_areas),
-            dangerous_area_radius=env.dangerous_area_radius,
-        ).create_visualization
-    else:
-        env = ContinuousLaserTagPOMDP(
-            discount_factor=0.95,
-            **continuous_laser_tag_pinned_kwargs(
-                robot_transition_cov_matrix=np.eye(2) * 0.01,
-                opponent_transition_cov_matrix=np.eye(2) * 0.01,
-            ),
-        )
-        history = golden.create_deterministic_continuous_laser_tag_episode(seed=42)
-        render = ContinuousLaserTagVisualizer(
-            grid_size=env.grid_size,
-            walls=env.walls,
-            robot_radius=env.robot_radius,
-            opponent_radius=env.opponent_radius,
-            dangerous_areas=env.dangerous_areas,
-            dangerous_area_radius=env.dangerous_area_radius,
-        ).create_visualization
-
-    first, second = tmp_path / "a.gif", tmp_path / "b.gif"
-    render(history, first)
-    render(history, second)
-
-    digest = hashlib.sha256(first.read_bytes()).hexdigest()
-    assert digest == hashlib.sha256(second.read_bytes()).hexdigest()
-    assert first.stat().st_size > 0
+        LaserTagVisualizer(discrete_env).build_trace([], 0)

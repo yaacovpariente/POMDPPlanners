@@ -1098,41 +1098,6 @@ def test_get_actions():
     assert set(actions) == {"up", "down", "right", "left"}
 
 
-def test_visualize_path(tmp_path):
-    """Test path visualization
-
-    Purpose: Validates that DiscreteLightDarkPOMDP visualization creates animated GIF files showing agent path and belief evolution
-
-    Given: DiscreteLightDarkPOMDP, path=[0,5]→[1,5]→[2,5]→[3,5], belief path with distributions, actions=["right","right","right"]
-    When: visualize_path creates animation with agent trajectory and belief visualization
-    Then: Creates GIF file at specified cache_path location with path animation
-
-    Test type: unit
-    """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
-    path = [np.array([0, 5]), np.array([1, 5]), np.array([2, 5]), np.array([3, 5])]
-
-    # Create a simple belief path for testing
-    agent_belief_path = [
-        DiscreteDistribution(values=[path[i]], probs=np.array([1.0])) for i in range(len(path))
-    ]
-
-    # Create actions corresponding to the path
-    actions = ["right", "right", "right"]  # 0->1, 1->2, 2->3
-
-    # Test visualization with temporary path
-    cache_path = tmp_path / "test_animation.gif"
-    env.visualize_path(
-        path=path,
-        agent_belief_path=agent_belief_path,
-        actions=actions,
-        cache_path=cache_path,
-    )
-
-    # Verify file was created
-    assert cache_path.exists()
-
-
 def test_compute_metrics_empty_histories_is_rejected():
     """Test that scoring an empty batch of episodes raises.
 

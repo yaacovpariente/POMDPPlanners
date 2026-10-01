@@ -1,21 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Maze episode trace exporter, discrete and continuous.
+"""Tests for the Maze episode visualizer, discrete and continuous.
 
-Two things are checked here that nothing else checks. The first is that the
-payload survives a round trip through JSON, because that file is the whole
-interface between Python and the browser viewer: a field that does not survive
-is a field the viewer silently never sees.
-
-The second is that adding the exporter left the GIF alone. The Maze's GIF bytes
-are pinned by a golden hash in
-``tests/test_environments/test_environment_visualizations_golden_files.py``, and
-this migration must not move them. That test guards the renderer against its own
-changes; this one guards it against the exporter, by rendering the same episode
-before and after a trace is built from it and comparing the bytes.
+The payload must survive a round trip through JSON, because that file is the
+whole interface between Python and the browser viewer: a field that does not
+survive is a field the viewer silently never sees.
 """
 
-import hashlib
 from pathlib import Path
 from typing import Any, List
 
@@ -35,10 +26,9 @@ from POMDPPlanners.environments.maze_pomdp.maze_pomdp import (
     STATE_GOAL,
     create_maze_state,
 )
-from POMDPPlanners.environments.maze_pomdp.maze_visualizer import MazeVisualizer
-from POMDPPlanners.environments.maze_pomdp.maze_visualization.trace_exporter import (
+from POMDPPlanners.environments.maze_pomdp.maze_visualization.maze_visualizer import (
     MAZE_PAYLOAD_KIND,
-    build_maze_trace,
+    MazeVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_maze_pinned_kwargs,
@@ -118,7 +108,9 @@ def test_maze_trace_round_trips_through_json(discrete_env, tmp_path: Path):
     When: Its trace is written to disk and read back.
     Then: The envelope and the whole payload match the original.
     """
-    trace = build_maze_trace(discrete_env, _episode(discrete_env, ["up", "up"]), 2, "PFT_DPW")
+    trace = MazeVisualizer(discrete_env).build_trace(
+        _episode(discrete_env, ["up", "up"]), 2, "PFT_DPW"
+    )
     restored = EpisodeTrace.read(trace.write(tmp_path / "trace_2.json"))
 
     assert restored.payload_kind == MAZE_PAYLOAD_KIND
@@ -141,7 +133,9 @@ def test_maze_trace_world_is_the_map_the_episode_ran_on(discrete_env):
     When: Its trace is built.
     Then: Size, seed, walkable set, cue and goals all match the environment.
     """
-    world = build_maze_trace(discrete_env, _episode(discrete_env, ["up"]), 0).payload["world"]
+    world = (
+        MazeVisualizer(discrete_env).build_trace(_episode(discrete_env, ["up"]), 0).payload["world"]
+    )
 
     assert (world["width"], world["height"]) == (discrete_env.maze_width, discrete_env.maze_height)
     assert world["maze_seed"] == discrete_env.maze_seed
@@ -163,7 +157,7 @@ def test_continuous_maze_trace_records_its_movement_model(continuous_env):
     this pair of fields.
     """
     history = _episode(continuous_env, [np.array([0.0, 0.6])])
-    world = build_maze_trace(continuous_env, history, 0).payload["world"]
+    world = MazeVisualizer(continuous_env).build_trace(history, 0).payload["world"]
 
     assert world["draws_cell_guides"] is False
     assert world["max_step_size"] == pytest.approx(continuous_env.max_step_size)
@@ -171,7 +165,7 @@ def test_continuous_maze_trace_records_its_movement_model(continuous_env):
 
 
 def test_maze_trace_delegates_belief_serialization_to_core(discrete_env):
-    """The exporter writes no belief format of its own.
+    """The visualizer writes no belief format of its own.
 
     Purpose: Belief is a core abstraction with a closed family of
     implementations. Serializing it per environment would mean a copy of the
@@ -183,7 +177,7 @@ def test_maze_trace_delegates_belief_serialization_to_core(discrete_env):
         step's belief, field for field.
     """
     history = _episode(discrete_env, ["up", "up"])
-    trace = build_maze_trace(discrete_env, history, 0)
+    trace = MazeVisualizer(discrete_env).build_trace(history, 0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -203,7 +197,7 @@ def test_maze_belief_payload_keeps_the_goal_side_readable(discrete_env):
         0.1.
     """
     history = _episode(discrete_env, ["up", "up"])
-    payload = build_maze_trace(discrete_env, history, 0).payload
+    payload = MazeVisualizer(discrete_env).build_trace(history, 0).payload
     slot = payload["world"]["state_goal_index"]
     assert slot == STATE_GOAL
 
@@ -223,7 +217,9 @@ def test_maze_trace_records_the_cue_phase_per_step(discrete_env):
     that guessed at which step that was would light the wrong one on any episode
     that revisits the cue cell.
     """
-    payload = build_maze_trace(discrete_env, _episode(discrete_env, ["up", "up"]), 0).payload
+    payload = (
+        MazeVisualizer(discrete_env).build_trace(_episode(discrete_env, ["up", "up"]), 0).payload
+    )
 
     assert payload["cue_phases"][0] == CUE_UNSEEN
     assert CUE_EMITTING in payload["cue_phases"]
@@ -233,31 +229,4 @@ def test_maze_trace_records_the_cue_phase_per_step(discrete_env):
 def test_maze_trace_refuses_an_empty_history(discrete_env):
     """There is no episode to write, so nothing is invented."""
     with pytest.raises(ValueError):
-        build_maze_trace(discrete_env, [], 0)
-
-
-def test_building_a_trace_does_not_change_the_gif(discrete_env, tmp_path: Path):
-    """The GIF bytes are the same before and after a trace is built.
-
-    Purpose: This migration adds a trace beside the GIF, and the GIF's bytes are
-    pinned by a golden hash. The exporter must therefore be a pure read of the
-    recorded episode: if it consumed a random draw, rebuilt geometry or wrote
-    anything onto the environment, the next render would differ and the golden
-    file would move.
-
-    Given: One deterministic episode.
-    When: The GIF is rendered, a trace is built from the same history, and the
-        GIF is rendered again.
-    Then: The two files hash identically.
-    """
-    history = _episode(discrete_env, ["up", "up", "up"])
-
-    before = tmp_path / "before.gif"
-    MazeVisualizer(discrete_env).create_visualization(history, before)
-    first = hashlib.sha256(before.read_bytes()).hexdigest()
-
-    build_maze_trace(discrete_env, history, 0, "PFT_DPW")
-
-    after = tmp_path / "after.gif"
-    MazeVisualizer(discrete_env).create_visualization(history, after)
-    assert hashlib.sha256(after.read_bytes()).hexdigest() == first
+        MazeVisualizer(discrete_env).build_trace([], 0)

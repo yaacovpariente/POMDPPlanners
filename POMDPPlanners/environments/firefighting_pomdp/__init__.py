@@ -4,7 +4,7 @@
 
 Exports:
     FirefightingPOMDP: The environment.
-    FirefightingVisualizer: Episode renderer.
+    FirefightingVisualizer: Writes episodes as traces for the 3D viewer.
     FirefightingVectorizedBelief: The environment's default belief.
     FirefightingInitialStateDistribution: The reset distribution.
     FireCategory: The five per-cell categories.

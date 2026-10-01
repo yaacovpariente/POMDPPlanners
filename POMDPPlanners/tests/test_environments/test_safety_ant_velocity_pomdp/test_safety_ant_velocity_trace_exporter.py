@@ -1,18 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the Safety Ant Velocity trace exporter and its visualizer package.
+"""Tests for the Safety Ant Velocity episode trace.
 
-Two things are checked here that nothing else checks:
-
-* the payload a browser viewer reads survives a round trip through JSON, and
-  carries the episode's own belief rather than a cloud rebuilt from the truth;
-* moving the GIF renderer into ``visualizer/`` did not move a pixel. The golden
-  hash comparison in the suite's golden-file module only runs inside the
-  project's Docker image, so the check here is against the committed golden
-  file itself, which is what that comparison would use.
+The payload a browser viewer reads must survive a round trip through JSON, and
+carry the episode's own belief rather than a cloud rebuilt from the truth.
 """
 
-import hashlib
 from pathlib import Path
 
 import numpy as np
@@ -22,13 +15,9 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.core.simulation.traces import EpisodeTrace
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.trace_exporter import (
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization import (
     SAFETY_ANT_VELOCITY_PAYLOAD_KIND,
-    build_safety_ant_velocity_trace,
-)
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    GOLDEN_DIR,
-    GOLDEN_VISUALIZATIONS,
+    SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import safety_ant_velocity_pinned_kwargs
 
@@ -93,8 +82,8 @@ def test_payload_round_trips_through_json(env, tmp_path: Path):
     When: It is written to disk and read back.
     Then: The payload, the envelope and the payload kind all match.
     """
-    original = build_safety_ant_velocity_trace(
-        environment=env, history=_episode(env), episode_index=2, policy_name="PFT_DPW"
+    original = SafeAntVelocityVisualizer(env).build_trace(
+        history=_episode(env), episode_index=2, policy_name="PFT_DPW"
     )
     restored = EpisodeTrace.read(original.write(tmp_path / "trace.json"))
 
@@ -121,9 +110,11 @@ def test_world_block_comes_from_the_instance_the_episode_ran_on():
         discount_factor=0.9,
         **safety_ant_velocity_pinned_kwargs(safe_velocity_threshold=0.75, max_force=2.5),
     )
-    world = build_safety_ant_velocity_trace(
-        environment=env, history=_episode(env), episode_index=0
-    ).payload["world"]
+    world = (
+        SafeAntVelocityVisualizer(env)
+        .build_trace(history=_episode(env), episode_index=0)
+        .payload["world"]
+    )
 
     assert world["safe_velocity_threshold"] == pytest.approx(0.75)
     assert world["critical_velocity_threshold"] == pytest.approx(0.75 * 1.5)
@@ -148,8 +139,8 @@ def test_applied_force_matches_the_action_that_was_taken(env):
     Then: Every recovered force has magnitude ``max_force``, and the terminal
         step, which has no transition to invert, records none.
     """
-    trace = build_safety_ant_velocity_trace(
-        environment=env, history=_episode(env, length=5), episode_index=0
+    trace = SafeAntVelocityVisualizer(env).build_trace(
+        history=_episode(env, length=5), episode_index=0
     )
     forces = trace.payload["applied_forces"]
 
@@ -171,7 +162,7 @@ def test_trace_carries_the_episodes_own_belief(env):
         sum to one.
     """
     history = _episode(env)
-    trace = build_safety_ant_velocity_trace(environment=env, history=history, episode_index=0)
+    trace = SafeAntVelocityVisualizer(env).build_trace(history=history, episode_index=0)
     belief = trace.payload["beliefs"][0]
 
     assert belief["kind"] == "particles"
@@ -183,45 +174,24 @@ def test_trace_carries_the_episodes_own_belief(env):
 def test_empty_history_is_refused(env):
     """There is no episode to write, so nothing is written."""
     with pytest.raises(ValueError, match="empty history"):
-        build_safety_ant_velocity_trace(environment=env, history=[], episode_index=0)
+        SafeAntVelocityVisualizer(env).build_trace(history=[], episode_index=0)
 
 
-def test_the_environment_writes_its_trace_through_cache_trace(env, tmp_path: Path):
-    """The environment's own hook writes the file the reporting site looks for.
+def test_the_environment_writes_its_trace(env, tmp_path: Path):
+    """The environment's visualizer writes the file the reporting site looks for.
 
-    Purpose: The exporter is only reachable in a real run through
-    ``cache_trace``. A trace exporter nothing calls is a trace nobody gets.
+    Purpose: The visualizer is only reachable in a real run through
+    ``episode_visualizer().write``. A visualizer nothing calls is a trace
+    nobody gets.
 
     Given: A four-step episode.
-    When: cache_trace is called with an output directory.
+    When: The environment's visualizer writes it into an output directory.
     Then: ``trace_<index>.json`` appears and reads back as this environment's
         trace.
     """
-    written = env.cache_trace(
+    written = env.episode_visualizer().write(
         history=_episode(env), output_dir=tmp_path, episode_index=1, policy_name="POMCPOW"
     )
 
     assert written == tmp_path / "trace_1.json"
     assert EpisodeTrace.read(written).payload_kind == SAFETY_ANT_VELOCITY_PAYLOAD_KIND
-
-
-def test_moving_the_renderer_left_the_gif_byte_identical(tmp_path: Path):
-    """The visualizer package is a move: the GIF's bytes did not change.
-
-    Purpose: The renderer's output is pinned by a golden hash, and that
-    comparison only runs inside the project's Docker image. This migration
-    touched the renderer's imports, so the one thing that must be proved
-    outside Docker is that the bytes are the same ones the golden file holds.
-
-    Given: The golden-file suite's own deterministic Safety Ant episode.
-    When: It is rendered by the moved visualizer.
-    Then: The output hashes to the committed golden file.
-    """
-    spec = next(s for s in GOLDEN_VISUALIZATIONS if s.name == "safety_ant_velocity")
-    output = tmp_path / "safety_ant_velocity.gif"
-    spec.build_renderer()(spec.build_history(), output)
-
-    golden = GOLDEN_DIR / spec.golden_file
-    assert hashlib.sha256(output.read_bytes()).hexdigest() == (
-        hashlib.sha256(golden.read_bytes()).hexdigest()
-    )

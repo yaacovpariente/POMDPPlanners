@@ -1190,29 +1190,6 @@ def test_the_constructor_rejects_an_impossible_world() -> None:
             build_env(**kwargs)
 
 
-def test_the_renderer_has_a_label_for_every_action() -> None:
-    """The caption's action labels cover the action enum exactly.
-
-    Purpose: The renderer names actions from its own table. Adding a sixth
-        per-robot action would leave that table short and the caption would
-        raise mid-render -- or, worse, silently mislabel -- on the first
-        episode anyone tried to visualize, long after the change landed.
-
-    Given: The renderer's label table and the environment's action enum.
-    When: The two are compared.
-    Then: Every action has exactly one label, and there are no extras.
-
-    Test type: unit
-    """
-    from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (  # noqa: E501
-        ACTION_LABELS,
-        action_labels,
-    )
-
-    assert set(action_labels()) == {int(member) for member in FirefightingAction}
-    assert len(ACTION_LABELS) == len(FirefightingAction)
-
-
 @pytest.mark.parametrize("error", [0.0, 1.0])
 def test_the_observation_likelihood_is_finite_at_both_error_extremes(error) -> None:
     """A zero or total error rate scores a reading without producing ``NaN``.

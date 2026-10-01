@@ -1,15 +1,9 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for the firefighting trace exporter and its viewer package.
+"""Tests for the firefighting episode trace.
 
-Two things are checked here, and they are the two ways this migration could
-quietly break something:
-
-* the payload round-trips and says what the episode actually was -- the true
-  fire maps, the recorded poses, the hidden wind and the run's own belief;
-* moving the renderer into ``visualizer/`` moved it and nothing else, so the
-  GIF whose bytes are pinned by a golden hash still renders from the same
-  history to the same bytes.
+The payload must round-trip and say what the episode actually was -- the true
+fire maps, the recorded poses, the hidden wind and the run's own belief.
 """
 
 from pathlib import Path
@@ -34,12 +28,8 @@ from POMDPPlanners.environments.firefighting_pomdp import (
     WindStrength,
     create_firefighting_state,
 )
-from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.trace_exporter import (
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_visualization.firefighting_visualizer import (
     FIREFIGHTING_PAYLOAD_KIND,
-    build_firefighting_trace,
-)
-from POMDPPlanners.tests.test_environments.test_environment_visualizations_golden_files import (
-    create_deterministic_firefighting_episode,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     firefighting_pinned_kwargs,
@@ -121,7 +111,7 @@ def test_trace_round_trips_through_json(env, tmp_path: Path):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_firefighting_trace(env, history, episode_index=2, policy_name="PFT")
+    trace = FirefightingVisualizer(env).build_trace(history, episode_index=2, policy_name="PFT")
 
     written = tmp_path / "trace_2.json"
     trace.write(written)
@@ -150,7 +140,7 @@ def test_trace_carries_the_recorded_state_not_a_reconstruction(env):
     Test type: unit
     """
     history = _episode(env)
-    payload = build_firefighting_trace(env, history, 0).payload
+    payload = FirefightingVisualizer(env).build_trace(history, episode_index=0).payload
 
     for index, step in enumerate(history):
         assert payload["fires"][index] == [int(v) for v in env.fire_map(step.state).ravel()]
@@ -181,7 +171,7 @@ def test_trace_delegates_belief_serialization_to_core(env):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_firefighting_trace(env, history, 0)
+    trace = FirefightingVisualizer(env).build_trace(history, episode_index=0)
 
     for step, written in zip(history, trace.payload["beliefs"]):
         assert written == belief_to_payload(step.belief)
@@ -203,7 +193,7 @@ def test_trace_names_where_the_wind_sits_in_a_particle(env):
     Test type: unit
     """
     history = _episode(env)
-    trace = build_firefighting_trace(env, history, 0)
+    trace = FirefightingVisualizer(env).build_trace(history, episode_index=0)
     layout = trace.payload["world"]["state_layout"]
 
     assert layout["wind_direction_index"] == env.wind_direction_index
@@ -232,7 +222,9 @@ def test_trace_takes_the_world_from_the_instance(env):
 
     Test type: unit
     """
-    payload = build_firefighting_trace(env, _episode(env), 0).payload["world"]
+    payload = (
+        FirefightingVisualizer(env).build_trace(_episode(env), episode_index=0).payload["world"]
+    )
 
     assert payload["num_rows"] == env.num_rows
     assert payload["num_cols"] == env.num_cols
@@ -271,15 +263,15 @@ def test_trace_inherits_the_subsampling_cap(env):
             belief=_belief(env, winds, fire),
         )
     ]
-    belief = build_firefighting_trace(env, history, 0).payload["beliefs"][0]
+    belief = FirefightingVisualizer(env).build_trace(history, episode_index=0).payload["beliefs"][0]
 
     assert belief["num_particles"] == count
     assert belief["num_written"] == MAX_PAYLOAD_PARTICLES
 
 
 def test_environment_writes_a_trace_file(env, tmp_path: Path):
-    """cache_trace writes a readable file under the episode's index."""
-    written = env.cache_trace(
+    """The environment's visualizer writes a readable file under the episode's index."""
+    written = env.episode_visualizer().write(
         history=_episode(env), output_dir=tmp_path, episode_index=3, policy_name="POMCPOW"
     )
     assert written == tmp_path / "trace_3.json"
@@ -289,48 +281,4 @@ def test_environment_writes_a_trace_file(env, tmp_path: Path):
 def test_trace_rejects_an_empty_history(env):
     """There is no trace for an episode with no steps."""
     with pytest.raises(ValueError, match="empty history"):
-        build_firefighting_trace(env, [], 0)
-
-
-def test_moving_the_renderer_into_the_visualizer_package_did_not_move_the_gif(tmp_path: Path):
-    """The same episode still renders to the same bytes after the package move.
-
-    Purpose: The GIF's bytes are pinned by a golden hash that only runs inside
-        the project's Docker image, so a change to the renderer's output made
-        on a laptop would not be caught until CI. This renders the golden
-        fixture's own episode twice through the moved module and requires the
-        two to be byte-identical, which is the property the golden hash
-        depends on and the one a move could break.
-
-    Given: The deterministic episode the golden firefighting GIF is built from.
-    When: It is rendered twice through the relocated visualizer.
-    Then: The two files are byte-identical and non-empty.
-
-    Test type: integration
-    """
-    history = create_deterministic_firefighting_episode(seed=5)
-    env = FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
-    first, second = tmp_path / "a.gif", tmp_path / "b.gif"
-    FirefightingVisualizer(env).create_visualization(history, first)
-    FirefightingVisualizer(env).create_visualization(history, second)
-
-    assert first.read_bytes() == second.read_bytes()
-    assert first.stat().st_size > 0
-
-
-def test_the_environment_still_writes_its_gif_from_the_moved_package(tmp_path: Path):
-    """``cache_visualization`` finds the renderer at its new import path.
-
-    Purpose: The environment imports the renderer lazily by module path, so a
-        move breaks it at render time rather than at import time -- in a
-        simulation worker, hours into a run.
-
-    Test type: integration
-    """
-    env = FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs())
-    env.cache_visualization(
-        history=create_deterministic_firefighting_episode(seed=5),
-        output_dir=tmp_path,
-        episode_index=4,
-    )
-    assert (tmp_path / "firefighting_4.gif").stat().st_size > 0
+        FirefightingVisualizer(env).build_trace([], episode_index=0)

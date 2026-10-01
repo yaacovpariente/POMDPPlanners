@@ -36,10 +36,9 @@ def _classified(path: Path, relative_path: str):
 @pytest.mark.parametrize(
     "name, expected",
     [
-        ("agent_path_3.gif", 3),
         ("trace_12.json", 12),
-        ("battleship_board_0.gif", 0),
         ("agent_path_0.mp4", 0),
+        ("agent_path_3.webm", 3),
         ("discounted_returns_histogram.png", None),
         ("policy_comparison_histogram.png", None),
     ],
@@ -47,10 +46,10 @@ def _classified(path: Path, relative_path: str):
 def test_episode_index_is_read_from_the_trailing_number(name, expected):
     """The index comes from the trailing number, not a fixed prefix.
 
-    Purpose: Environments name their per-episode files differently, so a fixed
+    Purpose: Per-episode files are named differently by kind, so a fixed
     prefix would silently miss half of them.
 
-    Given: File names from several environments and two per-policy plots.
+    Given: Trace and video file names and two per-policy plots.
     When: The index is read.
     Then: Per-episode files yield their index and plots yield None.
     """
@@ -62,7 +61,6 @@ def test_episode_index_is_read_from_the_trailing_number(name, expected):
     [
         ("agent_path_0.mp4", ArtifactKind.VIDEO, "video"),
         ("episode.webm", ArtifactKind.VIDEO, "video"),
-        ("agent_path_0.gif", ArtifactKind.GIF, "image"),
         ("discounted_returns_histogram.png", ArtifactKind.PLOT, "image"),
     ],
 )
@@ -146,15 +144,14 @@ def test_unknown_extensions_are_not_artifacts(tmp_path: Path):
     assert classify(path, path.name) is None
 
 
-def test_preferred_ranks_trace_over_video_over_gif(tmp_path: Path):
+def test_preferred_ranks_trace_over_video(tmp_path: Path):
     """An episode with several artifacts plays the most useful one.
 
-    Purpose: Light-Dark writes both a trace and a GIF. The interactive viewer
-    is the better page, and a video beats a GIF because it seeks.
+    Purpose: The interactive viewer is the better page.
 
-    Given: An episode with a trace, a video and a GIF.
+    Given: An episode with a trace and a video.
     When: The preferred artifact is chosen, then again with the trace removed.
-    Then: Trace wins, then video, then GIF.
+    Then: Trace wins, then video.
     """
     trace = _classified(
         EpisodeTrace(
@@ -163,23 +160,30 @@ def test_preferred_ranks_trace_over_video_over_gif(tmp_path: Path):
         "trace_0.json",
     )
     video = _classified(FIXTURE_VIDEO, "agent_path_0.mp4")
-    gif_path = tmp_path / "agent_path_0.gif"
-    gif_path.write_bytes(b"GIF89a")
-    gif = _classified(gif_path, "agent_path_0.gif")
 
-    assert preferred([gif, video, trace]) is trace
-    assert preferred([gif, video]) is video
-    assert preferred([gif]) is gif
+    assert preferred([video, trace]) is trace
+    assert preferred([video]) is video
     assert preferred([]) is None
+
+
+def test_a_gif_is_not_an_artifact(tmp_path: Path):
+    """GIFs from runs made before they were removed are ignored.
+
+    Purpose: Environments show their episodes in one way. A leftover GIF must
+    not come back as a second recording of the episode.
+    """
+    path = tmp_path / "agent_path_0.gif"
+    path.write_bytes(b"GIF89a")
+    assert classify(path, path.name) is None
 
 
 def test_group_by_episode_leaves_out_per_policy_plots(tmp_path: Path):
     """Plots with no episode index belong to the policy page, not an episode."""
-    gif = tmp_path / "agent_path_1.gif"
-    gif.write_bytes(b"GIF89a")
+    video = tmp_path / "agent_path_1.mp4"
+    video.write_bytes(FIXTURE_VIDEO.read_bytes())
     plot = tmp_path / "discounted_returns_histogram.png"
     plot.write_bytes(b"\x89PNG")
 
-    grouped = group_by_episode([_classified(gif, gif.name), _classified(plot, plot.name)])
+    grouped = group_by_episode([_classified(video, video.name), _classified(plot, plot.name)])
     assert list(grouped) == [1]
     assert len(grouped[1]) == 1

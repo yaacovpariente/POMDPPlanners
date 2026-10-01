@@ -393,46 +393,6 @@ def test_reinvigoration_moves_an_unreported_chicken():
     assert all(row >= 1.0 for _, row in cells)
 
 
-def test_the_belief_panel_renders_occupancy_probability_not_expected_count():
-    """A cell two chickens share is painted once, not twice.
-
-    Purpose: The panel's docstring promises the weighted chance that a cell
-        holds a chicken. Summing one weight per live chicken renders the
-        expected chicken *count* instead, and a ``clip`` to 1 hides the
-        overflow rather than fixing it -- a single certain particle with two
-        chickens stacked would paint that cell exactly as a certain particle
-        with one. Sideways patrols walk into each other, so stacked cells are
-        reachable rather than theoretical.
-
-    Given: One particle, certain, with two of its three chickens on one cell
-        and the third elsewhere.
-    When: The marginal is computed.
-    Then: Both occupied cells read 1.0, and the grid sums to 2.0 -- the number
-        of occupied cells -- rather than 3.0, the number of chickens.
-
-    Test type: unit
-    """
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersVisualizer
-
-    env = build_env(num_chickens=3)
-    state = create_chicheck_invaders_state(
-        env,
-        chickens=[
-            [1, 2, 1, MODE_PATROL, 1],
-            [1, 2, -1, MODE_PATROL, 1],
-            [3, 1, 1, MODE_PATROL, 1],
-        ],
-    )
-    belief = placeholder_belief(state)
-    # pylint: disable-next=protected-access
-    grid = ChicheckInvadersVisualizer(env)._occupancy_marginal(belief)
-
-    assert grid[2, 1] == pytest.approx(1.0)
-    assert grid[1, 3] == pytest.approx(1.0)
-    assert float(grid.sum()) == pytest.approx(2.0)
-
-
 def test_a_fully_observable_belief_collapses_onto_the_observed_state():
     """In FULL mode the belief is a point mass on what was observed.
 
