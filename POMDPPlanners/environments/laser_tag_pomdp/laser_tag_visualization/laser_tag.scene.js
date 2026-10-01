@@ -891,10 +891,45 @@
     var steps = payload.robots.length;
     var longest = Math.max(spanA, spanB);
 
+    var reduceMotion = global.matchMedia
+      ? global.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+
+    /* How deep into a hazard a point is: 0 outside, 1 well inside. It ramps
+       across the rim rather than switching on, so the robot starts to labour
+       as it climbs in rather than lurching the instant it crosses. The rim
+       itself counts as inside (the penalty test is `<=`), so a grid cell on it
+       is already well into the ramp, and a diagonal cell is outside it. */
+    function zoneDepth(a, b) {
+      var worst = 0, hz = world.hazards || [];
+      for (var i = 0; i < hz.length; i++) {
+        var d = Math.hypot(a - hz[i][0], b - hz[i][1]);
+        worst = Math.max(worst, clamp((hazardRadius + 0.28 - d) / 0.45, 0, 1));
+      }
+      return worst * worst * (3 - 2 * worst);
+    }
+
+    /* `f` is the plain step fraction; `fr` is the robot's. Over broken ground
+       the robot's crossing catches and lurches, but a hazard costs reward and
+       nothing else, so the step still takes one step: the envelope sin(pi f)
+       is exactly zero at both ends and the lurch never moves where a step
+       starts or ends. It is keyed to the step index, so scrubbing is
+       repeatable, and roughness is read at the step's midpoint, so the lurch
+       cannot feed back into where the robot is. Everything anchored to the
+       robot — its beams, its trail head — moves on `fr` so it stays attached. */
     function sampleAt(t) {
       var i0 = Math.floor(clamp(t, 0, steps - 1));
       var i1 = Math.min(i0 + 1, steps - 1);
-      return { i0: i0, i1: i1, f: clamp(t - i0, 0, 1) };
+      var f = clamp(t - i0, 0, 1);
+      var r0 = payload.robots[i0], r1 = payload.robots[i1];
+      var fr = f;
+      var mid = zoneDepth((r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2);
+      if (mid > 0 && !reduceMotion) {
+        var wob = 0.62 * Math.sin(f * 6.9 + i0 * 2.399) + 0.38 * Math.sin(f * 12.7 + i0 * 5.137);
+        fr = clamp(f + mid * 0.11 * Math.sin(Math.PI * f) * wob, 0, 1);
+      }
+      var rough = reduceMotion ? 0 : zoneDepth(lerp(r0[0], r1[0], fr), lerp(r0[1], r1[1], fr));
+      return { i0: i0, i1: i1, f: f, fr: fr, rough: rough };
     }
 
     /* A beam between two steps sweeps from one true beam to the next. It is
@@ -917,8 +952,8 @@
         b.tube.visible = false; b.flare.visible = false; b.bead.visible = false;
         return;
       }
-      var sx = wx(lerp(p0[0], p1[0], sample.f)), sz = wz(lerp(p0[1], p1[1], sample.f));
-      var tx = wx(lerp(a0[0], a1[0], sample.f)), tz = wz(lerp(a0[1], a1[1], sample.f));
+      var sx = wx(lerp(p0[0], p1[0], sample.fr)), sz = wz(lerp(p0[1], p1[1], sample.fr));
+      var tx = wx(lerp(a0[0], a1[0], sample.fr)), tz = wz(lerp(a0[1], a1[1], sample.fr));
       beamVec.set(tx - sx, 0, tz - sz);
       var len = Math.max(0.001, beamVec.length());
       b.tube.scale.set(0.028, len, 0.028);
@@ -942,7 +977,7 @@
         return;
       }
       b.bead.position.set(
-        wx(lerp(o0[0], o1[0], sample.f)), BEAM_Y, wz(lerp(o0[1], o1[1], sample.f))
+        wx(lerp(o0[0], o1[0], sample.fr)), BEAM_Y, wz(lerp(o0[1], o1[1], sample.fr))
       );
       b.bead.visible = true;
     }
@@ -1073,7 +1108,7 @@
       return "not drawn (" + (belief.belief_class || belief.kind) + ")";
     }
 
-    function drawTrail(line, series, sample) {
+    function drawTrail(line, series, sample, f) {
       var pos = line.geometry.attributes.position.array;
       var n = 0, i;
       for (i = 0; i <= sample.i0; i++) {
@@ -1083,9 +1118,9 @@
         n++;
       }
       if (sample.f > 0) {
-        pos[n * 3] = wx(lerp(series[sample.i0][0], series[sample.i1][0], sample.f));
+        pos[n * 3] = wx(lerp(series[sample.i0][0], series[sample.i1][0], f));
         pos[n * 3 + 1] = 0.06;
-        pos[n * 3 + 2] = wz(lerp(series[sample.i0][1], series[sample.i1][1], sample.f));
+        pos[n * 3 + 2] = wz(lerp(series[sample.i0][1], series[sample.i1][1], f));
         n++;
       }
       line.geometry.attributes.position.needsUpdate = true;
@@ -1155,7 +1190,7 @@
         var sample = sampleAt(t);
         var r0 = payload.robots[sample.i0], r1 = payload.robots[sample.i1];
         var o0 = payload.opponents[sample.i0], o1 = payload.opponents[sample.i1];
-        var ra = lerp(r0[0], r1[0], sample.f), rb = lerp(r0[1], r1[1], sample.f);
+        var ra = lerp(r0[0], r1[0], sample.fr), rb = lerp(r0[1], r1[1], sample.fr);
         var oa = lerp(o0[0], o1[0], sample.f), ob = lerp(o0[1], o1[1], sample.f);
         var px = wx(ra), pz = wz(rb);
         var qx = wx(oa), qz = wz(ob);
@@ -1183,8 +1218,22 @@
         // ring. robot.rotation.y is -heading, so the ring carries +heading.
         lensRing.rotation.y = heading;
 
-        var speed = playing ? 1 : 0;
-        wheelSpin += dt * speed * 5;
+        /* The struggle is attitude only: the hull pitches, rolls and jolts on
+           the rubble and the wheels spin ahead of the ground and catch. The
+           lens ring and the beams hang off the robot, not the hull, so the
+           scan stays on the recorded rays however the body is thrown about. */
+        var rough = sample.rough;
+        var moving = playing ? 1 : 0;
+        var judder = rough * (Math.sin(elapsed * 23.0) * 0.6 + Math.sin(elapsed * 37.0 + 1.7) * 0.4);
+        var snap = clamp(dt * (8 + rough * 26), 0, 1);      // stiffer, so it jolts
+        hull.rotation.z = lerp(hull.rotation.z, judder * 0.14 * (0.4 + moving), snap);
+        hull.rotation.x = lerp(
+          hull.rotation.x, Math.sin(elapsed * 19.0 + 2.2) * rough * 0.16 * (0.4 + moving), snap
+        );
+        hull.position.y = Math.abs(judder) * 0.035;
+
+        var slip = 1 + rough * 2.0 + rough * Math.sin(elapsed * 27.0) * 0.9;
+        wheelSpin += dt * 5 * (moving ? slip : rough * 0.8 * Math.max(0, Math.sin(elapsed * 13.0)));
         for (var wI = 0; wI < robotWheels.length; wI++) robotWheels[wI].rotation.y = wheelSpin;
 
         /* Park the one shadow-casting lamp on whichever gantry lamp is nearest
@@ -1227,8 +1276,8 @@
           beliefLabel = "hidden";
         }
 
-        drawTrail(robTrail, payload.robots, sample);
-        drawTrail(oppTrail, payload.opponents, sample);
+        drawTrail(robTrail, payload.robots, sample, sample.fr);
+        drawTrail(oppTrail, payload.opponents, sample, sample.f);
         robTrail.visible = panel.toggles.trails.checked;
         oppTrail.visible = panel.toggles.trails.checked;
         hazardGroup.visible = panel.toggles.hazards.checked;
