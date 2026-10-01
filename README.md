@@ -188,16 +188,81 @@ the chart as an image, and playing every episode at once with Live.
 
 https://github.com/user-attachments/assets/3b305863-5180-454d-bb47-0a9dd13d76cf
 
-For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
-accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
-best configuration to evaluation automatically.
-
 Long-running experiments can report progress to Slack and a local progress
 database, including detection of crashed or stalled runs — set
 `SLACK_WEBHOOK_URL` in your environment and notifications are picked up
 automatically. See
 [`NotificationConfig`](POMDPPlanners/simulations/simulations_deployment/run_progress/config.py)
 for details.
+
+## Parameter Tuning
+
+`LocalSimulationsAPI.run_optimize_and_evaluate` tunes a planner with an Optuna
+study, then runs the best configuration again on fresh episodes. The fresh run
+matters: the best tuning score is the luckiest of many noisy trials, so it
+overstates how good the configuration is.
+
+The example below tunes POMCPOW on RockSample: a rover crosses a grid of rocks
+whose value it can only sense from a distance, and it must decide which rocks
+are worth sampling before it exits. The search ranges come from
+`PlannersHyperparamConfigs`, and the study scores each trial on average return
+and task completion rate. Early stopping ends the study once its best trials
+stop improving, so `N_TRIALS` is an upper bound. Change the three constants at
+the top to make the study bigger or smaller.
+Save it as `tune_planner.py` and run `python tune_planner.py`.
+
+```python
+from pathlib import Path
+
+from POMDPPlanners.environments import RockSamplePOMDP
+from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
+from POMDPPlanners.configs.experiment_configs import AverageReturnParameterToOptimizeMapper
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    EarlyStoppingConfig, HyperParameterRunParams)
+from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+N_TRIALS = 300            # at most this many Optuna trials
+EPISODES_PER_TRIAL = 128  # episodes that score one trial
+EVAL_EPISODES = 100       # fresh episodes for the best configuration
+
+env = RockSamplePOMDP(discount_factor=0.95)
+belief = create_environment_belief(env, n_particles=200)
+pomcpow = PlannersHyperparamConfigs(discount_factor=0.95).pomcpow_config(
+    env, DiscreteActionSampler(env.get_actions()), name="POMCPOW",
+    time_out_in_seconds=1)
+
+study = HyperParameterRunParams(
+    environment=env, belief=belief, hyper_param_planner_config=pomcpow,
+    num_episodes=EPISODES_PER_TRIAL, num_steps=30, n_trials=N_TRIALS,
+    parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
+    early_stopping=EarlyStoppingConfig(patience=100, min_trials=50),
+)
+
+api = LocalSimulationsAPI()
+_, stats = api.run_optimize_and_evaluate(
+    configs=[study],
+    evaluation_episodes=EVAL_EPISODES, evaluation_steps=30,
+    optimization_n_jobs=-1, evaluation_n_jobs=-1,  # use every CPU core
+    experiment_name="RockSample_Tuning",
+    cache_dir_path=Path("results"),
+)
+print(stats[["policy", "average_return", "task_completion_rate"]])
+```
+
+A full study can run up to 38,400 tuning episodes (300 × 128) and takes hours.
+To try it in under a minute, set `N_TRIALS = 2`, `EPISODES_PER_TRIAL = 2` and
+`EVAL_EPISODES = 4`. Early stopping cannot fire that early, so both trials run.
+
+The log names the best configuration. The study also writes its trial records
+and diagnostic plots to `results/tuning_diagnostics/<study id>/`: the score of
+every trial, the trade-off between the two objectives, and each parameter
+against each objective. Read them before trusting the result, because the top
+trials can differ by chance alone when each is scored on few episodes. In
+`pomdp-report serve results`, the `RockSample_Tuning` experiment lists the best
+parameters in its tuning run, and its evaluation run holds the fresh episodes
+with 3D replays.
 
 ## Tutorial Notebooks
 
