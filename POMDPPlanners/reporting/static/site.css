@@ -169,6 +169,31 @@ a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   letter-spacing: 0;
 }
 .metrics td.ci { color: var(--dim); font-size: 13px; }
+span.ci { color: var(--dim); font-size: 13px; }
+
+/* Tuning view. The chosen trial's row is tinted so it can be found in a table
+   of hundreds; the range bar shows where a chosen value sits in its search
+   range, because a value pinned to an end means the range was too narrow. */
+.trials tr.best td { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.trials .chip { margin-left: 4px; }
+.range-bar {
+  position: relative;
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.range-mark {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 12px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
 
 /* List mode: one row per item, the same cards laid out along the row so the
    figures still line up down the page. */

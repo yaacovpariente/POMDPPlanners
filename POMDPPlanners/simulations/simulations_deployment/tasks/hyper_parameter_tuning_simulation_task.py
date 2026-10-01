@@ -826,6 +826,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.logger.info("Optimization completed successfully!")
         self.logger.info("Found %d Pareto-optimal trials", len(study.best_trials))
         self._log_early_stopping_outcome(study, early_stopping_callback, n_trials)
+        # Kept for the result's metadata: whether the study converged or ran
+        # out of budget is the first thing a reader of the results asks.
+        self._stopped_at_trial: Optional[int] = (  # pylint: disable=attribute-defined-outside-init
+            early_stopping_callback.stopped_at_trial
+            if isinstance(early_stopping_callback, EarlyStoppingCallback)
+            else None
+        )
         self._write_tuning_diagnostics(study, early_stopping_callback)
 
         return study
@@ -851,6 +858,15 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             self.logger.info(
                 "Early stopping used %d of the %d allowed trials.", completed, n_trials
             )
+
+    def resolve_diagnostics_dir(self) -> Optional[Path]:
+        """Where this study writes its trial records and diagnostic plots.
+
+        Returns:
+            The directory, or ``None`` when the task has neither an explicit
+            diagnostics directory nor a cache directory.
+        """
+        return self._resolve_diagnostics_dir()
 
     def _resolve_diagnostics_dir(self) -> Optional[Path]:
         if self.diagnostics_dir is not None:
@@ -1015,19 +1031,34 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self._train_best_policy(optimized_policy, best_trial)
 
         # Store metadata
+        stopped_at_trial = getattr(self, "_stopped_at_trial", None)
+        diagnostics_dir = self._resolve_diagnostics_dir()
         self._last_optimization_metadata = {  # pylint: disable=attribute-defined-outside-init
-            "best_pareto_score": best_score,
+            "best_pareto_score": float(best_score),
             "best_trial_metrics": {
                 param_name: best_trial.user_attrs.get(f"metric_{param_name}")
                 for param_name, _ in self.parameters_to_optimize
             },
+            # The budget. Early stopping can end the study before it is spent,
+            # so the trials actually run are counted separately below.
             "n_trials": self.n_trials,
+            "n_trials_completed": len(
+                [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+            ),
+            "n_trials_started": len(study.trials),
+            "early_stopping": (
+                self.early_stopping.to_dict() if self.early_stopping is not None else None
+            ),
+            "early_stopping_fired": stopped_at_trial is not None,
+            "stopped_at_trial": stopped_at_trial,
             "optimization_time": optimization_time,
             "config_id": self.get_config_id(),
             "best_trial_number": best_trial_num,
             "best_trial_statistics": best_trial.user_attrs.get("statistics"),
-            "all_pareto_scores": pareto_scores,
+            "all_pareto_scores": {int(k): float(v) for k, v in pareto_scores.items()},
+            "pareto_trial_numbers": sorted(t.number for t in pareto_trials),
             "num_pareto_optimal_trials": len(pareto_trials),
+            "diagnostics_dir": str(diagnostics_dir) if diagnostics_dir is not None else None,
         }
 
         # Extract actual metric values from best trial
@@ -1045,6 +1076,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             num_steps=self.num_steps,
             parameters_to_optimize=self.parameters_to_optimize,
             optimized_metric_values=optimized_metric_values,
+            # Travels with the result, so a result read back from the task
+            # cache, or returned from a remote worker, still carries it.
+            optimization_metadata=self._last_optimization_metadata,
         )
 
         self._last_optimization_result = result  # pylint: disable=attribute-defined-outside-init

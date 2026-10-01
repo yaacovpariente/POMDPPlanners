@@ -14,12 +14,13 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import quote
 
+from POMDPPlanners.core.simulation import tuning_run_layout as run_layout
 from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.simulation.traces import ArtifactKind
-from POMDPPlanners.reporting import charts
+from POMDPPlanners.reporting import charts, tuning
 from POMDPPlanners.reporting.artifacts import EpisodeArtifact, preferred
 from POMDPPlanners.reporting.scenes import scene_script_url
 from POMDPPlanners.reporting.store import (
@@ -381,6 +382,7 @@ def experiment_page(experiment: ExperimentView) -> str:
                 title=run.run_name,
                 href=run_url(run),
                 chip=_chip(run.status),
+                subtitle=run_kind_label(run),
                 fields=[
                     ("Started", _timestamp(run.start_time)),
                     ("Episodes", str(episodes)),
@@ -529,8 +531,20 @@ def _policy_cards(run: RunView, env: EnvironmentView) -> str:
     return _listing(items, "This run logged no planners for this environment.")
 
 
-def run_page(run: RunView) -> str:
-    """One run: its environments, and the comparison across planners in each."""
+def run_page(
+    run: RunView, children: Sequence[RunView] = (), parent: Optional[RunView] = None
+) -> str:
+    """One run: its environments, and the comparison across planners in each.
+
+    Args:
+        run: The run.
+        children: Runs nested under it -- a tuning study's tuned planners and
+            its evaluation -- listed after its own results.
+        parent: The run it is nested under, linked from the page.
+
+    Returns:
+        A complete HTML document.
+    """
     sections = []
     for env in run.environments:
         sections.append(
@@ -560,9 +574,17 @@ def run_page(run: RunView) -> str:
         ],
         f'<div class="page-head"><h1>{html(run.run_name)} {_chip(run.status)}</h1>'
         f"{_layout_toggle()}</div>"
-        f'<p class="note">Started {html(_timestamp(run.start_time))} · '
-        f"run <code>{html(run.run_id)}</code></p>"
+        f'<p class="note">{html(run_kind_label(run) + " · ") if run_kind_label(run) else ""}'
+        f"Started {html(_timestamp(run.start_time))} · "
+        f"run <code>{html(run.run_id)}</code>"
+        + (
+            f' · part of <a href="{html(run_url(parent))}">{html(parent.run_name)}</a>'
+            if parent is not None
+            else ""
+        )
+        + "</p>"
         + "".join(sections)
+        + _child_runs(children)
         + f"<details><summary>Run parameters</summary>{params}</details>",
     )
 
@@ -827,8 +849,20 @@ def _thumbnail_scripts(policies: Sequence[PolicyView]) -> str:
     )
 
 
-def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
-    """One planner on one environment: every episode it ran."""
+def _episode_items(run: RunView, env: EnvironmentView, policy: PolicyView) -> List[ListingItem]:
+    """One listing item per episode of one planner, each with its thumbnail.
+
+    Shared by the planner page and the tuning view's evaluation section, so an
+    episode card looks the same wherever it is listed.
+
+    Args:
+        run: The run the episodes belong to.
+        env: Their environment.
+        policy: Their planner.
+
+    Returns:
+        The items, in episode order.
+    """
     items = []
     for index, artifacts in policy.episodes.items():
         summary = next((a.summary for a in artifacts if a.summary), None)
@@ -858,6 +892,12 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
                 tags=sorted({view_label(a) for a in artifacts}),
             )
         )
+    return items
+
+
+def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
+    """One planner on one environment: every episode it ran."""
+    items = _episode_items(run, env, policy)
     plots = "".join(
         f'<figure><img src="{html(artifact_url(run, f"{env.name}/{policy.name}/{a.relative_path}"))}" '
         f'alt="{html(a.relative_path)}"><figcaption>{html(a.relative_path)}</figcaption></figure>'
@@ -1060,6 +1100,398 @@ def episode_page(
         f"{facts}{views}"
         f'<details><summary>Files</summary><ul class="files">{others}</ul></details>',
     )
+
+
+# -- tuning studies ----------------------------------------------------------
+
+_RUN_KIND_LABELS = {
+    run_layout.RUN_KIND_STUDY: "Tuning study",
+    run_layout.RUN_KIND_CONFIG: "Tuned planner",
+    run_layout.RUN_KIND_EVALUATION: "Fresh evaluation of the tuned planners",
+}
+
+
+def run_kind_label(run: RunView) -> str:
+    """Say what part of a tuning study a run is, or nothing for a plain run.
+
+    Args:
+        run: Any run.
+
+    Returns:
+        A short label, or an empty string.
+    """
+    if run.run_kind in _RUN_KIND_LABELS:
+        return _RUN_KIND_LABELS[run.run_kind]
+    if tuning.is_tuning_config_run(run):
+        return _RUN_KIND_LABELS[run_layout.RUN_KIND_CONFIG]
+    return ""
+
+
+def _number(value: object, fmt: str = "{:.4g}") -> str:
+    """Format a value from a run: numbers compactly, anything else as text."""
+    if isinstance(value, bool):
+        return html(value)
+    if isinstance(value, int):
+        return html(value)
+    if isinstance(value, float):
+        return html(fmt.format(value))
+    if value is None:
+        return '<span class="dim">—</span>'
+    return html(value)
+
+
+def _interval(low: Optional[float], high: Optional[float]) -> str:
+    if low is None or high is None or not high > low:
+        return '<span class="dim">—</span>'
+    return f"{low:.3g} – {high:.3g}"
+
+
+def _duration(seconds: Optional[float]) -> str:
+    if seconds is None:
+        return ""
+    if seconds < 120:
+        return f"{seconds:.0f} s"
+    if seconds < 7200:
+        return f"{seconds / 60:.1f} min"
+    return f"{seconds / 3600:.1f} h"
+
+
+def _early_stopping_text(study: tuning.TuningStudy) -> str:
+    """One line on whether early stopping ended the study."""
+    if study.early_stopping_fired:
+        return f"stopped after {study.stopped_at_trial} trials"
+    if study.early_stopping is None:
+        return "off" if study.has_summary else ""
+    return "did not fire"
+
+
+def _study_stats(study: tuning.TuningStudy) -> str:
+    completed = study.n_trials_completed
+    budget = study.n_trials_budget
+    if completed is not None and budget is not None:
+        trials = f"{completed} of {budget}"
+    elif budget is not None:
+        trials = f"budget {budget}"
+    else:
+        trials = ""
+    return _stats(
+        [
+            ("Planner", html(study.planner)),
+            ("Environment", html(study.environment)),
+            ("Trials run", html(trials)),
+            ("Early stopping", html(_early_stopping_text(study))),
+            (
+                "Best trial",
+                html(f"#{study.best_trial_number}") if study.best_trial_number is not None else "",
+            ),
+            (
+                "Pareto trials",
+                html(len(study.pareto_trial_numbers)) if study.pareto_trial_numbers else "",
+            ),
+            (
+                "Episodes per trial",
+                html(study.episodes_per_trial) if study.episodes_per_trial else "",
+            ),
+            ("Tuning time", html(_duration(study.optimization_time_seconds))),
+        ]
+    )
+
+
+def _objective_comparison(
+    study: tuning.TuningStudy,
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+) -> str:
+    """The best trial's score beside the fresh evaluation's, per objective.
+
+    The two are shown side by side because they differ for a reason: the best
+    trial was chosen as the best of several noisy scores, so its own score is
+    biased upward, and the fresh evaluation is what the planner actually does.
+    """
+    eval_metrics: Dict[str, float] = {}
+    eval_episodes = ""
+    if evaluation is not None:
+        eval_run, eval_env, eval_policy = evaluation
+        eval_metrics = eval_run.metrics_for(eval_env.name, eval_policy.name)
+        eval_episodes = f" ({len(eval_policy.episodes)} episodes)" if eval_policy.episodes else ""
+    trial_episodes = f" ({study.episodes_per_trial} episodes)" if study.episodes_per_trial else ""
+
+    names = [name for name, _ in study.objectives] or sorted(study.best_trial_scores)
+    rows = []
+    for name in names:
+        direction = next((d for n, d in study.objectives if n == name), "")
+        value, low, high = study.best_trial_scores.get(name, (None, None, None))
+        evaluated = eval_metrics.get(name)
+        rows.append(
+            [
+                html(name),
+                html(direction or ""),
+                f'<span class="num">{_number(value)}</span>',
+                f'<span class="num ci">{_interval(low, high)}</span>',
+                f'<span class="num">{_number(evaluated)}</span>',
+                '<span class="num ci">'
+                + _interval(
+                    eval_metrics.get(name + charts.CI_LOWER_SUFFIX),
+                    eval_metrics.get(name + charts.CI_UPPER_SUFFIX),
+                )
+                + "</span>",
+            ]
+        )
+    return _table(
+        [
+            "Objective",
+            "Direction",
+            f"Best trial{trial_episodes}",
+            "Interval",
+            f"Fresh evaluation{eval_episodes}",
+            "Interval",
+        ],
+        rows,
+    ) + (
+        '<p class="note">The best trial was picked as the best of several noisy scores, so '
+        "its own score runs high. The fresh evaluation reruns the chosen parameters on new "
+        "episodes and is the figure to report.</p>"
+    )
+
+
+def _parameter_table(study: tuning.TuningStudy) -> str:
+    rows = []
+    for parameter in study.parameters:
+        if parameter.choices is not None:
+            space = "one of " + ", ".join(html(c) for c in parameter.choices)
+        elif parameter.low is not None and parameter.high is not None:
+            space = f"{_number(parameter.low)} – {_number(parameter.high)}"
+        else:
+            space = html(parameter.range_text) or '<span class="dim">—</span>'
+        position = parameter.position
+        range_bar = (
+            f'<span class="range-bar" title="{position:.0%} of the way through the range">'
+            f'<span class="range-mark" style="left:{position * 100:.1f}%"></span></span>'
+            if position is not None
+            else ""
+        )
+        rows.append(
+            [
+                html(parameter.name),
+                f'<span class="num">{_number(parameter.best)}</span>',
+                space,
+                range_bar,
+            ]
+        )
+    if not rows:
+        return '<p class="empty">This run recorded no search space.</p>'
+    return _table(["Parameter", "Chosen", "Search range", "Where in the range"], rows) + (
+        '<p class="note">A value pressed against either end of its range suggests the '
+        "range was too narrow.</p>"
+    )
+
+
+def _trial_table(study: tuning.TuningStudy) -> str:
+    if not study.trials:
+        return (
+            '<p class="empty">This run carries no trial records. Runs logged before they '
+            "were copied into MLflow keep them under <code>tuning_diagnostics/</code> in the "
+            "study's cache directory.</p>"
+        )
+    objective_names = [name for name, _ in study.objectives] or sorted(
+        {k for t in study.trials for k in t.objective_values}
+    )
+    param_names = [p.name for p in study.parameters] or sorted(
+        {k for t in study.trials for k in t.params}
+    )
+    pareto = set(study.pareto_trial_numbers) or {t.number for t in study.trials if t.is_pareto}
+
+    head = (
+        "<th>Trial</th><th>State</th>"
+        + "".join(f'<th class="group">{html(n)}</th>' for n in objective_names)
+        + "".join(f"<th>{html(n)}</th>" for n in param_names)
+        + "<th>Duration</th>"
+    )
+    body = []
+    for trial in study.trials:
+        marks = []
+        is_best = trial.number == study.best_trial_number
+        if is_best:
+            marks.append('<span class="chip chip-ok">Best</span>')
+        if trial.number in pareto or trial.is_pareto:
+            marks.append('<span class="chip">Pareto</span>')
+        cells = [f'<td class="num">#{trial.number} {" ".join(marks)}</td>']
+        cells.append(f"<td>{html(trial.state.title())}</td>")
+        cells += [
+            f'<td class="num">{_number(trial.objective_values.get(n))}</td>'
+            for n in objective_names
+        ]
+        cells += [f'<td class="num">{_number(trial.params.get(n))}</td>' for n in param_names]
+        cells.append(f'<td class="num">{html(_duration(trial.duration_seconds)) or "—"}</td>')
+        body.append(f'<tr{" class=best" if is_best else ""}>' + "".join(cells) + "</tr>")
+    return (
+        '<div class="scroll"><table class="metrics trials">'
+        f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+        f'<p class="note">Each objective value is the mean over that trial\'s '
+        f"{html(study.episodes_per_trial or 'own')} episode(s). Pareto trials are not beaten "
+        "on every objective by any other trial; the best one is the Pareto trial with the "
+        "highest normalized score.</p>"
+    )
+
+
+def _plot_gallery(run: RunView, study: tuning.TuningStudy) -> str:
+    if not study.plots:
+        return '<p class="empty">This run carries no diagnostic plots.</p>'
+    figures = "".join(
+        f'<figure><a href="{html(artifact_url(run, path))}">'
+        f'<img loading="lazy" src="{html(artifact_url(run, path))}" alt="{html(path)}"></a>'
+        f"<figcaption>{html(path.rsplit('/', 1)[-1][: -len('.png')].replace('_', ' '))}"
+        "</figcaption></figure>"
+        for path in study.plots
+    )
+    return f'<section class="gallery">{figures}</section>'
+
+
+def _evaluation_section(
+    study: tuning.TuningStudy,
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+) -> str:
+    if evaluation is None:
+        if study.evaluation_run_id:
+            return (
+                '<p class="empty">The evaluation run this study names, '
+                f"<code>{html(study.evaluation_run_id)}</code>, is not in the served stores, "
+                "or does not hold this planner.</p>"
+            )
+        return (
+            '<p class="empty">No fresh evaluation is linked to this study. '
+            "<code>run_optimize_and_evaluate</code> runs one and links it here.</p>"
+        )
+    eval_run, eval_env, eval_policy = evaluation
+    single = EnvironmentView(name=eval_env.name, policies=[eval_policy])
+    return (
+        f'<p class="note">Run <a href="{html(run_url(eval_run))}">{html(eval_run.run_name)}</a> · '
+        f'<a href="{html(policy_url(eval_run, eval_env.name, eval_policy.name))}">'
+        f"{html(eval_policy.name)} on {html(eval_env.name)}</a>.</p>"
+        + _policy_cards(eval_run, single)
+        + "<h3>Episodes</h3>"
+        + _listing(
+            _episode_items(eval_run, eval_env, eval_policy),
+            "This evaluation produced no episode artifacts.",
+            "Recordings",
+        )
+        + _returns_chart(single, "Discounted return per evaluation episode")
+        + f"<details><summary>All evaluation metrics</summary>{_metric_table(eval_run, single)}"
+        "</details>" + _thumbnail_scripts([eval_policy])
+    )
+
+
+def find_evaluation(
+    study: tuning.TuningStudy, evaluation_run: Optional[RunView]
+) -> Optional[Tuple[RunView, EnvironmentView, PolicyView]]:
+    """Find the tuned planner inside its evaluation run.
+
+    The evaluation run holds every planner the study tuned, filed by
+    environment name and planner name, so those two names pick this one out.
+    A run with a single environment or a single planner needs no name.
+
+    Args:
+        study: The study.
+        evaluation_run: The run its tag names, or ``None``.
+
+    Returns:
+        ``(run, environment, planner)``, or ``None`` when it cannot be found.
+    """
+    if evaluation_run is None:
+        return None
+    env = evaluation_run.environment(study.environment_name or "")
+    if env is None and len(evaluation_run.environments) == 1:
+        env = evaluation_run.environments[0]
+    if env is None:
+        return None
+    policy = env.policy(study.policy_name or "")
+    if policy is None and len(env.policies) == 1:
+        policy = env.policies[0]
+    if policy is None:
+        return None
+    return evaluation_run, env, policy
+
+
+def tuning_page(
+    run: RunView,
+    study: tuning.TuningStudy,
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]] = None,
+    parent: Optional[RunView] = None,
+) -> str:
+    """One tuned planner: the study that chose its parameters, and its fresh evaluation.
+
+    Args:
+        run: The config run.
+        study: The study read from it.
+        evaluation: The planner inside its evaluation run, when linked.
+        parent: The study run this config run is nested under.
+
+    Returns:
+        A complete HTML document.
+    """
+    shown = {f"{run_layout.BEST_PARAM_PREFIX}{p.name}" for p in study.parameters} | {
+        f"{run_layout.PARAM_RANGE_PREFIX}{p.name}" for p in study.parameters
+    }
+    params = _table(
+        ["Parameter", "Value"],
+        [[html(k), html(v)] for k, v in sorted(run.params.items()) if k not in shown],
+    )
+    crumbs: List[Tuple[str, Optional[str]]] = [
+        ("Experiments", "/"),
+        (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+    ]
+    if parent is not None:
+        crumbs.append((parent.run_name, run_url(parent)))
+    crumbs.append((run.run_name, None))
+    study_note = (
+        f' · part of study <a href="{html(run_url(parent))}">{html(parent.run_name)}</a>'
+        if parent is not None
+        else ""
+    )
+    thin = (
+        ""
+        if study.has_summary
+        else '<p class="note">This run predates the study summary, so this view is built from '
+        "its parameters alone.</p>"
+    )
+    return layout(
+        run.run_name,
+        crumbs,
+        f'<div class="page-head"><h1>{html(run.run_name)} {_chip(run.status)}</h1>'
+        f"{_layout_toggle()}</div>"
+        f'<p class="note">Hyperparameter tuning of {html(study.planner)} on '
+        f"{html(study.environment)} · started {html(_timestamp(run.start_time))}{study_note}</p>"
+        + thin
+        + _study_stats(study)
+        + "<h2>Best trial against a fresh evaluation</h2>"
+        + _objective_comparison(study, evaluation)
+        + "<h2>Chosen parameters</h2>"
+        + _parameter_table(study)
+        + "<h2>Trials</h2>"
+        + _trial_table(study)
+        + "<h2>Diagnostic plots</h2>"
+        + _plot_gallery(run, study)
+        + "<h2>Fresh evaluation</h2>"
+        + _evaluation_section(study, evaluation)
+        + f"<details><summary>Run parameters</summary>{params}</details>",
+    )
+
+
+def _child_runs(children: Sequence[RunView]) -> str:
+    """The runs nested under a study run, as a listing."""
+    if not children:
+        return ""
+    items = [
+        ListingItem(
+            title=child.run_name,
+            href=run_url(child),
+            chip=_chip(child.status),
+            subtitle=run_kind_label(child),
+            fields=[("Started", _timestamp(child.start_time))],
+            footnote=child.run_id,
+        )
+        for child in children
+    ]
+    return "<h2>Runs in this study</h2>" + _listing(items)
 
 
 def not_found(message: str) -> str:

@@ -8,6 +8,7 @@ optimizing POMDP policy hyperparameters using Optuna and MLFlow.
 
 # pylint: disable=protected-access  # Tests need to access protected members
 
+import json
 import random
 import shutil
 import tempfile
@@ -16,6 +17,7 @@ from typing import List, cast
 from unittest.mock import Mock, patch
 
 import mlflow
+from mlflow.tracking import MlflowClient
 import numpy as np
 import pytest
 
@@ -795,10 +797,12 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             assert "metrics.best_pareto_score" in config_run
             assert "metrics.optimization_time" in config_run
 
-            # Verify final evaluation metrics were logged
-            assert "metrics.final_average_return" in config_run
-            assert "metrics.final_success_rate" in config_run
-            assert "metrics.final_average_listens" in config_run
+            # The best trial's own scores are logged under their honest name;
+            # the optimizer no longer replays them as a "final evaluation".
+            assert "metrics.best_trial_average_return" in config_run
+            assert "metrics.best_trial_task_completion_rate" in config_run
+            assert "metrics.best_trial_average_listens" in config_run
+            assert not any(str(key).startswith("metrics.final_") for key in config_run.index)
 
     def test_numerical_hyperparameter_constructor_order_validation(
         self, temp_cache_dir, real_environment, real_belief
@@ -1065,16 +1069,18 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                         f"metrics.{metric}" in config_run.index
                     ), f"Missing optimization metric: {metric}"
 
-                # Final evaluation metrics
-                expected_final_metrics = [
-                    "final_average_return",
-                    "final_success_rate",
-                    "final_average_listens",
+                # The best trial's own statistics, with their intervals
+                expected_best_trial_metrics = [
+                    "best_trial_average_return",
+                    "best_trial_average_return_ci_lower",
+                    "best_trial_average_return_ci_upper",
+                    "best_trial_task_completion_rate",
+                    "best_trial_average_listens",
                 ]
-                for metric in expected_final_metrics:
+                for metric in expected_best_trial_metrics:
                     assert (
                         f"metrics.{metric}" in config_run.index
-                    ), f"Missing final evaluation metric: {metric}"
+                    ), f"Missing best-trial metric: {metric}"
 
     def test_hyperparameter_runner_configuration_validation(self, temp_cache_dir):
         """Test validation of the exact configuration used in hyper_param_runner.py.
@@ -3084,3 +3090,141 @@ class TestHyperParameterOptimizerNotifications:
         assert first_call_kwargs["completed_trials"] == 2
         assert first_call_kwargs["run_id"] == "rid-test"
         assert first_call_kwargs["total_trials"] == 4
+
+
+class TestTuningStudyRecordInMlflow:
+    """What a study leaves in MLflow for the results site and the MLflow UI."""
+
+    @pytest.fixture(name="study")
+    def study_fixture(self, temp_cache_dir, real_environment, real_belief):
+        """One small finished study, and its optimizer."""
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (  # pylint: disable=import-outside-toplevel
+            EarlyStoppingConfig,
+        )
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir, experiment_name="Study_Record_Test"
+        )
+        config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},
+            ),
+            num_episodes=2,
+            num_steps=2,
+            # Early stopping fires on the third completed trial: two to freeze
+            # the bounds, then one without improvement.
+            n_trials=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            early_stopping=EarlyStoppingConfig(
+                patience=1, min_trials=2, min_relative_improvement=1e9
+            ),
+        )
+        results = optimizer.optimize([config])
+        assert len(results) == 1
+        client = MlflowClient()
+        config_run = client.get_run(optimizer.config_run_ids[0])
+        artifact_dir = Path(config_run.info.artifact_uri.replace("file://", ""))
+        return optimizer, results[0], client, config_run, artifact_dir
+
+    def test_runs_are_tagged_and_the_config_run_is_nested_under_the_study(self, study):
+        """The study and config runs say what they are, and the ids are exposed.
+
+        Given: A finished study.
+        When: Its runs are read back.
+        Then: The study run and config run carry their kind tags, and the
+            config run is the study run's child.
+        """
+        from POMDPPlanners.core.simulation import (  # pylint: disable=import-outside-toplevel
+            tuning_run_layout as layout,
+        )
+
+        optimizer, _, client, config_run, _ = study
+        study_run = client.get_run(optimizer.study_run_id)
+
+        assert study_run.data.tags[layout.RUN_KIND_TAG] == layout.RUN_KIND_STUDY
+        assert config_run.data.tags[layout.RUN_KIND_TAG] == layout.RUN_KIND_CONFIG
+        assert config_run.data.tags["mlflow.parentRunId"] == optimizer.study_run_id
+
+    def test_best_trial_scores_are_named_for_what_they_are(self, study):
+        """The config run holds the best trial's scores, not a replay called final.
+
+        Purpose: The old "final evaluation" reran the best trial's own seeds
+        with the tuning episode count, so ``final_*`` equalled the tuning score
+        and read as if it were an evaluation.
+
+        Given: A finished study.
+        When: The config run's metrics are read.
+        Then: ``best_trial_average_return`` equals the result's own objective
+            value, intervals sit beside it, and no ``final_*`` or per-planner
+            simulator metric is on the run.
+        """
+        _, result, _, config_run, _ = study
+        metrics = config_run.data.metrics
+
+        assert metrics["best_trial_average_return"] == pytest.approx(
+            result.optimized_metric_values["average_return"]
+        )
+        assert "best_trial_average_return_ci_lower" in metrics
+        assert not [k for k in metrics if k.startswith("final_")]
+        assert not [k for k in metrics if k.startswith("TigerPOMDP_")]
+
+    def test_trials_are_counted_and_early_stopping_is_recorded(self, study):
+        """``n_trials_executed`` counts completed trials, not the budget.
+
+        Given: A study with a budget of 6 that early stopping ends after 3.
+        When: The config run's metrics and summary are read.
+        Then: 3 trials are reported, early stopping is reported as fired, and
+            the budget is kept separately in the summary.
+        """
+        _, result, _, config_run, artifact_dir = study
+        summary = json.loads((artifact_dir / "tuning" / "study_summary.json").read_text())
+
+        assert config_run.data.metrics["n_trials_executed"] == 3
+        assert config_run.data.metrics["early_stopping_fired"] == 1.0
+        assert summary["n_trials_budget"] == 6
+        assert summary["n_trials_completed"] == 3
+        assert summary["early_stopping_fired"] is True
+        assert summary["stopped_at_trial"] == 3
+        assert summary["best_parameters"] == result.chosen_hyper_parameters
+        assert result.optimization_metadata["n_trials_completed"] == 3
+
+    def test_trial_records_and_plots_are_copied_into_the_config_run(self, study):
+        """The per-trial records and diagnostic plots reach MLflow.
+
+        Given: A finished study, whose task wrote its diagnostics to the cache.
+        When: The config run's artifacts are listed.
+        Then: ``tuning/`` holds the trial records, one per trial, and at least
+            one diagnostic plot.
+        """
+        _, _, _, _, artifact_dir = study
+        tuning_dir = artifact_dir / "tuning"
+        records = json.loads((tuning_dir / "trial_records.json").read_text())
+
+        assert [r["number"] for r in records] == [0, 1, 2]
+        assert any(r["is_pareto"] for r in records)
+        assert list(tuning_dir.glob("*.png"))
+
+    def test_results_json_carries_the_real_best_trial_numbers(self, study):
+        """The results JSON no longer says "unknown" for numbers the run has.
+
+        Given: A finished study.
+        When: ``optimization_results_config_1.json`` is read.
+        Then: Its best Pareto score and best-trial metrics match the run's metrics.
+        """
+        _, _, _, config_run, artifact_dir = study
+        data = json.loads((artifact_dir / "optimization_results_config_1.json").read_text())
+
+        assert data["best_pareto_score"] == config_run.data.metrics["best_pareto_score"]
+        assert data["best_trial_metrics"]["average_return"] == pytest.approx(
+            config_run.data.metrics["best_trial_average_return"]
+        )
+        assert "final_statistics" not in data
