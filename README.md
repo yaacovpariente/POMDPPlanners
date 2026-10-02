@@ -119,7 +119,7 @@ actions, _ = planner.action(belief)
 print(f"Recommended action: {actions[0]}")
 ```
 
-## Running Experiments
+## Running Planner Evaluation Experiment
 
 The recommended entry point for end-to-end experiments is `LocalSimulationsAPI`,
 which runs parallel episodes, applies persistent caching, and returns aggregated
@@ -243,9 +243,17 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | RockSample | Rover science mission with sensing trade-offs |
 | LaserTag | Pursuit with laser range-finder observations |
 | PacMan | Arcade-style pursuit-evasion with rendering |
+| Battleship | Probe a hidden fleet one cell at a time and sink every ship in as few probes as possible |
+| Maze / T-Maze | Memory task: a one-time noisy cue at the start says which distant goal pays (T-shaped corridor, or a generated maze with discrete & continuous movement) |
+| Snake | Arcade Snake with hidden food, located through a short-range vision window and a noisy scent |
+| Chicheck Invaders | Grid shooter: clear a flock of chickens whose dives start unseen |
+| Occupancy Grid Mapping | Exploration that maps a hidden grid from noisy range scans |
 | CartPole / MountainCar | Partially observable versions of the Gym classics |
 | Push | Object manipulation under contact uncertainty |
+| Firefighting | Several robots put out a grid fire spread by a hidden wind |
+| Capture the Flag | Team game against hidden opponents and a hidden flag, sensed through noisy range readings |
 | Safety-Ant-Velocity | Safety-constrained quadruped locomotion |
+| Racetrack | Racing on [HighwayEnv](https://github.com/Farama-Foundation/HighwayEnv)'s racetrack, with matched fully and partially observed modes |
 | CARLA | Photorealistic autonomous driving in the [CARLA](https://github.com/carla-simulator/carla) simulator |
 | Isaac Lab | Franka reach manipulation in [NVIDIA Isaac Lab](https://github.com/isaac-sim/IsaacLab) / Isaac Sim |
 | nuPlan | Autonomous driving planning on real-world driving logs |
