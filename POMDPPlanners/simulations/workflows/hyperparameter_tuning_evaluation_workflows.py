@@ -6,9 +6,13 @@ This module provides class-based workflows for running hyperparameter optimizati
 followed by policy evaluation in different execution environments.
 """
 
+import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
+
+import mlflow
+from mlflow.tracking import MlflowClient
 import pandas as pd
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
@@ -16,6 +20,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     OptimizedPolicyResult,
 )
 from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.core.simulation import tuning_run_layout as layout
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
@@ -208,15 +213,47 @@ class OptimizationEvaluationWorkflow(ABC):
             experiment_name=self.experiment_name,
             debug=self.debug,
         ) as simulator:
-            results = simulator.compare_multiple_environments_policies(
-                environment_run_params=chosen_planners_eval_configs,
-                alpha=self.alpha,
-                confidence_interval_level=self.confidence_interval_level,
-                n_jobs=self.evaluation_n_jobs,
-                cache_visualizations=self.cache_visualizations,
-            )
+            # Reopen the study's run so the evaluation is logged as its child:
+            # without the link, the evaluation is a stray top-level run that
+            # nothing ties to the study whose planners it evaluated.
+            with self._study_run_context(optimizer.study_run_id):
+                results = simulator.compare_multiple_environments_policies(
+                    environment_run_params=chosen_planners_eval_configs,
+                    alpha=self.alpha,
+                    confidence_interval_level=self.confidence_interval_level,
+                    n_jobs=self.evaluation_n_jobs,
+                    cache_visualizations=self.cache_visualizations,
+                )
+            self._link_evaluation_run(optimizer, simulator.last_comparison_run_id)
 
         return results
+
+    @staticmethod
+    def _study_run_context(study_run_id: Optional[str]):
+        """Reopen the study run, or do nothing when there is none."""
+        if not isinstance(study_run_id, str):
+            return contextlib.nullcontext()
+        return mlflow.start_run(run_id=study_run_id)
+
+    @staticmethod
+    def _link_evaluation_run(
+        optimizer: HyperParameterOptimizer, evaluation_run_id: Optional[str]
+    ) -> None:
+        """Tag the evaluation run, and point every configuration run at it.
+
+        Best-effort: the evaluation has already been paid for and its results
+        are returned either way, so a failed tag is logged, not raised.
+        """
+        config_run_ids = getattr(optimizer, "config_run_ids", None)
+        if not isinstance(evaluation_run_id, str) or not isinstance(config_run_ids, dict):
+            return
+        try:
+            client = MlflowClient()
+            client.set_tag(evaluation_run_id, layout.RUN_KIND_TAG, layout.RUN_KIND_EVALUATION)
+            for config_run_id in config_run_ids.values():
+                client.set_tag(config_run_id, layout.EVALUATION_RUN_ID_TAG, evaluation_run_id)
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            logger.warning("Could not link the evaluation run to the study: %s", exc)
 
 
 class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):

@@ -124,15 +124,15 @@ Note:
 import os
 import uuid
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import mlflow
 
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
-    EnvironmentRunParams,
     NumericalHyperParameter,
 )
+from POMDPPlanners.core.simulation import tuning_run_layout as layout
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
@@ -151,7 +151,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import (
     HyperParameterTuningSimulationTask,
 )
-from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.utils.logger import cleanup_all_loggers, get_logger
 
 logger = get_logger(__name__)
@@ -328,6 +327,11 @@ class HyperParameterOptimizer:
             else NotificationConfig.disabled()
         )
         self._run_id: str = uuid.uuid4().hex
+        # MLflow ids of the study run and of each configuration's run, filled
+        # by :meth:`optimize`. A workflow that evaluates the chosen planners
+        # afterwards uses them to file that evaluation under the study.
+        self.study_run_id: Optional[str] = None
+        self.config_run_ids: Dict[int, str] = {}
         self._notifier: Notifier = build_notifier(
             experiment_name=self.experiment_name,
             config=self.notification_config,
@@ -488,8 +492,12 @@ class HyperParameterOptimizer:
         Note:
             This method automatically handles MLflow experiment tracking and creates
             nested runs for each configuration. All results are logged with comprehensive
-            metadata including hyperparameter ranges, optimization metrics, and final
-            evaluation statistics.
+            metadata including hyperparameter ranges, optimization metrics, and the
+            best trial's own statistics (``best_trial_*``). Those come from the
+            episodes the study chose on; it runs no fresh evaluation. Each
+            configuration run also gets ``tuning/study_summary.json``,
+            ``tuning/trial_records.json`` and the diagnostic plots.
+            :attr:`study_run_id` and :attr:`config_run_ids` name the runs.
         """
         if not configs:
             return []
@@ -517,7 +525,12 @@ class HyperParameterOptimizer:
             # Prepare MLflow session and execute optimization tasks
             self._prepare_mlflow_session()
 
-            with mlflow.start_run(run_name=f"optimize_batch_{len(configs)}_configs"):
+            self.config_run_ids = {}
+            with mlflow.start_run(
+                run_name=f"optimize_batch_{len(configs)}_configs",
+                tags={layout.RUN_KIND_TAG: layout.RUN_KIND_STUDY},
+            ) as study_run:
+                self.study_run_id = study_run.info.run_id
                 # Log batch-level information
                 self._log_batch_level_parameters(configs)
 
@@ -650,7 +663,9 @@ class HyperParameterOptimizer:
         with mlflow.start_run(
             run_name=f"config_{original_index+1}_{config.environment.__class__.__name__}_{config.hyper_param_planner_config.policy_cls.__name__}",
             nested=True,
-        ):
+            tags={layout.RUN_KIND_TAG: layout.RUN_KIND_CONFIG},
+        ) as config_run:
+            self.config_run_ids[original_index] = config_run.info.run_id
             try:
                 # Log configuration parameters
                 all_params = self._prepare_configuration_parameters(original_index, config)
@@ -659,11 +674,19 @@ class HyperParameterOptimizer:
                 # Process and log optimization results
                 self._log_optimization_results(task_result, task)
 
-                # Run and log final evaluation
-                self._run_and_log_final_evaluation(config, task_result, all_params, original_index)
+                # The study's own record: summary, per-trial data and plots
+                self._save_detailed_results_as_artifacts(
+                    task_result, config, all_params, original_index, task
+                )
+                # Best-effort: a study that took hours must not be reported
+                # as failed because a copy of its plots did not land.
+                try:
+                    self._log_tuning_artifacts(task_result, config, task)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    logger.warning("Could not log the tuning study's files: %s", exc)
 
                 # Log success and return result
-                best_value = self._get_best_value_from_task(task)
+                best_value = self._get_best_value_from_task(task, task_result)
                 logger.info(
                     "Configuration %s optimized successfully. Best value: %s",
                     original_index + 1,
@@ -768,6 +791,23 @@ class HyperParameterOptimizer:
 
         return policy_params
 
+    @staticmethod
+    def _metadata_for(
+        optimization_result: Optional["OptimizedPolicyResult"],
+        task: "HyperParameterTuningSimulationTask",
+    ) -> Optional[Dict[str, Any]]:
+        """The study's metadata, from the result first and the task second.
+
+        The result carries it whenever the task built it, including when the
+        result was read back from the task cache or returned by a remote
+        worker. The task holds it only if it ran in this process, which is
+        all older cached results can offer.
+        """
+        metadata = getattr(optimization_result, "optimization_metadata", None)
+        if metadata:
+            return metadata
+        return task.get_optimization_metadata()
+
     def _log_optimization_results(
         self,
         optimization_result: "OptimizedPolicyResult",
@@ -776,7 +816,10 @@ class HyperParameterOptimizer:
         if optimization_result is not None:
             # Log optimization results (best hyperparameters)
             mlflow.log_params(
-                {f"best_{k}": v for k, v in optimization_result.chosen_hyper_parameters.items()}
+                {
+                    f"{layout.BEST_PARAM_PREFIX}{k}": v
+                    for k, v in optimization_result.chosen_hyper_parameters.items()
+                }
             )
 
             # Log all policy parameters (including constant parameters and policy attributes)
@@ -784,19 +827,29 @@ class HyperParameterOptimizer:
             mlflow.log_params(all_policy_params)
 
             # Get additional metadata from the task if available
-            task_metadata = task.get_optimization_metadata()
+            task_metadata = self._metadata_for(optimization_result, task)
             if task_metadata:
                 mlflow.log_metric("best_pareto_score", task_metadata["best_pareto_score"])
                 mlflow.log_metric("optimization_time", task_metadata["optimization_time"])
-                mlflow.log_metric("n_trials_executed", task_metadata["n_trials"])
+                # Trials that actually completed: early stopping can end a
+                # study well inside its budget, which is the n_trials param.
+                mlflow.log_metric(
+                    "n_trials_executed",
+                    task_metadata.get("n_trials_completed", task_metadata["n_trials"]),
+                )
+                if "early_stopping_fired" in task_metadata:
+                    mlflow.log_metric(
+                        "early_stopping_fired", float(bool(task_metadata["early_stopping_fired"]))
+                    )
                 if task_metadata["best_trial_number"] is not None:
                     mlflow.log_metric("best_trial_number", task_metadata["best_trial_number"])
-
-                # Log individual metric values from best trial
-                if "best_trial_metrics" in task_metadata:
-                    for metric_name, metric_value in task_metadata["best_trial_metrics"].items():
-                        if metric_value is not None:
-                            mlflow.log_metric(f"best_trial_{metric_name}", metric_value)
+                self._log_best_trial_metrics(task_metadata)
+            else:
+                # A result cached before the metadata travelled with it, whose
+                # task did not run here: its objective values are all there is.
+                self._log_best_trial_metrics(
+                    {"best_trial_metrics": optimization_result.optimized_metric_values}
+                )
 
             mlflow.log_metric("optimization_success", 1.0)
         else:
@@ -804,77 +857,58 @@ class HyperParameterOptimizer:
             mlflow.log_metric("optimization_success", 0.0)
             mlflow.log_param("error_message", "Task execution returned None")
 
-    def _run_and_log_final_evaluation(
-        self,
-        config: HyperParameterRunParams,
-        optimization_result: "OptimizedPolicyResult",
-        all_params: dict,
-        original_index: int,
-    ) -> None:
-        task_manager_config = JoblibConfig(n_jobs=self.n_jobs)
-        simulator = POMDPSimulator(
-            task_manager_config=task_manager_config,
-            cache_dir_path=None,
-            experiment_name=f"optimization_results_config_{original_index+1}",
-        )
+    @staticmethod
+    def _log_best_trial_metrics(task_metadata: Dict[str, Any]) -> None:
+        """Log the best trial's own scores, with their intervals, as ``best_trial_*``.
 
-        env_run_params = [
-            EnvironmentRunParams(
-                environment=config.environment,
-                belief=config.belief,
-                policies=[optimization_result.policy],
-                num_episodes=config.num_episodes,
-                num_steps=config.num_steps,
-            )
-        ]
-
-        # Use the simulator's _run_simulations_and_compute_metrics method
-        (
-            _,
-            metrics,
-        ) = simulator._run_simulations_and_compute_metrics(  # pylint: disable=protected-access
-            environment_run_params=env_run_params,
-            alpha=self.alpha,
-            confidence_interval_level=self.confidence_interval_level,
-            n_jobs=self.n_jobs,
-        )
-
-        # Extract final statistics from metrics
-        final_statistics = metrics[config.environment.name][optimization_result.policy.name]
-
-        # Log final evaluation metrics with final_ prefix to distinguish from optimization metrics
-        for metric in final_statistics:
-            mlflow.log_metric(f"final_{metric.name}", metric.value)
-            mlflow.log_metric(f"final_{metric.name}_lower_ci", metric.lower_confidence_bound)
-            mlflow.log_metric(f"final_{metric.name}_upper_ci", metric.upper_confidence_bound)
-
-        # Save detailed results as artifacts
-        self._save_detailed_results_as_artifacts(
-            optimization_result, config, all_params, final_statistics, original_index
-        )
+        These are the episodes the study chose on, so they are biased upward:
+        the best of several noisy trials is partly the luckiest. They are
+        named for what they are, and a fresh evaluation, when one is run, is
+        a separate run linked from this one.
+        """
+        prefix = layout.BEST_TRIAL_METRIC_PREFIX
+        logged = set()
+        for statistic in task_metadata.get("best_trial_statistics") or []:
+            try:
+                name = statistic["name"]
+                mlflow.log_metric(f"{prefix}{name}", float(statistic["value"]))
+                mlflow.log_metric(
+                    f"{prefix}{name}_ci_lower", float(statistic["lower_confidence_bound"])
+                )
+                mlflow.log_metric(
+                    f"{prefix}{name}_ci_upper", float(statistic["upper_confidence_bound"])
+                )
+            except (KeyError, TypeError, ValueError):
+                continue
+            logged.add(name)
+        for metric_name, metric_value in (task_metadata.get("best_trial_metrics") or {}).items():
+            if metric_value is not None and metric_name not in logged:
+                mlflow.log_metric(f"{prefix}{metric_name}", metric_value)
 
     def _save_detailed_results_as_artifacts(
         self,
         optimization_result: "OptimizedPolicyResult",
         config: HyperParameterRunParams,
         all_params: dict,
-        final_statistics: List,
         original_index: int,
+        task: "HyperParameterTuningSimulationTask",
     ) -> None:
-        # Get task metadata for best value
-        task_metadata = getattr(optimization_result, "_task_metadata", None)
+        task_metadata = self._metadata_for(optimization_result, task)
 
         results_data = {
             "configuration_index": original_index + 1,
             "best_parameters": optimization_result.chosen_hyper_parameters,
-            "best_pareto_score": task_metadata["best_pareto_score"] if task_metadata else "unknown",
+            "best_pareto_score": task_metadata["best_pareto_score"] if task_metadata else None,
             "best_trial_metrics": (
                 task_metadata.get("best_trial_metrics", {}) if task_metadata else {}
             ),
             "hyperparameter_ranges": [
                 param._asdict() for param in config.hyper_param_planner_config.hyper_parameters
             ],
-            "final_statistics": [metric._asdict() for metric in final_statistics],
+            # The best trial's own episodes, not a fresh evaluation.
+            "best_trial_statistics": (
+                task_metadata.get("best_trial_statistics") if task_metadata else None
+            ),
             "configuration_params": all_params,
             "optimization_metadata": task_metadata,
         }
@@ -884,21 +918,21 @@ class HyperParameterOptimizer:
         planner_config = {
             "planner_type": config.hyper_param_planner_config.policy_cls.__name__,
             "chosen_hyper_parameters": optimization_result.chosen_hyper_parameters,
-            "constant_parameters": (
-                config.hyper_param_planner_config.constant_parameters
-                if hasattr(config, "constant_parameters")
-                else {}
-            ),
+            "constant_parameters": {
+                key: value
+                for key, value in config.hyper_param_planner_config.constant_parameters.items()
+                if isinstance(value, (int, float, str, bool))
+            },
             "environment_type": config.environment.__class__.__name__,
             "parameters_to_optimize": [
                 (param_name, direction.value)
                 for param_name, direction in config.parameters_to_optimize
             ],
             "best_pareto_score": (
-                task_metadata.get("best_pareto_score") if task_metadata else "unknown"
+                task_metadata.get("best_pareto_score") if task_metadata else None
             ),
             "best_trial_metrics": (
-                task_metadata.get("best_trial_metrics") if task_metadata else "unknown"
+                task_metadata.get("best_trial_metrics") if task_metadata else None
             ),
             "all_policy_parameters": self._extract_all_policy_parameters(optimization_result),
             "policy_creation_params": {
@@ -910,8 +944,111 @@ class HyperParameterOptimizer:
         }
         mlflow.log_dict(planner_config, f"planner_chosen_config_{original_index+1}.json")
 
-    def _get_best_value_from_task(self, task: "HyperParameterTuningSimulationTask") -> str:
-        task_metadata = task.get_optimization_metadata()
+    def _study_summary(
+        self,
+        optimization_result: "OptimizedPolicyResult",
+        config: HyperParameterRunParams,
+        task_metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Everything a reader needs to judge one study, in one JSON object.
+
+        Args:
+            optimization_result: The study's result.
+            config: The configuration the study ran.
+            task_metadata: The study's metadata, or ``None`` when unavailable.
+
+        Returns:
+            A JSON-serializable summary.
+        """
+        metadata = task_metadata or {}
+        search_space: List[Dict[str, Any]] = []
+        for param in config.hyper_param_planner_config.hyper_parameters:
+            if isinstance(param, CategoricalHyperParameter):
+                search_space.append(
+                    {"name": param.name, "kind": "categorical", "choices": list(param.choices)}
+                )
+            elif isinstance(param, NumericalHyperParameter):
+                search_space.append(
+                    {
+                        "name": param.name,
+                        "kind": "numerical",
+                        "low": param.low,
+                        "high": param.high,
+                    }
+                )
+        return {
+            "planner": config.hyper_param_planner_config.policy_cls.__name__,
+            "policy_name": getattr(optimization_result.policy, "name", None),
+            "environment": config.environment.__class__.__name__,
+            "environment_name": getattr(optimization_result.environment, "name", None),
+            "objectives": [
+                {"metric": name, "direction": direction.value}
+                for name, direction in config.parameters_to_optimize
+            ],
+            "search_space": search_space,
+            "best_parameters": optimization_result.chosen_hyper_parameters,
+            "best_trial_number": metadata.get("best_trial_number"),
+            "best_pareto_score": metadata.get("best_pareto_score"),
+            "best_trial_metrics": metadata.get(
+                "best_trial_metrics", optimization_result.optimized_metric_values
+            ),
+            "pareto_trial_numbers": metadata.get("pareto_trial_numbers"),
+            "pareto_scores": metadata.get("all_pareto_scores"),
+            "n_trials_budget": config.n_trials,
+            "n_trials_completed": metadata.get("n_trials_completed"),
+            "n_trials_started": metadata.get("n_trials_started"),
+            "early_stopping": (
+                config.early_stopping.to_dict() if config.early_stopping is not None else None
+            ),
+            "early_stopping_fired": metadata.get("early_stopping_fired"),
+            "stopped_at_trial": metadata.get("stopped_at_trial"),
+            # (completed trials, Pareto-front quality) after each trial, the
+            # curve early stopping watched; empty when early stopping was off.
+            "front_quality_history": metadata.get("front_quality_history") or [],
+            "episodes_per_trial": config.num_episodes,
+            "steps_per_episode": config.num_steps,
+            "optimization_time_seconds": metadata.get("optimization_time"),
+            "confidence_interval_level": self.confidence_interval_level,
+        }
+
+    def _log_tuning_artifacts(
+        self,
+        optimization_result: "OptimizedPolicyResult",
+        config: HyperParameterRunParams,
+        task: "HyperParameterTuningSimulationTask",
+    ) -> None:
+        """Copy the study's summary, trial records and diagnostic plots into this run.
+
+        The task writes the records and plots to its diagnostics directory on
+        disk, keyed by a config hash nobody can read off a run. Copying them
+        into the run makes the run self-contained: the results site and the
+        MLflow UI both read them from there, and they move with the run.
+        """
+        task_metadata = self._metadata_for(optimization_result, task)
+        mlflow.log_dict(
+            self._study_summary(optimization_result, config, task_metadata),
+            f"{layout.TUNING_ARTIFACT_DIR}/{layout.STUDY_SUMMARY_FILE}",
+        )
+
+        recorded = (task_metadata or {}).get("diagnostics_dir")
+        diagnostics_dir = Path(recorded) if recorded else task.resolve_diagnostics_dir()
+        if diagnostics_dir is None or not diagnostics_dir.is_dir():
+            logger.warning(
+                "No tuning diagnostics found at %s; the trial table and plots will be missing "
+                "from this run.",
+                diagnostics_dir,
+            )
+            return
+        for path in sorted(diagnostics_dir.iterdir()):
+            if path.is_file() and path.suffix in {".json", ".png"}:
+                mlflow.log_artifact(str(path), artifact_path=layout.TUNING_ARTIFACT_DIR)
+
+    def _get_best_value_from_task(
+        self,
+        task: "HyperParameterTuningSimulationTask",
+        optimization_result: Optional["OptimizedPolicyResult"] = None,
+    ) -> str:
+        task_metadata = self._metadata_for(optimization_result, task)
         if task_metadata:
             # Format as "pareto_score: X (metrics: {...})"
             pareto_score = task_metadata.get("best_pareto_score", "unknown")

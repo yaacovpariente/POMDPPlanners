@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Sequence
 
 import os
 
+from POMDPPlanners.core.simulation import tuning_run_layout as layout
 from POMDPPlanners.reporting import artifacts as artifact_module
 from POMDPPlanners.reporting.artifacts import EpisodeArtifact
 
@@ -36,6 +37,8 @@ from POMDPPlanners.reporting.artifacts import EpisodeArtifact
 ENV_NAME_PARAM = "env_{index}_name"
 POLICY_NAME_PARAM = "env_{env}_policy_{policy}_name"
 POLICY_TYPE_PARAM = "env_{env}_policy_{policy}_type"
+# MLflow's own tag naming the run a nested run belongs to.
+PARENT_RUN_TAG = "mlflow.parentRunId"
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,17 @@ class RunView:
     metrics: Dict[str, float]
     artifact_root: Path
     environments: List[EnvironmentView] = field(default_factory=list)
+    tags: Dict[str, str] = field(default_factory=dict)
+
+    @property
+    def parent_run_id(self) -> Optional[str]:
+        """The id of the run this one is nested under, or ``None``."""
+        return self.tags.get(PARENT_RUN_TAG)
+
+    @property
+    def run_kind(self) -> Optional[str]:
+        """What part of a tuning study this run is, when it is part of one."""
+        return self.tags.get(layout.RUN_KIND_TAG)
 
     def environment(self, name: str) -> Optional[EnvironmentView]:
         """Look up one environment by name.
@@ -352,6 +366,7 @@ class RunIndex:
                     metrics=metrics,
                     artifact_root=artifact_root,
                     environments=environments,
+                    tags=dict(run.data.tags),
                 )
             )
 
@@ -376,6 +391,21 @@ class RunIndex:
             ),
             None,
         )
+
+    def children(self, run: RunView) -> List[RunView]:
+        """The runs nested directly under one run, oldest first.
+
+        Args:
+            run: The parent run.
+
+        Returns:
+            Its child runs from the same experiment, in the order they started.
+        """
+        experiment = self.experiment(run.store_index, run.experiment_id)
+        if experiment is None:
+            return []
+        found = [r for r in experiment.runs if r.parent_run_id == run.run_id]
+        return sorted(found, key=lambda r: r.start_time or 0)
 
     def run(self, store_index: int, experiment_id: str, run_id: str) -> Optional[RunView]:
         """Look up one run.

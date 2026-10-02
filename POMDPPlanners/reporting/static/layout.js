@@ -17,8 +17,6 @@
   var buttons = Array.prototype.slice.call(document.querySelectorAll("[data-layout]"));
   if (!buttons.length) return;
 
-  var listings = Array.prototype.slice.call(document.querySelectorAll(".listing"));
-
   function read() {
     try {
       return window.localStorage.getItem(KEY);
@@ -36,7 +34,9 @@
   }
 
   function apply(mode) {
-    listings.forEach(function (listing) {
+    // Looked up on every call, not once: a collapsed section can add a
+    // listing after load (see lazy-details.js).
+    document.querySelectorAll(".listing").forEach(function (listing) {
       var cards = listing.querySelector(".cards");
       var table = listing.querySelector(".table-view");
       if (cards) {
@@ -60,6 +60,11 @@
 
   var stored = read();
   apply(MODES[stored] ? stored : "cards");
+
+  document.addEventListener("pomdp:inserted", function () {
+    var mode = read();
+    apply(MODES[mode] ? mode : "cards");
+  });
 
   /* Auto / Light / Dark. "Auto" removes the stamp rather than writing a
      value, so the page goes back to following `prefers-color-scheme` and
