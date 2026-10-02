@@ -236,12 +236,18 @@ for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.9
         configs.pomcpow_config(env, sampler, name=f"POMCPOW_{env.name}", time_out_in_seconds=1),
         configs.pft_dpw_config(env, sampler, name=f"PFT_DPW_{env.name}", time_out_in_seconds=1),
     ):
-        studies.append(HyperParameterRunParams(
-            environment=env, belief=belief, hyper_param_planner_config=planner,
-            num_episodes=EPISODES_PER_TRIAL, num_steps=NUM_STEPS, n_trials=N_TRIALS,
-            parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
-            early_stopping=EarlyStoppingConfig(patience=100, min_trials=50),
-        ))
+        studies.append(
+            HyperParameterRunParams(
+                environment=env,
+                belief=belief,
+                hyper_param_planner_config=planner,
+                num_episodes=EPISODES_PER_TRIAL,
+                num_steps=NUM_STEPS,
+                n_trials=N_TRIALS,
+                parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
+                early_stopping=EarlyStoppingConfig(patience=100, min_trials=50),
+            )
+        )
 
 api = LocalSimulationsAPI()
 _, stats = api.run_optimize_and_evaluate(
