@@ -417,3 +417,101 @@ def test_a_study_of_several_planners_gets_a_study_page_card(tmp_path: Path):
     assert "POMCP on Tiger" in study_page and "PFT_DPW on Tiger" in study_page
     for config_id in config_ids:
         assert f'/{config_id}"' in study_page
+
+
+def test_trials_and_episodes_are_collapsed_and_closed(router: Router, study_dir):
+    """The trial table and the evaluation's episodes sit in closed sections.
+
+    Purpose: A study can run thousands of trials and an evaluation hundreds
+    of episodes; laid open, either buries the rest of the page.
+
+    Given: The fixture study, with three trials and one evaluation episode.
+    When: The tuning view renders.
+    Then: Each is in a <details> that is not open, labelled with its count;
+        both are small, so neither is deferred.
+    """
+    page = _page(router, study_dir["config"])
+
+    assert "<details><summary>All trials (3)</summary>" in page
+    assert "<details><summary>Episodes (1)</summary>" in page
+    assert "data-lazy" not in page
+
+
+def test_all_evaluation_metrics_sit_under_the_comparison(router: Router, study_dir):
+    """The full evaluation metrics follow the table whose column they expand.
+
+    Given: The tuning view.
+    When: It renders.
+    Then: "All evaluation metrics" comes after the comparison heading and
+        before "Chosen parameters", and appears once.
+    """
+    page = _page(router, study_dir["config"])
+    between = page.split("<h2>Best trial against the evaluation</h2>", 1)[1].split(
+        "<h2>Chosen parameters</h2>", 1
+    )[0]
+
+    assert "<summary>All evaluation metrics</summary>" in between
+    assert page.count("All evaluation metrics") == 1
+
+
+def test_large_sections_are_built_only_when_opened(router: Router, study_dir, monkeypatch):
+    """Past their limits, the trial rows and episode cards wait in a <template>.
+
+    Given: Limits lowered below the fixture's counts.
+    When: The tuning view renders.
+    Then: Both sections are deferred, the trial rows and the scene scripts are
+        inside their templates, and the loader is on the page.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting import pages
+
+    monkeypatch.setattr(pages, "TRIALS_INLINE_LIMIT", 1)
+    monkeypatch.setattr(pages, "EPISODES_INLINE_LIMIT", 0)
+    page = _page(router, study_dir["config"])
+
+    trials = page.split("<summary>All trials (3)</summary>", 1)[1].split("</details>", 1)[0]
+    episodes = page.split("<summary>Episodes (1)</summary>", 1)[1].split("</details>", 1)[0]
+    assert page.count("<details data-lazy>") == 2
+    assert trials.startswith("<template>") and "<tr class=best>" in trials
+    assert episodes.startswith("<template>")
+    assert "/static/viewer/scene-cards.js" in episodes
+    assert "/static/lazy-details.js" in page
+
+
+def test_five_thousand_trials_stay_out_of_the_layout():
+    """A 5000-trial study's table is deferred and built quickly.
+
+    Given: A synthetic study of 5000 trials.
+    When: Its trial section is rendered.
+    Then: It is deferred into a <template>, holds one row per trial, and takes
+        well under a second to write.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    import time
+
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting import pages
+
+    trials = [
+        tuning.Trial(n, "COMPLETE", {"depth": n % 9}, {"average_return": n / 7}, {}, 1.0, False)
+        for n in range(5000)
+    ]
+    study = tuning.TuningStudy(
+        planner="P",
+        environment="E",
+        environment_name="E",
+        policy_name="P",
+        objectives=[("average_return", "maximize")],
+        parameters=[tuning.SearchParameter(name="depth", best=8, low=0, high=8)],
+        best_trial_number=4999,
+        best_trial_scores={},
+        trials=trials,
+    )
+    start = time.perf_counter()
+    # pylint: disable-next=protected-access
+    section = pages._trials_section(study)
+    elapsed = time.perf_counter() - start
+
+    assert section.startswith("<details data-lazy><summary>All trials (5000)</summary><template>")
+    assert section.count("<tr") == 5001
+    assert elapsed < 1.0

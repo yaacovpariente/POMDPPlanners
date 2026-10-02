@@ -1387,6 +1387,47 @@ def _trial_table(study: tuning.TuningStudy) -> str:
     )
 
 
+#: Above this many rows the trial table is built only when its section opens.
+#: The rows are written into the page either way; a <template> keeps the
+#: browser from laying out thousands of them that nobody has asked to see.
+TRIALS_INLINE_LIMIT = 200
+
+#: Above this many episodes their cards are built only when the section opens:
+#: each card fetches its trace and builds a 3D scene, which for a hundred
+#: episodes is work the reader may never want.
+EPISODES_INLINE_LIMIT = 24
+
+
+def _collapsible(summary: str, body: str, lazy: bool) -> str:
+    """A section closed by default, in the site's <details> pattern.
+
+    Args:
+        summary: The line the reader clicks, as plain text.
+        body: The section's HTML.
+        lazy: Hold the body in a <template> until the section is first
+            opened, for a body too large to lay out up front.
+
+    Returns:
+        HTML for the section.
+    """
+    inner = f"<template>{body}</template>" if lazy else body
+    return (
+        f'<details{" data-lazy" if lazy else ""}><summary>{html(summary)}</summary>'
+        f"{inner}</details>" + ('<script src="/static/lazy-details.js"></script>' if lazy else "")
+    )
+
+
+def _trials_section(study: tuning.TuningStudy) -> str:
+    """The trial table, collapsed: a study can run thousands of trials."""
+    if not study.trials:
+        return _trial_table(study)
+    return _collapsible(
+        f"All trials ({len(study.trials)})",
+        _trial_table(study),
+        lazy=len(study.trials) > TRIALS_INLINE_LIMIT,
+    )
+
+
 def _chart_grid(svgs: Sequence[str]) -> str:
     cards = "".join(f'<figure class="chart-card">{svg}</figure>' for svg in svgs if svg)
     return f'<div class="charts">{cards}</div>' if cards else ""
@@ -1494,15 +1535,37 @@ def _evaluation_section(
         f'<a href="{html(policy_url(eval_run, eval_env.name, eval_policy.name))}">'
         f"{html(eval_policy.name)} on {html(eval_env.name)}</a>. Its headline figures are "
         "in the comparison at the top of the page.</p>"
-        + "<h3>Episodes</h3>"
-        + _listing(
-            _episode_items(eval_run, eval_env, eval_policy),
-            "This evaluation produced no episode artifacts.",
-            "Recordings",
+        + _collapsible(
+            f"Episodes ({len(eval_policy.episodes)})",
+            _listing(
+                _episode_items(eval_run, eval_env, eval_policy),
+                "This evaluation produced no episode artifacts.",
+                "Recordings",
+            )
+            # The scene scripts go inside the section, so a lazy one loads
+            # them only when it opens.
+            + _thumbnail_scripts([eval_policy]),
+            lazy=len(eval_policy.episodes) > EPISODES_INLINE_LIMIT,
         )
         + _returns_chart(single, "Discounted return per evaluation episode")
-        + f"<details><summary>All evaluation metrics</summary>{_metric_table(eval_run, single)}"
-        "</details>" + _thumbnail_scripts([eval_policy])
+    )
+
+
+def _evaluation_metrics(
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+) -> str:
+    """Every metric the evaluation logged, collapsed under the comparison.
+
+    It sits under the comparison rather than with the episodes because it is
+    the full version of that table's evaluation column.
+    """
+    if evaluation is None:
+        return ""
+    eval_run, eval_env, eval_policy = evaluation
+    single = EnvironmentView(name=eval_env.name, policies=[eval_policy])
+    return (
+        f"<details><summary>All evaluation metrics</summary>{_metric_table(eval_run, single)}"
+        "</details>"
     )
 
 
@@ -1592,10 +1655,11 @@ def tuning_page(
         + _study_stats(study)
         + "<h2>Best trial against the evaluation</h2>"
         + _objective_comparison(study, evaluation)
+        + _evaluation_metrics(evaluation)
         + "<h2>Chosen parameters</h2>"
         + _parameter_table(study)
         + "<h2>Trials</h2>"
-        + _trial_table(study)
+        + _trials_section(study)
         + "<h2>Diagnostic charts</h2>"
         + _diagnostic_charts(run, study)
         + "<h2>Evaluation</h2>"
