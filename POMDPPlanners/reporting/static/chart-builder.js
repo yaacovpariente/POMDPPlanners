@@ -53,16 +53,8 @@
       svgButton: role("svg"),
       pngButton: role("png"),
       form: role("form"),
-      mode: role("mode"),
-      field: role("field"),
-      kind: role("kind"),
-      bins: role("bins"),
-      layout: role("layout"),
       csvButton: role("csv")
     };
-    var episodesUrl = root.getAttribute("data-episodes-url");
-    // Per-episode records, fetched the first time that mode is chosen.
-    var EPISODES = null;
 
     /* Metric names are shared across planners; a metric only one planner logged
        is still offered, because plotting that one planner is legitimate. */
@@ -111,7 +103,6 @@
     }
 
     function draw() {
-      if (el.mode && el.mode.value === "episodes") return drawEpisodes();
       var rows = series();
       output.textContent = "";
       if (!rows.length) {
@@ -339,359 +330,30 @@
       return svg;
     }
 
-    /* ---- Per episode: the distribution behind a logged mean. ---- */
-
-    function quantile(sorted, q) {
-      if (!sorted.length) return NaN;
-      var position = (sorted.length - 1) * q;
-      var low = Math.floor(position);
-      var high = Math.ceil(position);
-      return sorted[low] + (sorted[high] - sorted[low]) * (position - low);
-    }
-
-    /* The ticked planners' values of the chosen per-episode field. */
-    function episodeSeries() {
-      var field = el.field.value;
-      var found = [];
-      rows().forEach(function (row) {
-        var box = row.querySelector("input[type=checkbox]");
-        if (!box.checked || !EPISODES) return;
-        var records = EPISODES.policies[box.value] || [];
-        var values = records.map(function (r) { return r[field]; }).filter(function (v) {
-          return typeof v === "number" && isFinite(v);
-        });
-        if (!values.length) return;
-        var label = row.querySelector("input[type=text]").value.trim();
-        found.push({ name: label || box.value, values: values });
-      });
-      return found;
-    }
-
-    function frame(width, height) {
-      var look = style();
-      var svg = node("svg", {
-        xmlns: SVG_NS,
-        viewBox: "0 0 " + width + " " + height,
-        width: width,
-        height: height,
-        "font-family": "Helvetica Neue, Helvetica, Arial, sans-serif"
-      });
-      svg.appendChild(node("rect", { x: 0, y: 0, width: width, height: height, fill: look.background }));
-      return svg;
-    }
-
-    function drawEpisodes() {
-      output.textContent = "";
-      if (!EPISODES) {
-        output.textContent = "Loading the episodes…";
-        return null;
-      }
-      var series = episodeSeries();
-      if (!series.length) {
-        var empty = document.createElement("p");
-        empty.className = "empty";
-        empty.textContent = "Pick at least one planner with episodes that recorded this value.";
-        output.appendChild(empty);
-        return null;
-      }
-      var look = style();
-      var kind = el.kind.value;
-      var width = 640;
-      var height = 420;
-      var margin = { left: 86, right: 28, top: 58, bottom: 74 };
-      var plotW = width - margin.left - margin.right;
-      var plotH = height - margin.top - margin.bottom;
-      var svg = frame(width, height);
-      var pooled = [];
-      series.forEach(function (s) { pooled = pooled.concat(s.values); });
-      var lo = Math.min.apply(null, pooled);
-      var hi = Math.max.apply(null, pooled);
-      if (lo === hi) { lo -= 1; hi += 1; }
-
-      function hGrid(yLow, yHigh, toY, labels) {
-        kit.niceTicks(yLow, yHigh, 6).forEach(function (tick) {
-          if (tick < yLow - 1e-9 || tick > yHigh + 1e-9) return;
-          var y = toY(tick);
-          svg.appendChild(node("line", {
-            x1: margin.left, y1: y, x2: margin.left + plotW, y2: y,
-            stroke: look.grid, "stroke-width": 1, "stroke-dasharray": "3 4"
-          }));
-          if (labels !== false) {
-            svg.appendChild(node("text", {
-              x: margin.left - 12, y: y + 4, "text-anchor": "end", "font-size": 12.5, fill: look.muted
-            }, format(tick)));
-          }
-        });
-      }
-
-      function xTicks(xLow, xHigh, toX) {
-        kit.niceTicks(xLow, xHigh, 6).forEach(function (tick) {
-          if (tick < xLow - 1e-9 || tick > xHigh + 1e-9) return;
-          svg.appendChild(node("text", {
-            x: toX(tick), y: margin.top + plotH + 22, "text-anchor": "middle",
-            "font-size": 12.5, fill: look.muted
-          }, format(tick)));
-        });
-      }
-
-      var legend = false;
-      if (kind === "histogram") {
-        var bins = Math.max(1, Math.min(100, parseInt(el.bins.value, 10) || 8));
-        var step = (hi - lo) / bins;
-        var counts = series.map(function (s) {
-          var c = [];
-          for (var i = 0; i < bins; i++) c.push(0);
-          s.values.forEach(function (v) {
-            c[Math.min(bins - 1, Math.max(0, Math.floor((v - lo) / step)))] += 1;
-          });
-          return c;
-        });
-        var tallest = Math.max.apply(null, counts.map(function (c) { return Math.max.apply(null, c); }));
-        var toY = function (v) { return margin.top + plotH - (v / (tallest * 1.1)) * plotH; };
-        var toX = function (v) { return margin.left + (v - lo) / (hi - lo) * plotW; };
-        hGrid(0, tallest * 1.1, toY);
-        var side = el.layout.value === "side";
-        counts.forEach(function (c, index) {
-          c.forEach(function (count, bin) {
-            if (!count) return;
-            var x0 = toX(lo + bin * step);
-            var w = toX(lo + (bin + 1) * step) - x0;
-            var x = side ? x0 + (w / series.length) * index : x0;
-            var barW = side ? w / series.length : w;
-            svg.appendChild(node("rect", {
-              x: x + 1, y: toY(count), width: Math.max(1, barW - 2),
-              height: toY(0) - toY(count), fill: look.bars[index % look.bars.length],
-              "fill-opacity": side ? 1 : 0.6
-            }));
-          });
-        });
-        xTicks(lo, hi, toX);
-        legend = true;
-      } else if (kind === "ecdf") {
-        var toYE = function (v) { return margin.top + plotH - v * plotH; };
-        var toXE = function (v) { return margin.left + (v - lo) / (hi - lo) * plotW; };
-        hGrid(0, 1, toYE);
-        series.forEach(function (s, index) {
-          var sorted = s.values.slice().sort(function (a, b) { return a - b; });
-          var points = [toXE(lo) + "," + toYE(0)];
-          sorted.forEach(function (v, i) {
-            points.push(toXE(v) + "," + toYE(i / sorted.length));
-            points.push(toXE(v) + "," + toYE((i + 1) / sorted.length));
-          });
-          points.push(toXE(hi) + "," + toYE(1));
-          svg.appendChild(node("polyline", {
-            points: points.join(" "), fill: "none",
-            stroke: look.bars[index % look.bars.length], "stroke-width": 2.2
-          }));
-        });
-        xTicks(lo, hi, toXE);
-        legend = true;
-      } else {
-        // Box and strip: one column per planner, the value up the side.
-        var pad = (hi - lo) * 0.08;
-        var yLow = lo - pad;
-        var yHigh = hi + pad;
-        var toYB = function (v) { return margin.top + plotH - (v - yLow) / (yHigh - yLow) * plotH; };
-        hGrid(yLow, yHigh, toYB);
-        var band = plotW / series.length;
-        series.forEach(function (s, index) {
-          var centre = margin.left + band * index + band / 2;
-          var colour = look.bars[index % look.bars.length];
-          var sorted = s.values.slice().sort(function (a, b) { return a - b; });
-          if (kind === "box") {
-            var q1 = quantile(sorted, 0.25);
-            var q2 = quantile(sorted, 0.5);
-            var q3 = quantile(sorted, 0.75);
-            var reach = 1.5 * (q3 - q1);
-            var inside = sorted.filter(function (v) { return v >= q1 - reach && v <= q3 + reach; });
-            var lowW = inside.length ? inside[0] : q1;
-            var highW = inside.length ? inside[inside.length - 1] : q3;
-            var half = Math.min(40, band * 0.28);
-            svg.appendChild(node("line", { x1: centre, y1: toYB(lowW), x2: centre, y2: toYB(q1), stroke: look.ink, "stroke-width": 1.4 }));
-            svg.appendChild(node("line", { x1: centre, y1: toYB(q3), x2: centre, y2: toYB(highW), stroke: look.ink, "stroke-width": 1.4 }));
-            [lowW, highW].forEach(function (w) {
-              svg.appendChild(node("line", { x1: centre - half / 2, y1: toYB(w), x2: centre + half / 2, y2: toYB(w), stroke: look.ink, "stroke-width": 1.4 }));
-            });
-            svg.appendChild(node("rect", {
-              x: centre - half, y: toYB(q3), width: half * 2, height: Math.max(1, toYB(q1) - toYB(q3)),
-              fill: colour, "fill-opacity": 0.85, stroke: look.ink, "stroke-width": 1.2, rx: 2
-            }));
-            svg.appendChild(node("line", { x1: centre - half, y1: toYB(q2), x2: centre + half, y2: toYB(q2), stroke: look.background, "stroke-width": 2.4 }));
-            sorted.forEach(function (v) {
-              if (v < lowW || v > highW) {
-                svg.appendChild(node("circle", { cx: centre, cy: toYB(v), r: 3.5, fill: "none", stroke: look.ink, "stroke-width": 1.2 }));
-              }
-            });
-          } else {
-            var spread = Math.min(30, band * 0.25);
-            s.values.forEach(function (v, i) {
-              // A fixed spread rather than random jitter, so the figure that
-              // downloads is the figure on screen, every time.
-              var offset = s.values.length > 1 ? (i / (s.values.length - 1) - 0.5) * 2 * spread : 0;
-              svg.appendChild(node("circle", {
-                cx: centre + offset, cy: toYB(v), r: 4.5, fill: colour, "fill-opacity": 0.8,
-                stroke: look.background, "stroke-width": 1
-              }));
-            });
-            var mean = s.values.reduce(function (a, b) { return a + b; }, 0) / s.values.length;
-            svg.appendChild(node("line", {
-              x1: centre - spread - 8, y1: toYB(mean), x2: centre + spread + 8, y2: toYB(mean),
-              stroke: look.ink, "stroke-width": 2
-            }));
-          }
-          svg.appendChild(node("text", {
-            x: centre, y: margin.top + plotH + 25, "text-anchor": "middle", "font-size": 13.5, fill: look.ink
-          }, s.name + " (" + s.values.length + ")"));
-        });
-      }
-
-      svg.appendChild(node("line", { x1: margin.left, y1: margin.top, x2: margin.left, y2: margin.top + plotH, stroke: look.ink, "stroke-width": 1, opacity: 0.55 }));
-      svg.appendChild(node("line", { x1: margin.left, y1: margin.top + plotH, x2: margin.left + plotW, y2: margin.top + plotH, stroke: look.ink, "stroke-width": 1, opacity: 0.55 }));
-
-      if (legend) {
-        var x = margin.left + plotW;
-        for (var i = series.length - 1; i >= 0; i--) {
-          var text = series[i].name + " (" + series[i].values.length + ")";
-          x -= text.length * 6.8;
-          svg.appendChild(node("text", { x: x, y: margin.top - 10, "font-size": 12, fill: look.ink }, text));
-          svg.appendChild(node("rect", { x: x - 16, y: margin.top - 20, width: 11, height: 11, fill: look.bars[i % look.bars.length] }));
-          x -= 28;
-        }
-      }
-      if (el.title.value) {
-        svg.appendChild(node("text", {
-          x: width / 2, y: 30, "text-anchor": "middle", "font-size": 18, "font-weight": "600",
-          "letter-spacing": "0.2", fill: look.ink
-        }, el.title.value));
-      }
-      if (el.yLabel.value) {
-        svg.appendChild(node("text", {
-          x: 18, y: margin.top + plotH / 2, "text-anchor": "middle", "font-size": 14,
-          fill: look.muted, transform: "rotate(-90 18 " + (margin.top + plotH / 2) + ")"
-        }, el.yLabel.value));
-      }
-      if (el.xLabel.value) {
-        svg.appendChild(node("text", {
-          x: margin.left + plotW / 2, y: height - 16, "text-anchor": "middle",
-          "font-size": 14, fill: look.muted
-        }, el.xLabel.value));
-      }
-      output.style.background = look.background;
-      output.appendChild(svg);
-      return svg;
-    }
-
-    /* The two text fields keep their places but change meaning with the
-       mode: per episode they are the plot's vertical and horizontal axes. */
-    function caption(input, text) {
-      var label = input.closest("label");
-      if (label && label.firstChild && label.firstChild.nodeType === 3) {
-        label.firstChild.nodeValue = text + " ";
-      }
-    }
-
-    function showControls() {
-      var episodesMode = el.mode && el.mode.value === "episodes";
-      root.querySelectorAll("[data-mode]").forEach(function (label) {
-        label.hidden = label.getAttribute("data-mode") !== (episodesMode ? "episodes" : "aggregate");
-      });
-      root.querySelectorAll("[data-kind]").forEach(function (label) {
-        if (episodesMode) label.hidden = label.getAttribute("data-kind") !== el.kind.value;
-      });
-      caption(el.yLabel, episodesMode ? "Vertical axis" : "Value axis");
-      caption(el.xLabel, episodesMode ? "Horizontal axis" : "Planner axis");
-    }
-
-    function syncEpisodeLabels() {
-      var field = humanize(el.field.value || "value");
-      var kind = el.kind.value;
-      el.title.value = field + " per episode on " + DATA.environment;
-      if (kind === "histogram") { el.xLabel.value = field; el.yLabel.value = "Frequency"; }
-      else if (kind === "ecdf") { el.xLabel.value = field; el.yLabel.value = "Fraction of episodes at or below"; }
-      else { el.xLabel.value = "Planner"; el.yLabel.value = field; }
-    }
-
-    function loadEpisodes() {
-      if (EPISODES || !episodesUrl) return;
-      fetch(episodesUrl, { cache: "no-store" })
-        .then(function (response) {
-          if (!response.ok) throw new Error("HTTP " + response.status);
-          return response.json();
-        })
-        .then(function (data) {
-          EPISODES = data;
-          var fields = {};
-          Object.keys(data.policies).forEach(function (name) {
-            data.policies[name].forEach(function (record) {
-              Object.keys(record).forEach(function (key) {
-                if (key !== "episode" && typeof record[key] === "number") fields[key] = true;
-              });
-            });
-          });
-          var names = Object.keys(fields).sort();
-          var lead = ["discounted_return", "return", "steps"].filter(function (n) { return fields[n]; });
-          names = lead.concat(names.filter(function (n) { return lead.indexOf(n) === -1; }));
-          el.field.textContent = "";
-          names.forEach(function (name) {
-            var option = document.createElement("option");
-            option.value = name;
-            option.textContent = name;
-            el.field.appendChild(option);
-          });
-          syncEpisodeLabels();
-          draw();
-        })
-        .catch(function () {
-          output.textContent = "Could not load this run's episodes.";
-        });
-    }
-
-    function csv() {
-      var lines = [];
-      var csvField = kit.csvField;
-      var ticked = rows().filter(function (row) {
-        return row.querySelector("input[type=checkbox]").checked;
-      }).map(function (row) { return row.getAttribute("data-policy"); });
-      if (el.mode && el.mode.value === "episodes" && EPISODES) {
-        var columns = ["episode", "return", "discounted_return", "steps", "ended"];
-        ticked.forEach(function (name) {
-          (EPISODES.policies[name] || []).forEach(function (record) {
-            Object.keys(record).forEach(function (key) {
-              if (columns.indexOf(key) === -1) columns.push(key);
-            });
-          });
-        });
-        lines.push(["environment", "planner"].concat(columns).map(csvField).join(","));
-        ticked.forEach(function (name) {
-          (EPISODES.policies[name] || []).forEach(function (record) {
-            lines.push([DATA.environment, name].concat(columns.map(function (c) {
-              return record[c];
-            })).map(csvField).join(","));
-          });
-        });
-      } else {
-        var metric = el.metric.value;
-        lines.push(["environment", "planner", "metric", "value", "ci_lower", "ci_upper"].join(","));
-        DATA.policies.forEach(function (policy) {
-          if (ticked.indexOf(policy.name) === -1) return;
-          lines.push([DATA.environment, policy.name, metric, policy.metrics[metric],
-            policy.metrics[metric + DATA.ci.lower], policy.metrics[metric + DATA.ci.upper]]
-            .map(csvField).join(","));
-        });
-      }
-      return lines.join("\n") + "\n";
-    }
-
     function fileName(extension) {
       return kit.fileName(el.title.value || el.metric.value || "chart", extension);
     }
 
+    /* The plotted metric's numbers for the ticked planners, to plot elsewhere. */
+    function csv() {
+      var csvField = kit.csvField;
+      var metric = el.metric.value;
+      var lines = [["environment", "planner", "metric", "value", "ci_lower", "ci_upper"].join(",")];
+      rows().forEach(function (row) {
+        var box = row.querySelector("input[type=checkbox]");
+        if (!box.checked) return;
+        var policy = DATA.policies.filter(function (p) { return p.name === box.value; })[0];
+        if (!policy) return;
+        lines.push([DATA.environment, policy.name, metric, policy.metrics[metric],
+          policy.metrics[metric + DATA.ci.lower], policy.metrics[metric + DATA.ci.upper]]
+          .map(csvField).join(","));
+      });
+      return lines.join("\n") + "\n";
+    }
+
     if (el.csvButton) {
       el.csvButton.addEventListener("click", function () {
-        var base = el.mode && el.mode.value === "episodes"
-          ? DATA.environment + "_episodes_" + (el.field.value || "")
-          : (el.title.value || el.metric.value || "chart");
-        kit.downloadText(csv(), kit.fileName(base, "csv"), "text/csv");
+        kit.downloadText(csv(), fileName("csv"), "text/csv");
       });
     }
 
@@ -763,29 +425,6 @@
     el.xLabel.value = "Planner";
 
     el.metric.addEventListener("change", function () { syncLabels(); draw(); });
-    if (el.mode) {
-      el.mode.addEventListener("change", function (event) {
-        event.stopPropagation();
-        showControls();
-        if (el.mode.value === "episodes") {
-          if (EPISODES) syncEpisodeLabels();
-          loadEpisodes();
-        } else {
-          syncLabels();
-          el.xLabel.value = "Planner";
-        }
-        draw();
-      });
-      [el.field, el.kind].forEach(function (control) {
-        control.addEventListener("change", function (event) {
-          event.stopPropagation();
-          showControls();
-          syncEpisodeLabels();
-          draw();
-        });
-      });
-      showControls();
-    }
     el.form.addEventListener("input", draw);
     el.form.addEventListener("change", draw);
 

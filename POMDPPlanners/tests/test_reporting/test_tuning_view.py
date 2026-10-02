@@ -937,97 +937,6 @@ def test_a_plain_run_has_no_diagnostics_builder(router: Router, study_dir):
     assert status == 404
 
 
-def test_episode_records_are_read_from_the_traces(router: Router, study_dir):
-    """Each evaluation episode becomes one record, read from its trace.
-
-    Given: The fixture evaluation run, whose planner has one traced episode.
-    When: The environment's episodes route is fetched.
-    Then: It answers JSON with one record per episode holding the return,
-        the discounted return, the steps, how it ended, and each step_info
-        channel's total; the numbers match the trace file.
-    """
-    # pylint: disable-next=import-outside-toplevel
-    import json as json_module
-
-    experiment = router.index.experiments[0]
-    url = f"/run/0/{experiment.experiment_id}/{study_dir['evaluation']}/env/{ENV}/episodes.json"
-    status, media_type, body = router.resolve(url)
-    data = json_module.loads(body)
-    records = data["policies"][POLICY]
-    run = router.index.run(0, experiment.experiment_id, study_dir["evaluation"])
-    assert run is not None
-    env_view = run.environment(ENV)
-    assert env_view is not None
-    trace_path = next(
-        a.path for a in env_view.policy(POLICY).episodes[0] if a.path.suffix == ".json"
-    )
-    trace = json_module.loads(trace_path.read_text())
-
-    assert status == 200 and media_type == "application/json"
-    assert data["environment"] == ENV
-    assert [r["episode"] for r in records] == [0]
-    assert records[0]["discounted_return"] == pytest.approx(trace["discounted_return"])
-    # Steps that took an action, as average_actual_num_steps counts them.
-    assert records[0]["steps"] == sum(1 for st in trace["steps"] if st.get("action") is not None)
-    assert records[0]["ended"] in ("terminal", "out of steps")
-    assert set(records[0]) >= {"episode", "return", "discounted_return", "steps", "ended"}
-
-
-def test_episode_record_totals_each_step_info_channel(tmp_path: Path):
-    """A channel's per-episode value is its total over the episode's steps."""
-    # pylint: disable-next=import-outside-toplevel
-    from POMDPPlanners.reporting.episodes import episode_record
-
-    trace = {
-        "schema_version": "1.0",
-        "discounted_return": 7.5,
-        "total_reward": 10.0,
-        "num_steps": 3,
-        "reach_terminal_state": True,
-        "steps": [
-            {"action": 1, "reward": 0.0, "info": {"sampled_rock": 1.0, "terminal_state": 0.0}},
-            {"action": 1, "reward": 0.0, "info": {"sampled_rock": 1.0, "terminal_state": 0.0}},
-            {"action": 2, "reward": 10.0, "info": {"sampled_rock": 0.0, "terminal_state": 1.0}},
-            {"action": None, "reward": None},
-        ],
-    }
-    path = tmp_path / "trace_0.json"
-    path.write_text(json.dumps(trace))
-
-    record = episode_record(path, 0)
-
-    assert record == {
-        "episode": 0,
-        "return": 10.0,
-        "discounted_return": 7.5,
-        "steps": 3.0,
-        "ended": "terminal",
-        "sampled_rock (sum)": 2.0,
-        "terminal_state (sum)": 1.0,
-    }
-
-
-def test_the_chart_builder_offers_a_per_episode_mode(tmp_path: Path):
-    """Each builder can switch to per-episode data and export it as CSV.
-
-    Given: The two-by-two study page.
-    When: It renders.
-    Then: Each inline builder has the data-mode choice, the per-episode value
-        and plot pickers (histogram, box, strip, ECDF), bins and layout, the
-        raw-data CSV button, and the URL of its environment's episodes.
-    """
-    router, study_id, _ = _two_by_two_study(tmp_path)
-    page = _page(router, study_id)
-    rocks = page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
-
-    assert 'data-episodes-url="/run/' in rocks and '/env/Rocks/episodes.json"' in rocks
-    assert '<option value="episodes">Per episode</option>' in rocks
-    for kind in ("histogram", "box", "strip", "ecdf"):
-        assert f'<option value="{kind}">' in rocks
-    assert 'data-role="bins"' in rocks and 'data-role="layout"' in rocks
-    assert "Download raw data (CSV)" in rocks
-
-
 def test_every_builder_defaults_to_the_colour_style(tmp_path: Path):
     """Each builder on the study page and its standalone pages opens in "Paper, colour"."""
     router, study_id, configs = _two_by_two_study(tmp_path)
@@ -1038,13 +947,20 @@ def test_every_builder_defaults_to_the_colour_style(tmp_path: Path):
             f"/run/0/{experiment.experiment_id}/{configs[('Rocks', 'PFT_DPW')]}/tuning-chart"
         )[2].decode("utf-8"),
     ]
-    study_page = pages_to_check[0]
-    builder_url = study_page.split('data-episodes-url="', 1)[1].split('"', 1)[0][
-        : -len("/episodes.json")
-    ]
-    pages_to_check.append(router.resolve(builder_url + "/chart")[2].decode("utf-8"))
+    evaluation = next(r for r in experiment.runs if r.run_name == "environment_policy_comparison")
+    standalone = f"/run/0/{experiment.experiment_id}/{evaluation.run_id}/env/Rocks/chart"
+    pages_to_check.append(router.resolve(standalone)[2].decode("utf-8"))
 
     for page in pages_to_check:
         styles = page.count('data-role="style"')
         assert styles >= 1
         assert page.count('<option value="colour" selected>Paper, colour</option>') == styles
+
+
+def test_the_chart_builder_exports_the_plotted_metric_as_csv(tmp_path: Path):
+    """Every evaluation builder offers the plotted metric's values as CSV."""
+    router, study_id, _ = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+
+    assert page.count('data-role="csv"') == 2
+    assert "Download data (CSV)" in page

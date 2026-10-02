@@ -542,7 +542,7 @@ details[open] summary { margin-bottom: 8px; }
 }
 .builder-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--dim); }
 .builder-controls label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--ink); }
-.builder-controls input[type="text"], .builder-controls input[type="number"], .builder-controls select {
+.builder-controls input[type="text"], .builder-controls select {
   font: inherit;
   font-size: 14px;
   color: var(--ink);
