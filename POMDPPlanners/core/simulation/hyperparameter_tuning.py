@@ -446,9 +446,7 @@ class OptimizedPolicyResult:
     # early stopping fired. Left out of equality: it describes the search, not
     # the result. Kept out of repr too, so a result unpickled from a cache
     # written before this field existed still prints.
-    optimization_metadata: Optional[Dict[str, Any]] = field(
-        default=None, compare=False, repr=False
-    )
+    optimization_metadata: Optional[Dict[str, Any]] = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:  # pylint: disable=too-many-branches
         """Validate all parameters at construction time."""
