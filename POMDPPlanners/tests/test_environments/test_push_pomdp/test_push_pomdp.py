@@ -690,7 +690,7 @@ class TestPushPOMDP:
             for action in actions:
                 # Call sample_next_step multiple times to check consistency
                 for _ in range(5):
-                    next_state, observation, reward = self.env.sample_next_step(state, action)
+                    next_state, observation, _ = self.env.sample_next_step(state, action)
 
                     # Check observation properties
                     assert isinstance(observation, np.ndarray), "Observation should be numpy array"

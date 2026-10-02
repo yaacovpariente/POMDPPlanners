@@ -21,7 +21,6 @@ from POMDPPlanners.environments.occupancy_grid_mapping_pomdp import (
     OccupancyGridStepChannel,
     RangeNoiseModel,
     create_occupancy_grid_state,
-    grid_entropy_bits,
 )
 
 

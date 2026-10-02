@@ -11,7 +11,6 @@ import random
 from unittest.mock import Mock
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.policy import PolicyRunData
