@@ -157,10 +157,17 @@ belief = create_environment_belief(env, n_particles=200)
 
 api = LocalSimulationsAPI()
 _, stats = api.run_multiple_environments_and_policies(
-    environment_run_params=[EnvironmentRunParams(
-        environment=env, belief=belief,
-        policies=[pomcpow, pft_dpw], num_episodes=30, num_steps=30)],
-    alpha=0.1, confidence_interval_level=0.95,
+    environment_run_params=[
+        EnvironmentRunParams(
+            environment=env,
+            belief=belief,
+            policies=[pomcpow, pft_dpw],
+            num_episodes=30,
+            num_steps=30,
+        )
+    ],
+    alpha=0.1,
+    confidence_interval_level=0.95,
     experiment_name="LightDark_Evaluation",
     n_jobs=-1,  # run episodes in parallel, one per CPU core
     cache_dir_path=Path("results"),
