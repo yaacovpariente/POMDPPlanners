@@ -584,3 +584,123 @@ def test_comparison_params_are_all_kept():
     assert "<summary>Environment parameters (2)</summary>" in grouped
     assert "<summary>Run setup parameters (3)</summary>" in grouped
     assert grouped.count("<tr><td>") == len(params)
+
+
+def _two_by_two_study(tmp_path: Path):
+    """A study of two planners on two environments, evaluated, as the optimizer leaves it."""
+    # pylint: disable-next=import-outside-toplevel
+    import mlflow
+
+    os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+    store = tmp_path / "two_by_two" / "mlruns"
+    store.mkdir(parents=True)
+    mlflow.set_tracking_uri(f"file://{store}")
+    mlflow.set_experiment("two_by_two")
+    scores = {
+        ("Rocks", "POMCPOW"): (7.0, 1.0),
+        ("Rocks", "PFT_DPW"): (12.0, 0.5),
+        ("Push", "POMCPOW"): (-60.0, 0.5),
+        ("Push", "PFT_DPW"): (-55.0, 0.75),
+    }
+    configs = {}
+    with mlflow.start_run(
+        run_name="optimize_batch_4_configs", tags={layout.RUN_KIND_TAG: layout.RUN_KIND_STUDY}
+    ) as study_run:
+        for index, (env, planner) in enumerate(scores):
+            name = f"{planner}_{env}"
+            with mlflow.start_run(
+                run_name=f"config_{index + 1}_{env}_{planner}",
+                nested=True,
+                tags={layout.RUN_KIND_TAG: layout.RUN_KIND_CONFIG},
+            ) as config_run:
+                mlflow.log_params({"best_depth": 3, "param_range_depth": "1-5"})
+                mlflow.log_metric("best_trial_average_return", scores[(env, planner)][0] + 1)
+                summary = dict(
+                    SUMMARY,
+                    planner=planner,
+                    policy_name=name,
+                    environment=f"{env}POMDP",
+                    environment_name=env,
+                    objectives=[
+                        {"metric": "average_return", "direction": "maximize"},
+                        {"metric": "task_completion_rate", "direction": "maximize"},
+                    ],
+                )
+                staged = tmp_path / f"staging{index}" / "tuning"
+                _write(staged / layout.STUDY_SUMMARY_FILE, summary)
+                mlflow.log_artifact(str(staged / layout.STUDY_SUMMARY_FILE), "tuning")
+                configs[(env, planner)] = config_run.info.run_id
+        with mlflow.start_run(run_name="environment_policy_comparison", nested=True) as eval_run:
+            for env_index, env in enumerate(("Rocks", "Push")):
+                mlflow.log_param(f"env_{env_index}_name", env)
+                for policy_index, planner in enumerate(("POMCPOW", "PFT_DPW")):
+                    name = f"{planner}_{env}"
+                    mlflow.log_param(f"env_{env_index}_policy_{policy_index}_name", name)
+                    ret, rate = scores[(env, planner)]
+                    mlflow.log_metric(f"{env}_{name}_average_return", ret)
+                    mlflow.log_metric(f"{env}_{name}_average_return_ci_lower", ret - 2)
+                    mlflow.log_metric(f"{env}_{name}_average_return_ci_upper", ret + 2)
+                    mlflow.log_metric(f"{env}_{name}_task_completion_rate", rate)
+    client = MlflowClient()
+    for run_id in configs.values():
+        client.set_tag(run_id, layout.EVALUATION_RUN_ID_TAG, eval_run.info.run_id)
+    client.set_tag(eval_run.info.run_id, layout.RUN_KIND_TAG, layout.RUN_KIND_EVALUATION)
+    return Router(RunIndex([tmp_path])), study_run.info.run_id, configs
+
+
+def test_the_study_page_compares_planners_per_environment(tmp_path: Path):
+    """Each environment gets a block comparing its planners, first on the page.
+
+    Purpose: Comparing planners meant finding the raw evaluation run.
+
+    Given: Two planners evaluated on each of two environments.
+    When: The study page renders.
+    Then: Two comparison blocks with anchors come before the planner list;
+        each has a row per planner linking to its tuning view, and the best
+        evaluation return and task completion in each block are marked.
+    """
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    rocks = page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+    push = page.split('id="compare-Push"', 1)[1].split("</section>", 1)[0]
+
+    assert page.index('id="compare-Rocks"') < page.index("<h2>Tuned planners</h2>")
+    assert "Compare planners on Rocks" in rocks and "Compare planners on Push" in push
+    for (env, _), run_id in configs.items():
+        assert f'/{run_id}"' in (rocks if env == "Rocks" else push)
+    # Rocks: PFT_DPW has the best evaluation return and best-trial score,
+    # POMCPOW the best completion; each figure keeps its interval.
+    assert '<strong>12 <span class="ci">(10 – 14)</span></strong>' in rocks
+    assert "<strong>1</strong>" in rocks and "<strong>13</strong>" in rocks
+    assert rocks.count(">best<") == 3
+    assert "<strong>-55" in push and "<strong>0.75</strong>" in push
+    assert 'class="chart"' in rocks
+
+
+def test_a_tuning_view_links_to_its_environment_comparison(tmp_path: Path):
+    """A tuned planner's evaluation section links to the comparison on its environment."""
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    page = _page(router, configs[("Push", "PFT_DPW")])
+
+    assert "Compare with the other planners on Push" in page
+    assert f'/{study_id}#compare-Push"' in page
+
+
+def test_the_experiment_card_names_the_planners_and_environments(tmp_path: Path):
+    """The study card says which planners on which environments, not just how many."""
+    router, _, _ = _two_by_two_study(tmp_path)
+    experiment = router.index.experiments[0]
+    _, _, body = router.resolve(f"/experiment/0/{experiment.experiment_id}")
+    page = body.decode("utf-8")
+    cards = page.split('<div class="cards">', 1)[1].split('<div class="scroll table-view"', 1)[0]
+
+    assert "Tuning study of 2 planners on 2 environments" in cards
+    assert "POMCPOW, PFT_DPW" in cards
+    assert ">Rocks<" in cards and ">Push<" in cards
+
+
+def test_a_single_planner_view_has_no_comparison_link(router: Router, study_dir):
+    """With no other planner on the environment there is nothing to compare."""
+    page = _page(router, study_dir["config"])
+
+    assert "Compare with the other planners" not in page

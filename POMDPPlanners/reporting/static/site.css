@@ -191,6 +191,8 @@ span.ci { color: var(--dim); font-size: 13px; }
 .pt:hover circle { r: 6; fill-opacity: 1; stroke: var(--ink); }
 .pt:hover .chart-ci { stroke: var(--ink); stroke-width: 2; }
 .chart-group { margin: 6px 0 14px; }
+table.compare td .chip { margin-left: 4px; }
+.compare-link { font-weight: 600; }
 .chart-group > summary { font-size: 14px; color: var(--ink); font-weight: 600; }
 .pt:focus { outline: none; }
 .pt:focus circle { r: 6; stroke: var(--ink); }

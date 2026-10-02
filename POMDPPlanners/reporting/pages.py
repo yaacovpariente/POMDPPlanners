@@ -1561,6 +1561,7 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
 def _evaluation_section(
     study: tuning.TuningStudy,
     evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+    compare_url: str = "",
 ) -> str:
     if evaluation is None:
         if study.evaluation_run_id:
@@ -1581,6 +1582,12 @@ def _evaluation_section(
         f'<a href="{html(policy_url(eval_run, eval_env.name, eval_policy.name))}">'
         f"{html(eval_policy.name)} on {html(eval_env.name)}</a>. Its headline figures are "
         "in the comparison at the top of the page.</p>"
+        + (
+            f'<p><a class="compare-link" href="{html(compare_url)}">Compare with the other '
+            f"planners on {html(eval_env.name)}</a></p>"
+            if compare_url
+            else ""
+        )
         + _collapsible(
             f"Episodes ({len(eval_policy.episodes)})",
             _listing(
@@ -1613,6 +1620,23 @@ def _evaluation_metrics(
         f"<details><summary>All evaluation metrics</summary>{_metric_table(eval_run, single)}"
         "</details>"
     )
+
+
+def _compare_url(
+    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
+    parent: Optional[RunView],
+) -> str:
+    """The study page's comparison block for this planner's environment.
+
+    Empty unless another planner was evaluated on the same environment and
+    the study page exists to hold the block.
+    """
+    if evaluation is None or parent is None:
+        return ""
+    _, eval_env, _ = evaluation
+    if len(eval_env.policies) < 2:
+        return ""
+    return run_url(parent) + "#" + compare_anchor(eval_env.name)
 
 
 def find_evaluation(
@@ -1707,7 +1731,7 @@ def tuning_page(
         + "<h2>Diagnostic charts</h2>"
         + _diagnostic_charts(run, study)
         + "<h2>Evaluation</h2>"
-        + _evaluation_section(study, evaluation)
+        + _evaluation_section(study, evaluation, _compare_url(evaluation, parent))
         + params,
     )
 
@@ -1734,8 +1758,25 @@ def group_title(group: tuning.StudyGroup) -> str:
     if len(group.configs) == 1:
         return f"{study_label(group.configs[0].study)} — tuning study"
     if group.configs:
-        return f"Tuning study of {len(group.configs)} planners"
+        planners = _distinct(c.study.planner or c.study.policy_name or "" for c in group.configs)
+        environments = _study_environments(group)
+        count = f"{len(planners)} planner{'s' if len(planners) != 1 else ''}"
+        where = environments[0] if len(environments) == 1 else f"{len(environments)} environments"
+        return f"Tuning study of {count} on {where}"
     return group.anchor.run_name
+
+
+def _distinct(values: Iterable[str]) -> List[str]:
+    """Values in first-seen order, without repeats or blanks."""
+    seen: List[str] = []
+    for value in values:
+        if value and value not in seen:
+            seen.append(value)
+    return seen
+
+
+def _study_environments(group: tuning.StudyGroup) -> List[str]:
+    return _distinct(c.study.environment_name or c.study.environment or "" for c in group.configs)
 
 
 def _headline(name: str, value: Optional[float]) -> str:
@@ -1772,11 +1813,12 @@ def _study_item(group: tuning.StudyGroup) -> ListingItem:
         ]
         href = run_url(config.run)
     else:
-        fields = [("Planners tuned", str(len(group.configs)))]
+        # Which planners, by name: a count alone sends the reader through to
+        # find out what the study was about.
+        planners = _distinct(c.study.planner or c.study.policy_name or "" for c in group.configs)
+        fields = [("Planners", html(", ".join(planners)))]
         href = run_url(anchor)
-    environments = sorted(
-        {c.study.environment_name or c.study.environment for c in group.configs} - {""}
-    )
+    environments = _study_environments(group)
     return ListingItem(
         title=group_title(group),
         href=href,
@@ -1794,6 +1836,116 @@ def _best_parameters_text(study: tuning.TuningStudy, limit: int = 4) -> str:
         for name, value in chosen[:limit]
     )
     return shown + (f" and {len(chosen) - limit} more" if len(chosen) > limit else "")
+
+
+def compare_anchor(environment: str) -> str:
+    """The id of an environment's comparison block on the study page."""
+    return "compare-" + "".join(c if c.isalnum() else "-" for c in environment)
+
+
+def _comparison_rows(group: tuning.StudyGroup) -> Dict[str, List[tuple]]:
+    """Each environment's evaluated planners: ``env -> [(config, eval_run, env, policy)]``."""
+    rows: Dict[str, List[tuple]] = {}
+    for config in group.configs:
+        evaluation = find_evaluation(config.study, config.evaluation_run)
+        if evaluation is None:
+            continue
+        eval_run, eval_env, eval_policy = evaluation
+        rows.setdefault(eval_env.name, []).append((config, eval_run, eval_env, eval_policy))
+    return rows
+
+
+def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
+    """One environment's planners side by side: a table, then the run's charts.
+
+    The table's figures are the evaluation's, each with its interval, plus
+    the best trial's score for reference. The best value in each column is
+    marked, by each objective's own direction. The charts are the ones the
+    evaluation run's own page draws for this environment, limited to these
+    planners.
+    """
+    study = rows[0][0].study
+    directions = {str(n): str(d) for n, d in study.objectives}
+    columns = [("average_return", "Avg. return"), ("task_completion_rate", "Task completion")]
+
+    def evaluated(row: tuple, name: str) -> Optional[float]:
+        _, eval_run, eval_env, eval_policy = row
+        return eval_run.metrics_for(eval_env.name, eval_policy.name).get(name)
+
+    def best_of(values: List[Optional[float]], name: str) -> Optional[float]:
+        present = [v for v in values if v is not None]
+        if len(present) < 2:
+            return None
+        return min(present) if directions.get(name) == "minimize" else max(present)
+
+    marks = {name: best_of([evaluated(r, name) for r in rows], name) for name, _ in columns}
+    best_trial_name = "average_return"
+    best_trial_values = [
+        r[0].study.best_trial_scores.get(best_trial_name, (None,))[0] for r in rows
+    ]
+    best_trial_mark = best_of(best_trial_values, best_trial_name)
+
+    def cell(value: Optional[float], mark: Optional[float], low=None, high=None) -> str:
+        if value is None:
+            return '<td class="dim">—</td>'
+        text = f"{value:.4g}"
+        if low is not None and high is not None and high > low:
+            text += f' <span class="ci">({low:.3g} – {high:.3g})</span>'
+        if mark is not None and value == mark:
+            text = f"<strong>{text}</strong> " + '<span class="chip chip-ok">best</span>'
+        return f'<td class="num">{text}</td>'
+
+    body = []
+    for row, best_trial in zip(rows, best_trial_values):
+        config, eval_run, eval_env, eval_policy = row
+        metrics = eval_run.metrics_for(eval_env.name, eval_policy.name)
+        cells = [f'<td><a href="{html(run_url(config.run))}">{html(eval_policy.name)}</a></td>']
+        for name, _ in columns:
+            cells.append(
+                cell(
+                    metrics.get(name),
+                    marks[name],
+                    metrics.get(name + charts.CI_LOWER_SUFFIX),
+                    metrics.get(name + charts.CI_UPPER_SUFFIX),
+                )
+            )
+        cells.append(f'<td class="num">{len(eval_policy.episodes)}</td>')
+        cells.append(cell(best_trial, best_trial_mark))
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    head = (
+        "<th>Planner</th>"
+        + "".join(f"<th>{html(label)} (evaluation)</th>" for _, label in columns)
+        + "<th>Episodes</th><th>Avg. return (best trial)</th>"
+    )
+    eval_run, eval_env = rows[0][1], rows[0][2]
+    shown = EnvironmentView(
+        name=eval_env.name,
+        policies=[r[3] for r in rows],
+        artifacts=eval_env.artifacts,
+    )
+    return (
+        f'<section class="env" id="{html(compare_anchor(environment))}">'
+        f"<h2>Compare planners on {html(environment)}</h2>"
+        '<div class="scroll"><table class="metrics compare">'
+        f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+        '<p class="note">Evaluation figures with their confidence intervals; the best '
+        "trial's score is the tuning estimate, shown for reference. Each planner opens its "
+        f'tuning view. <a href="{html(env_url(eval_run, eval_env.name))}">All of this '
+        "environment's evaluation</a>.</p>"
+        + _comparison_charts(eval_run, shown)
+        + _returns_chart(shown, "Discounted return per evaluation episode")
+        + "</section>"
+    )
+
+
+def _comparison_section(group: tuning.StudyGroup) -> str:
+    """A block per environment where more than one planner was evaluated."""
+    rows = _comparison_rows(group)
+    return "".join(
+        _comparison_block(environment, env_rows)
+        for environment, env_rows in rows.items()
+        if len(env_rows) > 1
+    )
 
 
 def study_page(group: tuning.StudyGroup) -> str:
@@ -1823,6 +1975,8 @@ def study_page(group: tuning.StudyGroup) -> str:
     ]
     evaluation = group.evaluation_run
     params = run_parameters(run.params)
+    comparison = _comparison_section(group)
+    several_environments = len(_study_environments(group)) > 1
     return layout(
         title,
         [
@@ -1841,8 +1995,12 @@ def study_page(group: tuning.StudyGroup) -> str:
             else ""
         )
         + "</p>"
+        # With several environments the comparison is what the page is for,
+        # so it comes first; with one, the planners lead and it follows.
+        + (comparison if several_environments else "")
         + "<h2>Tuned planners</h2>"
         + _listing(items, "No planner in this study finished tuning.")
+        + ("" if several_environments else comparison)
         + params,
     )
 
