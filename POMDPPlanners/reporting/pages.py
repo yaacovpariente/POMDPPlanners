@@ -2114,7 +2114,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     )
     return (
         f'<section class="env" id="{html(compare_anchor(environment))}">'
-        f"<h2>Compare planners on {html(environment)}</h2>"
+        f"<h2>Compare Tuned planners on {html(environment)}</h2>"
         + controls
         + '<div class="scroll"><table class="metrics compare" '
         f'id="compare-table-{html(compare_anchor(environment))}">'

@@ -671,7 +671,7 @@ def test_the_study_page_compares_planners_per_environment(tmp_path: Path):
     push = page.split('id="compare-Push"', 1)[1].split("</section>", 1)[0]
 
     assert page.index('id="compare-Rocks"') < page.index("<h2>Tuned planners</h2>")
-    assert "Compare planners on Rocks" in rocks and "Compare planners on Push" in push
+    assert "Compare Tuned planners on Rocks" in rocks and "Compare Tuned planners on Push" in push
     for (env, _), run_id in configs.items():
         assert f'/{run_id}"' in (rocks if env == "Rocks" else push)
     # Rocks: PFT_DPW has the best evaluation return and best-trial score,
