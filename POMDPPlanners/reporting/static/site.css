@@ -193,6 +193,21 @@ span.ci { color: var(--dim); font-size: 13px; }
 .chart-group { margin: 6px 0 14px; }
 table.compare td .chip { margin-left: 4px; }
 .compare-link { font-weight: 600; }
+.metric-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 10px; }
+.metric-filter input[type="search"] {
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.metric-filter label.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+table.compare tr.reference td { background: var(--raise); }
+.metric-filter input[type="checkbox"] { accent-color: var(--accent); }
 .chart-group > summary { font-size: 14px; color: var(--ink); font-weight: 600; }
 .pt:focus { outline: none; }
 .pt:focus circle { r: 6; stroke: var(--ink); }

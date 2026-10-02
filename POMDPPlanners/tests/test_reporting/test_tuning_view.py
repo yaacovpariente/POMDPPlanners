@@ -641,6 +641,12 @@ def _two_by_two_study(tmp_path: Path):
                     mlflow.log_metric(f"{env}_{name}_average_return_ci_lower", ret - 2)
                     mlflow.log_metric(f"{env}_{name}_average_return_ci_upper", ret + 2)
                     mlflow.log_metric(f"{env}_{name}_task_completion_rate", rate)
+                    # A timing, where lower is better, and a planner counter
+                    # whose better direction nobody can say.
+                    mlflow.log_metric(f"{env}_{name}_average_action_time", 1.0 + policy_index)
+                    mlflow.log_metric(
+                        f"{env}_{name}_policy_info_tree_max_depth", 5.0 + policy_index
+                    )
     client = MlflowClient()
     for run_id in configs.values():
         client.set_tag(run_id, layout.EVALUATION_RUN_ID_TAG, eval_run.info.run_id)
@@ -672,7 +678,8 @@ def test_the_study_page_compares_planners_per_environment(tmp_path: Path):
     # POMCPOW the best completion; each figure keeps its interval.
     assert '<strong>12 <span class="ci">(10 – 14)</span></strong>' in rocks
     assert "<strong>1</strong>" in rocks and "<strong>13</strong>" in rocks
-    assert rocks.count(">best<") == 3
+    # Return, completion, best-trial return and the lower action time.
+    assert rocks.count(">best<") == 4
     assert "<strong>-55" in push and "<strong>0.75</strong>" in push
     assert 'class="chart"' in rocks
 
@@ -704,3 +711,55 @@ def test_a_single_planner_view_has_no_comparison_link(router: Router, study_dir)
     page = _page(router, study_dir["config"])
 
     assert "Compare with the other planners" not in page
+
+
+def test_the_comparison_lists_every_metric_with_directions_and_a_filter(tmp_path: Path):
+    """Every logged metric is a row; "best" follows each metric's known direction.
+
+    Given: Two planners per environment, with a timing and a planner counter
+        logged beside return and task completion.
+    When: The study page renders.
+    Then: The Rocks table has a row per metric plus the best-trial and
+        episodes rows, planners as columns; the lower action time is marked
+        best, the counter is not marked at all, and the filter box and group
+        toggles are there with each row tagged by group.
+    """
+    router, study_id, _ = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    rocks = page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+    rows = {
+        row.split('data-metric="', 1)[1].split('"', 1)[0]: row
+        for row in rocks.split("<tr")[1:]
+        if 'data-metric="' in row
+    }
+
+    assert set(rows) == {
+        "average_return best trial",
+        "episodes",
+        "average_return",
+        "task_completion_rate",
+        "average_action_time",
+        "policy_info_tree_max_depth",
+    }
+    assert "<strong>1</strong>" in rows["average_action_time"]
+    assert "lower is better" in rows["average_action_time"]
+    assert ">best<" not in rows["policy_info_tree_max_depth"]
+    assert 'data-group="timing"' in rows["average_action_time"]
+    assert 'data-group="policy"' in rows["policy_info_tree_max_depth"]
+    assert 'type="search"' in rocks and 'data-group-toggle="timing"' in rocks
+    assert page.count("/static/metric-filter.js") == 1
+
+
+def test_metric_directions_are_known_only_where_the_name_says():
+    """Directions come from the study's objectives, then from the metric's name."""
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting.pages import metric_direction
+
+    assert metric_direction("average_return") == "maximize"
+    assert metric_direction("average_belief_update_time") == "minimize"
+    assert metric_direction("average_dangerous_area_steps") == "minimize"
+    assert metric_direction("policy_info_root_visit_count") is None
+    assert metric_direction("average_rocks_sampled") is None
+    assert metric_direction("average_rocks_sampled", [("average_rocks_sampled", "maximize")]) == (
+        "maximize"
+    )

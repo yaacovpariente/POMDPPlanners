@@ -1855,35 +1855,96 @@ def _comparison_rows(group: tuning.StudyGroup) -> Dict[str, List[tuple]]:
     return rows
 
 
+#: Metrics whose better direction is known by name. Anything else -- the
+#: planners' own policy_info_* counters, most environment-specific counts --
+#: gets no "best" mark: calling a larger tree better would be a guess.
+_HIGHER_IS_BETTER = {
+    "average_return",
+    "return_cvar",
+    "return_value_at_risk",
+    CommonMetricName.TASK_COMPLETION_RATE.value,
+    CommonMetricName.ENDED_BY_GOAL_RATE.value,
+}
+_LOWER_IS_BETTER = {
+    CommonMetricName.ENDED_BY_FAILURE_RATE.value,
+    CommonMetricName.ENDED_BY_TIMEOUT_RATE.value,
+    CommonMetricName.AVERAGE_EPISODE_LENGTH.value,
+    CommonMetricName.COLLISION_RATE.value,
+    CommonMetricName.AVERAGE_COLLISIONS.value,
+    CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value,
+    CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value,
+    CommonMetricName.AVERAGE_NEAR_MISSES.value,
+    "average_actual_num_steps",
+}
+
+
+def metric_direction(name: str, objectives: Sequence[Tuple[str, str]] = ()) -> Optional[str]:
+    """Whether a larger or a smaller value of a metric is better, when that is known.
+
+    Args:
+        name: Metric name.
+        objectives: The study's ``(metric, direction)`` pairs, which win.
+
+    Returns:
+        ``"maximize"``, ``"minimize"``, or ``None`` when the name does not say.
+    """
+    for objective, direction in objectives:
+        if objective == name:
+            return str(direction)
+    if name in _HIGHER_IS_BETTER:
+        return "maximize"
+    if (
+        name in _LOWER_IS_BETTER
+        or name.endswith("_time")
+        or "dangerous" in name
+        or "collision" in name
+    ):
+        return "minimize"
+    return None
+
+
+def metric_group(name: str) -> str:
+    """The filter group a metric belongs to: timing, planner internals, or outcome."""
+    if name.endswith("_time"):
+        return "timing"
+    if name.startswith("policy_info_"):
+        return "policy"
+    return "outcome"
+
+
+_GROUP_LABELS = (
+    ("outcome", "Outcomes"),
+    ("timing", "Timings"),
+    ("policy", "Planner internals"),
+)
+
+
 def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     """One environment's planners side by side: a table, then the run's charts.
 
-    The table's figures are the evaluation's, each with its interval, plus
-    the best trial's score for reference. The best value in each column is
-    marked, by each objective's own direction. The charts are the ones the
-    evaluation run's own page draws for this environment, limited to these
-    planners.
+    The table has a row per metric and a column per planner. A run logs a
+    few dozen metrics and a study compares a handful of planners, so the
+    long side runs down the page and every planner's figure for one metric
+    sits on one line, where it can be compared. Every metric the evaluation
+    logged is there with its interval, the best trial's return is a first
+    row for reference, and the best value in a row is marked when the
+    metric's direction is known. A filter box and group toggles narrow the
+    rows. The charts are the evaluation run page's own, for these planners.
     """
     study = rows[0][0].study
-    directions = {str(n): str(d) for n, d in study.objectives}
-    columns = [("average_return", "Avg. return"), ("task_completion_rate", "Task completion")]
-
-    def evaluated(row: tuple, name: str) -> Optional[float]:
-        _, eval_run, eval_env, eval_policy = row
-        return eval_run.metrics_for(eval_env.name, eval_policy.name).get(name)
-
-    def best_of(values: List[Optional[float]], name: str) -> Optional[float]:
-        present = [v for v in values if v is not None]
-        if len(present) < 2:
-            return None
-        return min(present) if directions.get(name) == "minimize" else max(present)
-
-    marks = {name: best_of([evaluated(r, name) for r in rows], name) for name, _ in columns}
-    best_trial_name = "average_return"
-    best_trial_values = [
-        r[0].study.best_trial_scores.get(best_trial_name, (None,))[0] for r in rows
+    objectives = [(str(n), str(d)) for n, d in study.objectives]
+    per_planner = [r[1].metrics_for(r[2].name, r[3].name) for r in rows]
+    names = sorted({n for metrics in per_planner for n in charts.base_metric_names(metrics)})
+    leading = [
+        n for n in ("average_return", CommonMetricName.TASK_COMPLETION_RATE.value) if n in names
     ]
-    best_trial_mark = best_of(best_trial_values, best_trial_name)
+    names = leading + [n for n in names if n not in leading]
+
+    def best_of(values: List[Optional[float]], direction: Optional[str]) -> Optional[float]:
+        present = [v for v in values if v is not None]
+        if direction is None or len(present) < 2 or len(set(present)) == 1:
+            return None
+        return min(present) if direction == "minimize" else max(present)
 
     def cell(value: Optional[float], mark: Optional[float], low=None, high=None) -> str:
         if value is None:
@@ -1895,27 +1956,58 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             text = f"<strong>{text}</strong> " + '<span class="chip chip-ok">best</span>'
         return f'<td class="num">{text}</td>'
 
+    def direction_note(direction: Optional[str]) -> str:
+        if direction is None:
+            return ""
+        arrow = "higher is better" if direction == "maximize" else "lower is better"
+        return f' <span class="dim">({arrow})</span>'
+
     body = []
-    for row, best_trial in zip(rows, best_trial_values):
-        config, eval_run, eval_env, eval_policy = row
-        metrics = eval_run.metrics_for(eval_env.name, eval_policy.name)
-        cells = [f'<td><a href="{html(run_url(config.run))}">{html(eval_policy.name)}</a></td>']
-        for name, _ in columns:
-            cells.append(
-                cell(
-                    metrics.get(name),
-                    marks[name],
-                    metrics.get(name + charts.CI_LOWER_SUFFIX),
-                    metrics.get(name + charts.CI_UPPER_SUFFIX),
-                )
+    best_trial = [r[0].study.best_trial_scores.get("average_return", (None,))[0] for r in rows]
+    reference_direction = metric_direction("average_return", objectives)
+    reference_mark = best_of(best_trial, reference_direction)
+    body.append(
+        '<tr class="reference" data-metric="average_return best trial" data-group="outcome">'
+        "<td>average_return, best trial"
+        '<span class="dim"> — the tuning estimate, for reference</span></td>'
+        + "".join(cell(v, reference_mark) for v in best_trial)
+        + "</tr>"
+    )
+    body.append(
+        '<tr data-metric="episodes" data-group="outcome"><td>episodes evaluated</td>'
+        + "".join(f'<td class="num">{len(r[3].episodes)}</td>' for r in rows)
+        + "</tr>"
+    )
+    for name in names:
+        direction = metric_direction(name, objectives)
+        mark = best_of([m.get(name) for m in per_planner], direction)
+        cells = "".join(
+            cell(
+                m.get(name),
+                mark,
+                m.get(name + charts.CI_LOWER_SUFFIX),
+                m.get(name + charts.CI_UPPER_SUFFIX),
             )
-        cells.append(f'<td class="num">{len(eval_policy.episodes)}</td>')
-        cells.append(cell(best_trial, best_trial_mark))
-        body.append("<tr>" + "".join(cells) + "</tr>")
-    head = (
-        "<th>Planner</th>"
-        + "".join(f"<th>{html(label)} (evaluation)</th>" for _, label in columns)
-        + "<th>Episodes</th><th>Avg. return (best trial)</th>"
+            for m in per_planner
+        )
+        body.append(
+            f'<tr data-metric="{html(name)}" data-group="{metric_group(name)}">'
+            f"<td>{html(name)}{direction_note(direction)}</td>{cells}</tr>"
+        )
+    head = "<th>Metric</th>" + "".join(
+        f'<th class="group"><a href="{html(run_url(r[0].run))}">{html(r[3].name)}</a></th>'
+        for r in rows
+    )
+    controls = (
+        '<div class="metric-filter" data-filter-for="compare-table-'
+        f'{html(compare_anchor(environment))}">'
+        '<input type="search" placeholder="Filter metrics by name" aria-label="Filter metrics">'
+        + "".join(
+            f'<label class="check"><input type="checkbox" data-group-toggle="{key}" checked> '
+            f"{label}</label>"
+            for key, label in _GROUP_LABELS
+        )
+        + '<span class="dim" data-filter-count></span></div>'
     )
     eval_run, eval_env = rows[0][1], rows[0][2]
     shown = EnvironmentView(
@@ -1926,12 +2018,14 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     return (
         f'<section class="env" id="{html(compare_anchor(environment))}">'
         f"<h2>Compare planners on {html(environment)}</h2>"
-        '<div class="scroll"><table class="metrics compare">'
+        + controls
+        + '<div class="scroll"><table class="metrics compare" '
+        f'id="compare-table-{html(compare_anchor(environment))}">'
         f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
-        '<p class="note">Evaluation figures with their confidence intervals; the best '
-        "trial's score is the tuning estimate, shown for reference. Each planner opens its "
-        f'tuning view. <a href="{html(env_url(eval_run, eval_env.name))}">All of this '
-        "environment's evaluation</a>.</p>"
+        '<p class="note">Every metric the evaluation logged, with its confidence interval. '
+        '"Best" is marked only where the metric says which way is better. Each planner\'s '
+        f'name opens its tuning view. <a href="{html(env_url(eval_run, eval_env.name))}">All '
+        "of this environment's evaluation</a>.</p>"
         + _comparison_charts(eval_run, shown)
         + _returns_chart(shown, "Discounted return per evaluation episode")
         + "</section>"
@@ -1941,11 +2035,12 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
 def _comparison_section(group: tuning.StudyGroup) -> str:
     """A block per environment where more than one planner was evaluated."""
     rows = _comparison_rows(group)
-    return "".join(
+    blocks = "".join(
         _comparison_block(environment, env_rows)
         for environment, env_rows in rows.items()
         if len(env_rows) > 1
     )
+    return blocks + ('<script src="/static/metric-filter.js"></script>' if blocks else "")
 
 
 def study_page(group: tuning.StudyGroup) -> str:
