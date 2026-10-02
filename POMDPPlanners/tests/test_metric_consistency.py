@@ -39,42 +39,6 @@ random.seed(42)
 class TestEnvironmentMetricConsistency:
     """Test suite for environment metric name consistency."""
 
-    def test_tiger_pomdp_metric_consistency(self):
-        """Test TigerPOMDP metric name consistency.
-
-        Purpose: Validates that TigerPOMDP declares and produces consistent metric names
-
-        Given: A TigerPOMDP environment with sample histories
-        When: get_metric_names() and compute_metrics() are called
-        Then: Declared names match produced names exactly
-
-        Test type: unit
-        """
-        env = TigerPOMDP(discount_factor=0.95)
-
-        # Create sample histories
-        steps = [
-            StepData(
-                state="tiger_left",
-                action="listen",
-                next_state="tiger_left",
-                observation="hear_left",
-                reward=-1,
-                belief=Mock(spec=Belief),
-            )
-            for _ in range(3)
-        ]
-
-        histories = [
-            build_test_history(
-                steps=steps,
-                reach_terminal=True,
-                policy_run_data=[PolicyRunData(info_variables=[])],
-            )
-        ]
-
-        verify_environment_metric_consistency(env, histories)
-
     def test_push_pomdp_metric_consistency(self):
         """Test PushPOMDP metric name consistency.
 

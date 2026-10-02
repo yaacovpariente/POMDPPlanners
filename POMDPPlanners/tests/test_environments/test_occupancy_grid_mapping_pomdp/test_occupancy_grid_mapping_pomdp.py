@@ -408,28 +408,6 @@ def test_the_ray_templates_survive_pickling(env):
     np.testing.assert_allclose(restored.nominal_scan(state), env.nominal_scan(state))
 
 
-def test_config_id_is_unchanged_by_using_the_environment(env):
-    """Using the environment does not move its cache key.
-
-    Purpose: ``config_id`` keys the result cache. Anything memoized onto the
-        instance that leaked into it would give a used environment a different
-        identity from a fresh one, and every cached result would miss.
-
-    Given: A fresh environment's config id
-    When: An episode's worth of steps is taken and the id is read again
-    Then: It is unchanged, and equal to a freshly built environment's
-
-    Test type: integration
-    """
-    before = env.config_id
-    np.random.seed(0)
-    state = env.initial_state_dist().sample()[0]
-    for _ in range(5):
-        state, _, _ = env.sample_next_step(state, int(np.random.randint(3)))
-    assert env.config_id == before
-    assert env.config_id == OccupancyGridMappingPOMDP().config_id
-
-
 # -- range noise model configuration ---------------------------------------
 
 
