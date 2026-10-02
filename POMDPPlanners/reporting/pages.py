@@ -830,12 +830,31 @@ def chart_builder_html(run: RunView, env: EnvironmentView, read_query: bool = Fa
     # element early is "</", so that is what is escaped.
     payload = json.dumps(data).replace("</", "<\\/")
     return (
-        f'<div class="builder" data-chart-builder{" data-read-query" if read_query else ""}>'
+        f'<div class="builder" data-chart-builder{" data-read-query" if read_query else ""} '
+        f'data-episodes-url="{html(env_url(run, env.name) + "/episodes.json")}">'
         '<form class="builder-controls" data-role="form">'
+        '<label>Data <select data-role="mode">'
+        '<option value="aggregate">Logged metric (mean and interval)</option>'
+        '<option value="episodes">Per episode</option>'
+        "</select></label>"
         "<fieldset><legend>Planners</legend>"
         '<p class="note">Tick the ones to plot; the box under each is the name it carries in the figure.</p>'
         '<div data-role="policies"></div></fieldset>'
-        '<label>Metric <select data-role="metric"></select></label>'
+        '<label data-mode="aggregate">Metric <select data-role="metric"></select></label>'
+        '<label data-mode="episodes">Episode value <select data-role="field"></select></label>'
+        '<label data-mode="episodes">Plot <select data-role="kind">'
+        '<option value="histogram">Histogram</option>'
+        '<option value="box">Box plot</option>'
+        '<option value="strip">Strip plot (every episode)</option>'
+        '<option value="ecdf">Cumulative distribution (ECDF)</option>'
+        "</select></label>"
+        '<label data-mode="episodes" data-kind="histogram">Bins '
+        '<input data-role="bins" type="number" min="1" max="100" value="8"></label>'
+        '<label data-mode="episodes" data-kind="histogram">Planners '
+        '<select data-role="layout">'
+        '<option value="overlaid">Overlaid</option>'
+        '<option value="side">Side by side</option>'
+        "</select></label>"
         '<label>Title <input data-role="title" type="text" autocomplete="off"></label>'
         '<label>Value axis <input data-role="y" type="text" autocomplete="off"></label>'
         '<label>Planner axis <input data-role="x" type="text" autocomplete="off"></label>'
@@ -844,17 +863,18 @@ def chart_builder_html(run: RunView, env: EnvironmentView, read_query: bool = Fa
         '<option value="colour">Paper, colour</option>'
         '<option value="slide">Slide, dark</option>'
         "</select></label>"
-        '<label>Orientation <select data-role="orient">'
+        '<label data-mode="aggregate">Orientation <select data-role="orient">'
         '<option value="vertical">Vertical bars</option>'
         '<option value="horizontal">Horizontal bars</option>'
         "</select></label>"
-        '<label class="check"><input data-role="errors" type="checkbox" checked> '
-        "Show confidence intervals</label>"
-        '<label class="check"><input data-role="values" type="checkbox" checked> '
-        "Print the value on each bar</label>"
+        '<label class="check" data-mode="aggregate"><input data-role="errors" type="checkbox" '
+        "checked> Show confidence intervals</label>"
+        '<label class="check" data-mode="aggregate"><input data-role="values" type="checkbox" '
+        "checked> Print the value on each bar</label>"
         '<div class="builder-actions">'
         '<button type="button" data-role="svg" class="tab">Download SVG</button>'
         '<button type="button" data-role="png" class="tab">Download PNG</button>'
+        '<button type="button" data-role="csv" class="tab">Download raw data (CSV)</button>'
         "</div></form>"
         '<figure class="builder-canvas" data-role="output"></figure>'
         f'<script type="application/json" data-role="data">{payload}</script>'

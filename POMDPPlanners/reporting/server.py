@@ -24,7 +24,7 @@ from urllib.parse import unquote, urlparse
 import json
 import os
 
-from POMDPPlanners.reporting import pages, tuning
+from POMDPPlanners.reporting import episodes, pages, tuning
 from POMDPPlanners.reporting.artifacts import media_type_for
 from POMDPPlanners.reporting.scenes import scene_script_file
 from POMDPPlanners.reporting.store import RunIndex
@@ -198,6 +198,14 @@ class Router:
 
         if tail == ["chart"]:
             return self._ok(pages.chart_builder_page(run, env))
+
+        if tail == ["episodes.json"]:
+            # One record per episode, for the chart builder's per-episode
+            # mode; fetched when that mode is chosen, never embedded.
+            body = json.dumps(
+                {"environment": env.name, "policies": episodes.episode_records(env)}
+            ).encode("utf-8")
+            return HTTPStatus.OK, "application/json", body
 
         if tail[0] != "policy" or len(tail) < 2:
             return self._not_found("Malformed environment URL")

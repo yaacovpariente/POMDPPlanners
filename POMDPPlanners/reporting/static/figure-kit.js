@@ -117,6 +117,17 @@
     save(new Blob([text], { type: "image/svg+xml" }), name);
   }
 
+  function downloadText(text, name, type) {
+    save(new Blob([text], { type: type || "text/plain" }), name);
+  }
+
+  /* One CSV field: quoted when it holds a comma, a quote or a line break. */
+  function csvField(value) {
+    if (value === null || value === undefined) return "";
+    var text = String(value);
+    return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  }
+
   function downloadPng(output, background, name) {
     var svg = output.querySelector("svg");
     var text = svgText(output);
@@ -151,6 +162,8 @@
     humanize: humanize,
     fileName: fileName,
     downloadSvg: downloadSvg,
-    downloadPng: downloadPng
+    downloadPng: downloadPng,
+    downloadText: downloadText,
+    csvField: csvField
   };
 })(window);
