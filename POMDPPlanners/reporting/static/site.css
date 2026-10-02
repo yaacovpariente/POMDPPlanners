@@ -208,6 +208,49 @@ table.compare td .chip { margin-left: 4px; }
 .metric-filter label.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
 table.compare tr.reference td { background: var(--raise); }
 .metric-filter input[type="checkbox"] { accent-color: var(--accent); }
+.metric-picker { position: relative; margin: 0; border: 0; padding: 0; background: none; }
+.metric-picker > summary {
+  list-style: none;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+}
+.metric-picker > summary::-webkit-details-marker { display: none; }
+.metric-picker > summary::after { content: " ▾"; color: var(--dim); }
+.metric-picker[open] > summary { margin-bottom: 0; }
+.metric-picker > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.metric-picker-panel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 300px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.metric-picker-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.metric-picker fieldset { border: 0; margin: 0 0 8px; padding: 0; }
+.metric-picker legend {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+/* "Best" lives on the cell as a class, so the planner picker can move it
+   to whichever planner is best among the ones left showing. */
+table.compare .best-chip { display: none; margin-left: 4px; }
+table.compare td.is-best .best-chip { display: inline-block; }
+table.compare td.is-best .cell-value, table.compare td.is-best .ci { font-weight: 700; }
+.metric-picker label.check { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; white-space: nowrap; }
 .chart-group > summary { font-size: 14px; color: var(--ink); font-weight: 600; }
 .pt:focus { outline: none; }
 .pt:focus circle { r: 6; stroke: var(--ink); }

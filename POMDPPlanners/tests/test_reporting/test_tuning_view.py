@@ -676,11 +676,13 @@ def test_the_study_page_compares_planners_per_environment(tmp_path: Path):
         assert f'/{run_id}"' in (rocks if env == "Rocks" else push)
     # Rocks: PFT_DPW has the best evaluation return and best-trial score,
     # POMCPOW the best completion; each figure keeps its interval.
-    assert '<strong>12 <span class="ci">(10 – 14)</span></strong>' in rocks
-    assert "<strong>1</strong>" in rocks and "<strong>13</strong>" in rocks
+    assert 'class="num is-best" data-col="1" data-value="12.0">' in rocks
+    assert 'class="num is-best" data-col="0" data-value="1.0">' in rocks
+    assert 'class="num is-best" data-col="1" data-value="13.0">' in rocks
     # Return, completion, best-trial return and the lower action time.
-    assert rocks.count(">best<") == 4
-    assert "<strong>-55" in push and "<strong>0.75</strong>" in push
+    assert rocks.count("is-best") == 4
+    assert 'is-best" data-col="1" data-value="-55.0"' in push
+    assert 'is-best" data-col="1" data-value="0.75"' in push
     assert 'class="chart"' in rocks
 
 
@@ -741,9 +743,11 @@ def test_the_comparison_lists_every_metric_with_directions_and_a_filter(tmp_path
         "average_action_time",
         "policy_info_tree_max_depth",
     }
-    assert "<strong>1</strong>" in rows["average_action_time"]
+    assert 'is-best" data-col="0" data-value="1.0"' in rows["average_action_time"]
+    assert 'data-direction="minimize"' in rows["average_action_time"]
     assert "lower is better" in rows["average_action_time"]
-    assert ">best<" not in rows["policy_info_tree_max_depth"]
+    assert "is-best" not in rows["policy_info_tree_max_depth"]
+    assert 'data-direction=""' in rows["policy_info_tree_max_depth"]
     assert 'data-group="timing"' in rows["average_action_time"]
     assert 'data-group="policy"' in rows["policy_info_tree_max_depth"]
     assert 'type="search"' in rocks and 'data-group-toggle="timing"' in rocks
@@ -763,3 +767,30 @@ def test_metric_directions_are_known_only_where_the_name_says():
     assert metric_direction("average_rocks_sampled", [("average_rocks_sampled", "maximize")]) == (
         "maximize"
     )
+
+
+def test_the_comparison_has_metric_and_planner_pickers(tmp_path: Path):
+    """Dropdowns pick exactly which metric rows and planner columns show.
+
+    Given: The two-by-two study.
+    When: The study page renders.
+    Then: Each block has a metric picker listing every row, grouped like the
+        toggles, and a planner picker listing both planners; every planner
+        cell carries its column so the page can hide it and re-mark "best".
+    """
+    router, study_id, _ = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    rocks = page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+    metric_picker = rocks.split('data-picker="metric"', 1)[1].split("</details>", 1)[0]
+    planner_picker = rocks.split('data-picker="planner"', 1)[1].split("</details>", 1)[0]
+
+    assert "Metrics (6 of 6)" in metric_picker
+    assert metric_picker.count("data-metric-choice=") == 6
+    assert "<legend>Outcomes</legend>" in metric_picker
+    assert "<legend>Timings</legend>" in metric_picker
+    assert "<legend>Planner internals</legend>" in metric_picker
+    assert "Planners (2 of 2)" in planner_picker
+    assert 'data-choice-name="POMCPOW_Rocks"' in planner_picker
+    assert 'data-choice-name="PFT_DPW_Rocks"' in planner_picker
+    assert "data-picker-all" in metric_picker and "data-picker-none" in planner_picker
+    assert '<th class="group" data-col="1">' in rocks

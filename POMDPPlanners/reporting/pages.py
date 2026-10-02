@@ -1919,6 +1919,76 @@ _GROUP_LABELS = (
 )
 
 
+def _picker(kind: str, label: str, groups: Sequence[Tuple[str, str]], count: int) -> str:
+    """A dropdown of checkboxes, the shared shell of the metric and planner pickers.
+
+    A <details> rather than a custom widget: it opens and closes from the
+    keyboard as it is, and every checkbox inside is reachable by Tab.
+
+    Args:
+        kind: ``"metric"`` or ``"planner"``; names the data attributes.
+        label: The summary's word, e.g. "Metrics".
+        groups: ``(legend, checkboxes HTML)``; an empty legend draws none.
+        count: How many choices there are.
+
+    Returns:
+        HTML for the picker.
+    """
+    fieldsets = "".join(
+        "<fieldset>"
+        + (f"<legend>{html(legend)}</legend>" if legend else "")
+        + boxes
+        + "</fieldset>"
+        for legend, boxes in groups
+        if boxes
+    )
+    return (
+        f'<details class="metric-picker" data-picker="{kind}">'
+        f'<summary data-picker-summary data-picker-label="{html(label)}">'
+        f"{html(label)} ({count} of {count})</summary>"
+        '<div class="metric-picker-panel">'
+        '<div class="metric-picker-actions">'
+        '<button type="button" class="tab" data-picker-all>Select all</button>'
+        '<button type="button" class="tab" data-picker-none>Clear</button></div>'
+        + fieldsets
+        + "</div></details>"
+    )
+
+
+def _planner_picker(planners: Sequence[str]) -> str:
+    """A dropdown choosing which planner columns show."""
+    boxes = "".join(
+        f'<label class="check"><input type="checkbox" data-planner-choice="{index}" '
+        f'data-choice-name="{html(name)}" checked> {html(name)}</label>'
+        for index, name in enumerate(planners)
+    )
+    return _picker("planner", "Planners", [("", boxes)], len(planners))
+
+
+def _metric_picker(choices: Sequence[Tuple[str, str, str]]) -> str:
+    """A dropdown choosing exactly which metric rows show, grouped like the toggles.
+
+    Args:
+        choices: ``(row key, label, group)`` for every row of the table.
+
+    Returns:
+        HTML for the picker.
+    """
+    groups = [
+        (
+            label,
+            "".join(
+                f'<label class="check"><input type="checkbox" data-metric-choice="{html(row)}" '
+                f'data-choice-name="{html(row)}" checked> {html(text)}</label>'
+                for row, text, group in choices
+                if group == key
+            ),
+        )
+        for key, label in _GROUP_LABELS
+    ]
+    return _picker("metric", "Metrics", groups, len(choices))
+
+
 def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     """One environment's planners side by side: a table, then the run's charts.
 
@@ -1946,15 +2016,21 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             return None
         return min(present) if direction == "minimize" else max(present)
 
-    def cell(value: Optional[float], mark: Optional[float], low=None, high=None) -> str:
+    def cell(
+        column: int, value: Optional[float], mark: Optional[float], low=None, high=None
+    ) -> str:
+        # The value and column ride on the cell, so the planner picker can
+        # re-mark the best among the planners left showing.
         if value is None:
-            return '<td class="dim">—</td>'
-        text = f"{value:.4g}"
+            return f'<td class="dim" data-col="{column}">—</td>'
+        text = f'<span class="cell-value">{value:.4g}</span>'
         if low is not None and high is not None and high > low:
             text += f' <span class="ci">({low:.3g} – {high:.3g})</span>'
-        if mark is not None and value == mark:
-            text = f"<strong>{text}</strong> " + '<span class="chip chip-ok">best</span>'
-        return f'<td class="num">{text}</td>'
+        best = mark is not None and value == mark
+        return (
+            f'<td class="num{" is-best" if best else ""}" data-col="{column}" '
+            f'data-value="{value!r}">{text} <span class="chip chip-ok best-chip">best</span></td>'
+        )
 
     def direction_note(direction: Optional[str]) -> str:
         if direction is None:
@@ -1967,15 +2043,18 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     reference_direction = metric_direction("average_return", objectives)
     reference_mark = best_of(best_trial, reference_direction)
     body.append(
-        '<tr class="reference" data-metric="average_return best trial" data-group="outcome">'
+        '<tr class="reference" data-metric="average_return best trial" data-group="outcome"'
+        f' data-direction="{reference_direction or ""}">'
         "<td>average_return, best trial"
         '<span class="dim"> — the tuning estimate, for reference</span></td>'
-        + "".join(cell(v, reference_mark) for v in best_trial)
+        + "".join(cell(i, v, reference_mark) for i, v in enumerate(best_trial))
         + "</tr>"
     )
     body.append(
         '<tr data-metric="episodes" data-group="outcome"><td>episodes evaluated</td>'
-        + "".join(f'<td class="num">{len(r[3].episodes)}</td>' for r in rows)
+        + "".join(
+            f'<td class="num" data-col="{i}">{len(r[3].episodes)}</td>' for i, r in enumerate(rows)
+        )
         + "</tr>"
     )
     for name in names:
@@ -1983,25 +2062,36 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         mark = best_of([m.get(name) for m in per_planner], direction)
         cells = "".join(
             cell(
+                i,
                 m.get(name),
                 mark,
                 m.get(name + charts.CI_LOWER_SUFFIX),
                 m.get(name + charts.CI_UPPER_SUFFIX),
             )
-            for m in per_planner
+            for i, m in enumerate(per_planner)
         )
         body.append(
-            f'<tr data-metric="{html(name)}" data-group="{metric_group(name)}">'
+            f'<tr data-metric="{html(name)}" data-group="{metric_group(name)}" '
+            f'data-direction="{direction or ""}">'
             f"<td>{html(name)}{direction_note(direction)}</td>{cells}</tr>"
         )
     head = "<th>Metric</th>" + "".join(
-        f'<th class="group"><a href="{html(run_url(r[0].run))}">{html(r[3].name)}</a></th>'
-        for r in rows
+        f'<th class="group" data-col="{i}">'
+        f'<a href="{html(run_url(r[0].run))}">{html(r[3].name)}</a></th>'
+        for i, r in enumerate(rows)
     )
     controls = (
         '<div class="metric-filter" data-filter-for="compare-table-'
         f'{html(compare_anchor(environment))}">'
         '<input type="search" placeholder="Filter metrics by name" aria-label="Filter metrics">'
+        + _planner_picker([r[3].name for r in rows])
+        + _metric_picker(
+            [
+                ("average_return best trial", "average_return, best trial", "outcome"),
+                ("episodes", "episodes evaluated", "outcome"),
+            ]
+            + [(name, name, metric_group(name)) for name in names]
+        )
         + "".join(
             f'<label class="check"><input type="checkbox" data-group-toggle="{key}" checked> '
             f"{label}</label>"
