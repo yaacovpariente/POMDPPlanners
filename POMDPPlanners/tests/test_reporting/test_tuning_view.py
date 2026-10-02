@@ -515,3 +515,72 @@ def test_five_thousand_trials_stay_out_of_the_layout():
     assert section.startswith("<details data-lazy><summary>All trials (5000)</summary><template>")
     assert section.count("<tr") == 5001
     assert elapsed < 1.0
+
+
+def test_run_parameters_are_grouped_by_prefix():
+    """A run's params read as one collapsed table per group, prefixes stripped.
+
+    Given: Params from each group, a private ``env__`` one, and the tuning
+        view's best and range params.
+    When: They are grouped with the tuning view's omissions.
+    Then: Environment, Policy, Fixed planner settings and Run setup each get a
+        closed table with their own count, names lose their prefix, best and
+        range params are left out, and a group with nothing is not shown.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting.pages import run_parameters
+
+    params = {
+        "env_discount_factor": "0.95",
+        "env__hazard_terminal_enabled": "True",
+        "policy_depth": "3",
+        "constant_time_out_in_seconds": "1",
+        "n_trials": "2",
+        "num_steps": "30",
+        "best_depth": "3",
+        "param_range_depth": "2-10",
+    }
+    grouped = run_parameters(params, omit_prefixes=("best_", "param_range_"))
+
+    assert '<details class="param-group"><summary>Environment parameters (2)</summary>' in grouped
+    assert "<summary>Policy parameters (1)</summary>" in grouped
+    assert "<summary>Fixed planner settings parameters (1)</summary>" in grouped
+    assert "<summary>Run setup parameters (2)</summary>" in grouped
+    assert "<td>hazard_terminal_enabled</td>" in grouped
+    assert "<td>discount_factor</td>" in grouped and "env_discount_factor" not in grouped
+    assert "best_depth" not in grouped and "param_range" not in grouped
+    assert run_parameters({"policy_x": "1"}).count("<details") == 1
+
+
+def test_a_plain_run_page_keeps_every_param(router: Router, study_dir):
+    """Outside the tuning view nothing is dropped: unmatched params go to Run setup.
+
+    Given: The evaluation run, whose params are env_0_* and run settings.
+    When: Its page renders.
+    Then: The env_0_* params are under Environment without the prefix, and
+        the rest are under Run setup.
+    """
+    page = _page(router, study_dir["evaluation"])
+
+    assert "<summary>Environment parameters (3)</summary>" in page
+    assert "<td>0_policy_0_name</td>" in page
+    assert "<summary>Run parameters</summary>" not in page
+
+
+def test_comparison_params_are_all_kept():
+    """A comparison run's params all appear, the unprefixed ones under Run setup."""
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting.pages import run_parameters
+
+    params = {
+        "alpha": "0.05",
+        "n_jobs": "5",
+        "num_environments": "1",
+        "env_0_name": "RockSample",
+        "env_0_num_episodes": "4",
+    }
+    grouped = run_parameters(params)
+
+    assert "<summary>Environment parameters (2)</summary>" in grouped
+    assert "<summary>Run setup parameters (3)</summary>" in grouped
+    assert grouped.count("<tr><td>") == len(params)

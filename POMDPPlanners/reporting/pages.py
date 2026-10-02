@@ -343,6 +343,55 @@ def _table(headers: Sequence[str], rows: Iterable[Sequence[str]]) -> str:
     return f'<div class="scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>'
 
 
+#: How a run's params are grouped for reading, by name prefix, in order. A
+#: param matching none of them goes under "Run setup". The prefixes are the
+#: ones the simulator and the optimizer write.
+PARAMETER_GROUPS: Tuple[Tuple[str, str], ...] = (
+    ("Environment", "env_"),
+    ("Policy", "policy_"),
+    ("Fixed planner settings", "constant_"),
+)
+RUN_SETUP_GROUP = "Run setup"
+
+
+def run_parameters(params: Dict[str, str], omit_prefixes: Sequence[str] = ()) -> str:
+    """A run's params as one collapsed table per group, prefix stripped.
+
+    One flat table of a config run is sixty rows where the environment's
+    settings, the planner's and the run's own are interleaved alphabetically;
+    grouped, a reader opens the one they came for.
+
+    Args:
+        params: The run's params.
+        omit_prefixes: Params to leave out because the page shows them
+            elsewhere.
+
+    Returns:
+        HTML for the groups that have a param; nothing for an empty one.
+    """
+    grouped: Dict[str, List[Tuple[str, str]]] = {}
+    for key, value in sorted(params.items()):
+        if any(key.startswith(prefix) for prefix in omit_prefixes):
+            continue
+        label, name = RUN_SETUP_GROUP, key
+        for group, prefix in PARAMETER_GROUPS:
+            if key.startswith(prefix) and len(key) > len(prefix):
+                # "env__x" is a private attribute logged as-is; its name
+                # reads as "x" once the prefix is gone.
+                label, name = group, key[len(prefix) :].lstrip("_") or key
+                break
+        grouped.setdefault(label, []).append((name, value))
+    order = [group for group, _ in PARAMETER_GROUPS] + [RUN_SETUP_GROUP]
+    return "".join(
+        f'<details class="param-group"><summary>{html(group)} parameters '
+        f"({len(grouped[group])})</summary>"
+        + _table(["Parameter", "Value"], [[html(k), html(v)] for k, v in grouped[group]])
+        + "</details>"
+        for group in order
+        if grouped.get(group)
+    )
+
+
 def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -> str:
     """The landing page: every experiment found under the served roots."""
     items = []
@@ -590,10 +639,7 @@ def run_page(
             + "</section>"
         )
 
-    params = _table(
-        ["Parameter", "Value"],
-        [[html(k), html(v)] for k, v in sorted(run.params.items())],
-    )
+    params = run_parameters(run.params)
     return layout(
         run.run_name,
         [
@@ -617,7 +663,7 @@ def run_page(
         + "</p>"
         + "".join(sections)
         + _child_runs(children)
-        + f"<details><summary>Run parameters</summary>{params}</details>",
+        + params,
     )
 
 
@@ -1617,12 +1663,10 @@ def tuning_page(
     Returns:
         A complete HTML document.
     """
-    shown = {f"{run_layout.BEST_PARAM_PREFIX}{p.name}" for p in study.parameters} | {
-        f"{run_layout.PARAM_RANGE_PREFIX}{p.name}" for p in study.parameters
-    }
-    params = _table(
-        ["Parameter", "Value"],
-        [[html(k), html(v)] for k, v in sorted(run.params.items()) if k not in shown],
+    # The chosen values and their ranges are the "Chosen parameters" table.
+    params = run_parameters(
+        run.params,
+        omit_prefixes=(run_layout.BEST_PARAM_PREFIX, run_layout.PARAM_RANGE_PREFIX),
     )
     title = study_label(study)
     crumbs: List[Tuple[str, Optional[str]]] = [
@@ -1664,7 +1708,7 @@ def tuning_page(
         + _diagnostic_charts(run, study)
         + "<h2>Evaluation</h2>"
         + _evaluation_section(study, evaluation)
-        + f"<details><summary>Run parameters</summary>{params}</details>",
+        + params,
     )
 
 
@@ -1778,10 +1822,7 @@ def study_page(group: tuning.StudyGroup) -> str:
         for config in group.configs
     ]
     evaluation = group.evaluation_run
-    params = _table(
-        ["Parameter", "Value"],
-        [[html(k), html(v)] for k, v in sorted(run.params.items())],
-    )
+    params = run_parameters(run.params)
     return layout(
         title,
         [
@@ -1802,7 +1843,7 @@ def study_page(group: tuning.StudyGroup) -> str:
         + "</p>"
         + "<h2>Tuned planners</h2>"
         + _listing(items, "No planner in this study finished tuning.")
-        + f"<details><summary>Run parameters</summary>{params}</details>",
+        + params,
     )
 
 
