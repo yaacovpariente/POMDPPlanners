@@ -964,3 +964,27 @@ def test_the_chart_builder_exports_the_plotted_metric_as_csv(tmp_path: Path):
 
     assert page.count('data-role="csv"') == 2
     assert "Download data (CSV)" in page
+
+
+def test_a_tagged_evaluation_stays_reachable_when_its_links_failed(tmp_path: Path):
+    """An evaluation tagged under the study, but named by no config, is still linked.
+
+    Given: The two-by-two study with the configs' evaluation tags removed, as
+        when writing them failed.
+    When: The experiment and study pages render.
+    Then: The evaluation run is still folded into the study card, and the
+        study page links it as the raw evaluation run.
+    """
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    client = MlflowClient()
+    for run_id in configs.values():
+        client.delete_tag(run_id, layout.EVALUATION_RUN_ID_TAG)
+    router = Router(RunIndex([tmp_path]))
+    experiment = router.index.experiments[0]
+    evaluation = next(r for r in experiment.runs if r.run_name == "environment_policy_comparison")
+    _, _, body = router.resolve(f"/experiment/0/{experiment.experiment_id}")
+    listing = body.decode("utf-8")
+    page = _page(router, study_id)
+
+    assert listing.count('<a class="card') == 1
+    assert "raw evaluation run" in page and f'/{evaluation.run_id}"' in page

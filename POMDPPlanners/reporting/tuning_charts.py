@@ -357,6 +357,22 @@ def _objective_names(study: tuning.TuningStudy) -> List[str]:
     return names or sorted({k for t in study.trials for k in t.objective_values})
 
 
+def _stop_trial_number(study: tuning.TuningStudy) -> Optional[float]:
+    """The trial number at which early stopping fired.
+
+    ``stopped_at_trial`` counts completed trials, while the history charts
+    are drawn against trial numbers; a failed or pruned trial before the stop
+    makes the two differ, so the stop is placed at the number of the trial
+    that completed the count.
+    """
+    if not study.stopped_at_trial:
+        return None
+    completed = sorted(t.number for t in _completed(study))
+    if len(completed) >= study.stopped_at_trial:
+        return float(completed[study.stopped_at_trial - 1])
+    return float(study.stopped_at_trial - 1)
+
+
 def objective_history(study: tuning.TuningStudy) -> List[str]:
     """Each objective against trial number, with the best value so far.
 
@@ -389,7 +405,7 @@ def objective_history(study: tuning.TuningStudy) -> List[str]:
                     y_label=name,
                     points=points,
                     lines=[Line(best_line, "chart-line", step=True, label="best so far")],
-                    x_marker=float(study.stopped_at_trial - 1) if study.stopped_at_trial else None,
+                    x_marker=_stop_trial_number(study),
                     x_marker_label="early stop" if study.stopped_at_trial else "",
                 )
             )

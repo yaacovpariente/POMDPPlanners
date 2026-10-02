@@ -408,7 +408,9 @@
     /* Start from a given set of planners and a metric; anything not given is
        left as it is. */
     function select(planners, metric) {
-      if (planners && planners.length) {
+      // An empty list is a choice -- the reader cleared every planner -- and
+      // is applied; only an omitted one leaves the ticks as they are.
+      if (planners) {
         rows().forEach(function (row) {
           row.querySelector("input[type=checkbox]").checked =
             planners.indexOf(row.getAttribute("data-policy")) !== -1;

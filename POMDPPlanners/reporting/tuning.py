@@ -351,6 +351,7 @@ class StudyGroup:
     study_run: Optional[RunView]
     configs: List[TunedConfig]
     member_ids: frozenset
+    tagged_evaluation: Optional[RunView] = None
 
     @property
     def anchor(self) -> RunView:
@@ -359,8 +360,14 @@ class StudyGroup:
 
     @property
     def evaluation_run(self) -> Optional[RunView]:
-        """The study's evaluation run, shared by its configs."""
-        return next((c.evaluation_run for c in self.configs if c.evaluation_run), None)
+        """The study's evaluation run, shared by its configs.
+
+        Falls back to an evaluation run tagged under the study when no config
+        names it, as when writing the configs' links failed: the run is hidden
+        from the experiment listing, so the study page must still reach it.
+        """
+        linked = next((c.evaluation_run for c in self.configs if c.evaluation_run), None)
+        return linked if linked is not None else self.tagged_evaluation
 
 
 def group_studies(runs: Sequence[RunView]) -> List[StudyGroup]:
@@ -426,4 +433,10 @@ def _group(
         for r in siblings
         if r.run_kind == layout.RUN_KIND_EVALUATION or is_tuning_config_run(r)
     }
-    return StudyGroup(study_run=study_run, configs=configs, member_ids=frozenset(members))
+    tagged = next((r for r in siblings if r.run_kind == layout.RUN_KIND_EVALUATION), None)
+    return StudyGroup(
+        study_run=study_run,
+        configs=configs,
+        member_ids=frozenset(members),
+        tagged_evaluation=tagged,
+    )

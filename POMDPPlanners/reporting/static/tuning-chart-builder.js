@@ -52,6 +52,8 @@
 
     var DATA = null;
     var completed = [];
+    var stopTrial = null;
+    var request = 0;
     var pareto = {};
 
     function kindOf(trial) {
@@ -196,9 +198,9 @@
       var xs = data.points.map(function (p) { return p.x; });
       var ys = data.points.map(function (p) { return p.y; });
       if (data.line) data.line.forEach(function (p) { xs.push(p[0]); ys.push(p[1]); });
-      var showStop = el.stop.checked && DATA.stopped_at && data.xInteger &&
+      var showStop = el.stop.checked && stopTrial !== null && data.xInteger &&
         el.kind.value === "objective-history";
-      if (showStop) xs.push(DATA.stopped_at - 1);
+      if (showStop) xs.push(stopTrial);
 
       var xRange = data.xCats ? [-0.5, data.xCats.length - 0.5]
         : data.xInteger ? [Math.min.apply(null, xs) - 0.5, Math.max.apply(null, xs) + 0.5]
@@ -243,7 +245,7 @@
       });
 
       if (showStop) {
-        var sx = toX(DATA.stopped_at - 1);
+        var sx = toX(stopTrial);
         svg.appendChild(node("line", {
           x1: sx, y1: margin.top, x2: sx, y2: margin.top + plotH,
           stroke: style.muted, "stroke-width": 1.2, "stroke-dasharray": "5 4"
@@ -403,6 +405,14 @@
     function load(data) {
       DATA = data;
       completed = DATA.trials.filter(function (t) { return t.state === "COMPLETE"; });
+      // stopped_at counts completed trials; the chart's axis is trial numbers,
+      // which differ once a trial before the stop failed.
+      var numbers = completed.map(function (t) { return t.number; }).sort(function (a, b) {
+        return a - b;
+      });
+      stopTrial = !DATA.stopped_at ? null
+        : numbers.length >= DATA.stopped_at ? numbers[DATA.stopped_at - 1]
+        : DATA.stopped_at - 1;
       pareto = {};
       DATA.pareto.forEach(function (n) { pareto[n] = true; });
       fill(el.objective, DATA.objectives.map(function (o) { return o.name; }));
@@ -440,15 +450,20 @@
     el.form.addEventListener("change", draw);
 
     function fetchConfig() {
+      // Only the latest request may draw: a slower answer for a planner the
+      // reader has already moved away from must not replace the chart.
+      var mine = ++request;
       output.textContent = "Loading…";
       fetch(el.config.value, { cache: "no-store" })
         .then(function (response) {
           if (!response.ok) throw new Error("HTTP " + response.status);
           return response.json();
         })
-        .then(load)
+        .then(function (data) {
+          if (mine === request) load(data);
+        })
         .catch(function () {
-          output.textContent = "Could not load this planner's trials.";
+          if (mine === request) output.textContent = "Could not load this planner's trials.";
         });
     }
 

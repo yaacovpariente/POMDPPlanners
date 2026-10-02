@@ -194,3 +194,22 @@ def test_tiny_values_are_scaled_and_ticks_never_repeat():
 
     assert tiny == ["2", "4", "6"] and suffix == " (×1e-5)"
     assert len(set(narrow)) == 5 and plain == ""
+
+
+def test_the_early_stop_marker_sits_on_the_trial_that_completed_the_count():
+    """A failed trial before the stop moves the marker to the right trial number.
+
+    Given: Trials #0 and #2 completed and #1 failed, and early stopping fired
+        after 2 completed trials.
+    When: The marker's position is computed.
+    Then: It is trial #2, not #1.
+    """
+    trials = [
+        _trial(0, 1.0, 0.5, 3, "random"),
+        tuning.Trial(1, "FAIL", {"depth": 4}, {}, {}, 1.0, False),
+        _trial(2, 4.0, 0.1, 6, "greedy"),
+    ]
+    # pylint: disable-next=protected-access
+    assert tuning_charts._stop_trial_number(_study(trials=trials, stopped_at_trial=2)) == 2.0
+    # pylint: disable-next=protected-access
+    assert tuning_charts._stop_trial_number(_study(trials=trials, stopped_at_trial=None)) is None
