@@ -32,6 +32,14 @@ knowing anything about what a state means. The only per-environment knowledge
 is in the registry: how an observation is handed to the updater, and which
 paths share an RNG stream.
 
+Rollouts stop at the first terminal state, so the checks above never hand the
+updater a finished particle. A belief does: once some of its particles have
+finished, a planner that tests one sampled particle for termination keeps
+updating the rest. The last group of checks repeats the kernel comparisons on
+terminal states, alone and mixed into a batch of live ones, and compares the
+belief-level terminal test across the two belief types. The terminal states
+come from ``_terminal_states``.
+
 The registry's coverage tests at the bottom fail when a vectorized updater or
 belief class exists that no entry exercises.
 """
@@ -41,6 +49,7 @@ from typing import Any, List, Tuple
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief.belief_utils import is_terminal_belief
 from POMDPPlanners.core.belief.particle_beliefs import WeightedParticleBelief
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
@@ -53,8 +62,14 @@ from POMDPPlanners.tests.test_core.test_belief.belief_equivalence_utils import (
 from POMDPPlanners.tests.test_core.test_belief.vectorized_updater_test_utils import (
     assert_batch_transition_matches_loop,
 )
+from POMDPPlanners.tests.test_environments._env_config_variants import base_id_of
 from POMDPPlanners.tests.test_environments._sample_distribution_checks import (
     assert_same_distribution,
+)
+from POMDPPlanners.tests.test_environments._terminal_states import (
+    ENVS_WITHOUT_TERMINAL_STATES,
+    copy_state,
+    terminal_states,
 )
 from POMDPPlanners.tests.test_environments._vectorized_registry import (
     BELIEF_CLASS_EXCLUSIONS,
@@ -64,6 +79,9 @@ from POMDPPlanners.tests.test_environments._vectorized_registry import (
     OBSERVATION_HANDLING_DISAGREEMENTS,
     OBSERVATION_LIKELIHOOD_DISAGREEMENTS,
     POSTERIOR_DISTRIBUTION_DISAGREEMENTS,
+    TERMINAL_BELIEF_DISAGREEMENTS,
+    TERMINAL_OBSERVATION_LIKELIHOOD_DISAGREEMENTS,
+    TERMINAL_TRANSITION_DISAGREEMENTS,
     TRANSITION_DISTRIBUTION_DISAGREEMENTS,
     TRANSITION_SHARED_SEED_DISAGREEMENTS,
     BeliefSpec,
@@ -107,6 +125,12 @@ _MAX_ACTIONS_CHECKED = 8
 _CONTINUOUS_ACTIONS_CHECKED = 3
 _POSTERIOR_DRAWS_PER_ESS = 0.1
 _MIN_POSTERIOR_DRAWS = 30
+
+# Actions and draws for each terminal state ``terminal_states`` supplies. Fewer
+# draws than the live-state transition check: most environments hold a terminal
+# state still, and a constant column is compared exactly.
+_TERMINAL_ACTIONS_CHECKED = 4
+_TERMINAL_DRAWS = 500
 
 
 # ---------------------------------------------------------------------------
@@ -651,6 +675,179 @@ def test_vectorized_belief_accepts_every_observation_the_env_emits(spec: BeliefS
 
 
 # ---------------------------------------------------------------------------
+# Terminal states
+# ---------------------------------------------------------------------------
+
+
+def _terminal_states_of(spec: BeliefSpec, env: Environment) -> List[Any]:
+    """Terminal states of ``env``; skips an environment declared to have none."""
+    states = terminal_states(spec.env_id, env)
+    if not states:
+        # test_env_terminal_conformance.py fails for any environment that
+        # supplies no terminal state without being declared.
+        pytest.skip(
+            f"{spec.env_id} has no terminal state: "
+            f"{ENVS_WITHOUT_TERMINAL_STATES.get(base_id_of(spec.env_id), 'none found')}"
+        )
+    return states
+
+
+def _terminal_actions(env: Environment) -> List[Any]:
+    return _actions_to_check(env, np.random.default_rng(1234))[:_TERMINAL_ACTIONS_CHECKED]
+
+
+@pytest.mark.parametrize("spec", _params(TERMINAL_TRANSITION_DISAGREEMENTS))
+def test_batch_transition_matches_scalar_env_on_terminal_states(spec: BeliefSpec) -> None:
+    """``batch_transition`` does to a finished particle what the scalar env does.
+
+    Purpose: Every belief update moves every particle, finished ones included.
+        Whatever the scalar environment does to a terminal state -- hold it,
+        move it, clear its flag -- the updater must do the same, or the
+        finished part of the belief drifts from the model the planner searches
+        on. A terminal rule applied to the whole array rather than row by row
+        gets a mixed batch wrong, so the batch here mixes terminal states with
+        a live one.
+
+    Given: Terminal states of the scalar env and one reachable live state,
+        interleaved into one block with each state repeated
+        ``_TERMINAL_DRAWS`` times.
+    When: The block goes through ``batch_transition`` once and through the
+        scalar ``sample_next_state`` row by row, from independent seeds.
+    Then: For every source state, terminal or live, the two samples have the
+        same distribution.
+
+    Test type: integration
+    """
+    env = spec.build_env()
+    belief = _vectorized_belief(env, n_particles=8)
+    updater = belief.updater
+    dtype = belief.particles.dtype
+    sources = _terminal_states_of(spec, env) + _reachable_states(env)[:1]
+    rows = np.stack([_as_row(state, dtype) for state in sources])
+    block = np.tile(rows, (_TERMINAL_DRAWS, 1))
+    repeated = [sources[i % len(sources)] for i in range(len(block))]
+
+    for action in _terminal_actions(env):
+        _seed_all(11)
+        vectorized = np.asarray(updater.batch_transition(block.copy(), action), dtype=np.float64)
+        _seed_all(12)
+        scalar = np.stack(
+            [
+                _as_row(env.sample_next_state(state=copy_state(state), action=action), np.float64)
+                for state in repeated
+            ]
+        )
+        for index, source in enumerate(sources):
+            try:
+                assert_same_distribution(
+                    vectorized[index :: len(sources)], scalar[index :: len(sources)]
+                )
+            except AssertionError as error:
+                kind = "terminal" if env.is_terminal(source) else "live"
+                raise AssertionError(
+                    f"{spec.env_id} action={action!r} {kind} state={source!r}: {error}"
+                ) from None
+
+
+@pytest.mark.parametrize("spec", _params(TERMINAL_OBSERVATION_LIKELIHOOD_DISAGREEMENTS))
+def test_batch_observation_log_likelihood_matches_scalar_env_on_terminal_states(
+    spec: BeliefSpec,
+) -> None:
+    """The updater scores a reading against a finished particle as the scalar env does.
+
+    Purpose: After the transition every particle is reweighted, finished ones
+        included. An updater that gives a terminal particle another likelihood
+        than the environment's observation model -- zero where the model
+        allows the reading, or the reverse -- shifts the weight between the
+        finished and the live part of the belief.
+
+    Given: Terminal states and reachable live states as candidate next
+        states, an action, and an observation the scalar env emits from a
+        terminal state.
+    When: ``batch_observation_log_likelihood`` and a loop over the scalar
+        ``observation_log_probability`` score that observation against every
+        candidate.
+    Then: The two agree to 1e-6 wherever either is above
+        ``_NEGLIGIBLE_LOG_LIKELIHOOD``.
+
+    Test type: integration
+    """
+    env = spec.build_env()
+    belief = _vectorized_belief(env, n_particles=8)
+    updater = belief.updater
+    dtype = belief.particles.dtype
+    terminal = _terminal_states_of(spec, env)
+    candidates = terminal + _reachable_states(env)[:8]
+    rows = np.stack([_as_row(state, dtype) for state in candidates])
+
+    for action in _terminal_actions(env):
+        for observed_from in terminal:
+            _seed_all(7)
+            observation = env.sample_observation(
+                next_state=copy_state(observed_from), action=action
+            )
+            vectorized = updater.batch_observation_log_likelihood(
+                rows.copy(), action, spec.observation_for_updater(observation)
+            )
+            scalar = _scalar_log_likelihoods(env, candidates, action, observation)
+            _assert_log_likelihoods_agree(
+                vectorized,
+                scalar,
+                f"{spec.env_id} action={action!r} observation={observation!r} "
+                f"emitted from terminal state {observed_from!r}",
+            )
+
+
+@pytest.mark.parametrize("spec", _params(TERMINAL_BELIEF_DISAGREEMENTS))
+def test_vectorized_belief_is_terminal_exactly_when_the_scalar_belief_is(spec: BeliefSpec) -> None:
+    """A vectorized belief and a scalar one over the same particles end together.
+
+    Purpose: The episode runner and the planners stop on ``is_terminal_belief``.
+        It reads a vectorized belief's particles out of its array and a scalar
+        belief's from its list, so a particle that changes on the way into the
+        array -- a float truncated into an integer array, a flag lost in a
+        cast -- can be terminal in one belief and live in the other. The same
+        episode would then end or not depending on the belief type.
+
+    Given: Three particle sets -- all terminal, terminal and live mixed, all
+        live -- each held by the factory's vectorized belief class and by a
+        ``WeightedParticleBelief``.
+    When: ``is_terminal_belief`` is asked about each belief.
+    Then: The two belief types agree, and the answer is true only for the
+        all-terminal set.
+
+    Test type: integration
+    """
+    env = spec.build_env()
+    prior = _vectorized_belief(env, n_particles=8)
+    terminal = _terminal_states_of(spec, env)
+    live = _reachable_states(env)[:2]
+
+    for label, particles, expected in (
+        # Each set twice over: a belief of one particle has a single log-weight
+        # of zero, which the belief constructors reject.
+        ("all terminal", 2 * terminal, True),
+        ("mixed", terminal + live, False),
+        ("all live", 2 * live, False),
+    ):
+        log_weights = np.log(np.full(len(particles), 1.0 / len(particles)))
+        vectorized = type(prior)(
+            particles=np.stack([_as_row(state, prior.particles.dtype) for state in particles]),
+            log_weights=log_weights.copy(),
+            updater=prior.updater,
+            resampling=False,
+        )
+        scalar = _weighted_particle_belief(list(particles), log_weights.copy())
+        vectorized_answer = is_terminal_belief(vectorized, env)
+        scalar_answer = is_terminal_belief(scalar, env)
+        assert vectorized_answer == scalar_answer == expected, (
+            f"{spec.env_id} ({label} particles): is_terminal_belief is {vectorized_answer} "
+            f"for the vectorized belief and {scalar_answer} for the scalar one; "
+            f"expected {expected}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Registry coverage
 # ---------------------------------------------------------------------------
 
@@ -673,6 +870,34 @@ def test_belief_factory_returns_the_registered_classes(spec: BeliefSpec) -> None
     belief = _vectorized_belief(spec.build_env(), n_particles=4)
     assert type(belief).__name__ == spec.belief_class
     assert type(belief.updater).__name__ == spec.updater_class
+
+
+@pytest.mark.parametrize("spec", [pytest.param(s, id=s.env_id) for s in BELIEF_SPECS])
+def test_updater_config_id_is_stable_across_identical_constructions(spec: BeliefSpec) -> None:
+    """Two updaters built from one configuration share one ``config_id``.
+
+    Purpose: The updater's ``config_id`` is hashed into the belief's, and the
+        belief's into the cache key of every simulation that uses it. If it
+        picks up anything instance-specific -- an object id, a cached array's
+        address -- every run gets a fresh key and the cache never hits.
+
+        The converse is not checked here: a variant need not change the
+        updater's id, because a switch that only selects a reward model leaves
+        the updater's two kernels as they were.
+
+    Given: Two environments built from the registry entry's builder.
+    When: Each one's default vectorized belief is built and its updater's
+        ``config_id`` read.
+    Then: The two ids are equal strings.
+
+    Test type: unit
+    """
+    first = _vectorized_belief(spec.build_env(), n_particles=4).updater.config_id
+    second = _vectorized_belief(spec.build_env(), n_particles=4).updater.config_id
+    assert isinstance(first, str) and first == second, (
+        f"{spec.env_id}: the updater's config_id is not a pure function of the "
+        f"configuration: {first!r} != {second!r}"
+    )
 
 
 def test_every_vectorized_belief_class_is_registered_or_excluded() -> None:
@@ -728,7 +953,9 @@ def test_every_environment_is_registered_or_declared_without_vectorized_belief()
     registered = {spec.env_id for spec in BELIEF_SPECS}
     for env_id, builder in ENV_BUILDERS:
         in_registry = env_id in registered
-        declared_without = env_id in ENVS_WITHOUT_VECTORIZED_BELIEF
+        # A variant is the same class as its pinned configuration, so the
+        # declaration on the pinned id covers it.
+        declared_without = base_id_of(env_id) in ENVS_WITHOUT_VECTORIZED_BELIEF
         assert in_registry != declared_without, (
             f"{env_id} must be in exactly one of BELIEF_SPECS and " "ENVS_WITHOUT_VECTORIZED_BELIEF"
         )

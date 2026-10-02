@@ -4,7 +4,7 @@
 
 Adding an environment means adding a line to a handful of central lists:
 ``ENVIRONMENT_REGISTRY`` and ``__all__`` in the environments package, the
-``ENV_BUILDERS`` table the API conformance suite iterates, the ``FAMILIES``
+``HAND_WRITTEN_ENV_BUILDERS`` table the API conformance suite is built from, the ``FAMILIES``
 matrix that guards visualization coverage, and one pinned-kwargs function per
 environment. None of those lists had an order, so every author appended at the
 same place, and two environment branches developed in parallel inserted at the
@@ -31,7 +31,9 @@ from pathlib import Path
 from typing import List
 
 from POMDPPlanners.environments import ENVIRONMENT_REGISTRY, __all__ as ENVIRONMENT_EXPORTS
-from POMDPPlanners.tests.test_environments.test_env_api_conformance import ENV_BUILDERS
+from POMDPPlanners.tests.test_environments.test_env_api_conformance import (
+    HAND_WRITTEN_ENV_BUILDERS,
+)
 from POMDPPlanners.tests.test_environments.test_visualization_coverage_matrix import FAMILIES
 
 PINNED_KWARGS_MODULE = Path(__file__).resolve().parents[1] / "test_utils" / "env_pinned_kwargs.py"
@@ -93,19 +95,19 @@ def test_environment_exports_are_alphabetical():
 def test_env_builders_are_alphabetical():
     """Test that the API conformance table is alphabetical by environment label.
 
-    Purpose: Same insertion-point argument, for the list every conformance test
-        is parametrized over
+    Purpose: Same insertion-point argument, for the hand-written list every
+        conformance test is parametrized over
 
-    Given: ``ENV_BUILDERS``
+    Given: ``HAND_WRITTEN_ENV_BUILDERS``
     When: Its labels are read in declaration order
     Then: They are already sorted
 
     Test type: unit
     """
-    names = [label for label, _ in ENV_BUILDERS]
+    names = [label for label, _ in HAND_WRITTEN_ENV_BUILDERS]
     assert names == sorted(
         names
-    ), f"ENV_BUILDERS must be alphabetical by label: {_misplaced(names)}"
+    ), f"HAND_WRITTEN_ENV_BUILDERS must be alphabetical by label: {_misplaced(names)}"
 
 
 def test_visualization_families_are_alphabetical():

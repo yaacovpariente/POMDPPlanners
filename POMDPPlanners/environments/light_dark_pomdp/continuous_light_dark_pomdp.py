@@ -43,6 +43,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
+from POMDPPlanners.core.serialization import serialize_value
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.light_dark_pomdp import (
@@ -262,6 +263,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.beacon_radius = beacon_radius
         self.observation_model_type = observation_model_type
         self.penalty_decay = penalty_decay
+        # Private on purpose: ``config_id`` hashes the public attributes, and a
+        # new public one would change the id of every existing configuration.
+        # ``to_dict`` writes it out by hand.
+        self._reward_model_type = reward_model_type
         self._configure_hazard_terminal(is_obstacle_hit_terminal, reward_model_type)
 
         # Create distributions with pre-computed Cholesky decomposition
@@ -396,10 +401,21 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return self._hazard_terminal_enabled
 
     def initial_state_dist(self) -> Distribution:
-        if not self._hazard_terminal_enabled:
-            return super().initial_state_dist()
+        # float64 with or without the terminal slot. Every transitioned state
+        # is float64, and a belief takes its particle array's dtype from the
+        # initial state: an integer ``start_state`` handed through unchanged
+        # gave an int64 array that truncated the states written into it.
         padded = self._pad_terminal_slot(np.asarray(self.start_state, dtype=np.float64))
         return DiscreteDistribution(values=[padded], probs=np.array([1.0]))
+
+    def to_dict(self) -> Dict[str, Any]:
+        # The base ``to_dict`` writes the constructor parameters it finds as
+        # public attributes. The reward model type is not one (see
+        # ``__init__``), and without it ``from_dict`` rebuilds the env with the
+        # default constant-penalty reward model.
+        data = super().to_dict()
+        data["params"]["reward_model_type"] = serialize_value(self._reward_model_type)
+        return data
 
     def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
         # Append a live (0.0) terminal slot to a 2-D state when the env carries
@@ -755,9 +771,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     ) -> np.ndarray:
         if self.observation_model_type != ObservationModelType.NORMAL_NOISE:
             # NoObsInDark and DistanceBased models lack a native batch kernel;
-            # fall back to the base-class per-state Python loop.
-            return super().observation_log_probability_per_state(
-                next_states=next_states, action=action, observation=observation
+            # loop over the states in Python. ``action`` is the move vector
+            # here, so the loop calls this class's vector-taking likelihood by
+            # name: the base-class loop would go through
+            # ``self.observation_log_probability``, which in the discrete-action
+            # subclass takes a label and would convert the vector a second time.
+            return np.asarray(
+                [
+                    ContinuousLightDarkPOMDP.observation_log_probability(
+                        self, next_state=next_state, action=action, observations=[observation]
+                    )[0]
+                    for next_state in next_states
+                ]
             )
         next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         if next_states_array.ndim == 1:
@@ -1013,6 +1038,16 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         vars(self).update(state)
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
+        if "_reward_model_type" not in state:
+            # Pickled before the attribute existed (a joblib cache entry, say).
+            # Recover the type from the variant code such a pickle does carry;
+            # ``to_dict`` reads it.
+            code = state["_reward_variant_code"]
+            self._reward_model_type = next(
+                reward_type
+                for reward_type, variant_code in _REWARD_VARIANT_CODE_BY_TYPE.items()
+                if variant_code == code
+            )
 
     def hash_action(self, action: Any) -> Hashable:
         # Continuous actions are ndarray; bytes match np.array_equal semantics

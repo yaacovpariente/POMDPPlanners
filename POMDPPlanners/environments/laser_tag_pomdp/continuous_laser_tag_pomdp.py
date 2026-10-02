@@ -469,13 +469,16 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
-        kernel = self._get_trans_kernel(action)
-        kernel.set_state(state)
-        # kernel.probability returns a C-contiguous float64 ndarray; skip
-        # the redundant np.asarray wrap.
-        probs = kernel.probability(next_states)
-        with np.errstate(divide="ignore"):
-            return np.log(probs)
+        # The move is a Gaussian step projected onto the free space by wall
+        # collision and clamping, which has no tractable closed-form density.
+        # The native kernel's ``probability`` is a placeholder that returns
+        # zeros; taking its log would report every next state -- including one
+        # ``sample_next_state`` just drew -- as impossible.
+        del state, action, next_states
+        raise NotImplementedError(
+            f"{type(self).__name__} has no transition density: the Gaussian move is "
+            "projected by wall collision and clamping. Use sample_next_state."
+        )
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
