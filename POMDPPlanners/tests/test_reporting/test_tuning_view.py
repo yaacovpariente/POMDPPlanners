@@ -794,3 +794,78 @@ def test_the_comparison_has_metric_and_planner_pickers(tmp_path: Path):
     assert 'data-choice-name="PFT_DPW_Rocks"' in planner_picker
     assert "data-picker-all" in metric_picker and "data-picker-none" in planner_picker
     assert '<th class="group" data-col="1">' in rocks
+
+
+def test_comparison_and_tuning_view_link_to_the_evaluation_chart_builder(tmp_path: Path):
+    """The comparison block and the tuning view open the run's chart builder.
+
+    Given: The two-by-two study.
+    When: The study page and a tuning view render.
+    Then: Each comparison block and the tuning view's evaluation section link
+        to the evaluation run's chart builder for that environment, and the
+        builder loads the shared figure kit before its own script.
+    """
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    study_page = _page(router, study_id)
+    view = _page(router, configs[("Push", "POMCPOW")])
+    rocks = study_page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+
+    builder = rocks.split('data-build-chart href="', 1)[1].split('"', 1)[0]
+    assert builder.endswith("/env/Rocks/chart")
+    assert "Build a chart from this evaluation" in view and "/env/Push/chart" in view
+
+    status, _, body = router.resolve(builder)
+    page = body.decode("utf-8")
+    assert status == 200
+    assert page.index("/static/figure-kit.js") < page.index("/static/chart-builder.js")
+
+
+def test_the_diagnostics_chart_builder_serves_the_study(router: Router, study_dir):
+    """A tuned planner's diagnostics open in an editable chart builder.
+
+    Given: The fixture study, with one objective and three trials.
+    When: The tuning view and its builder page render.
+    Then: The view links "Build a chart"; the builder carries every trial,
+        the objectives, the parameters with their ranges, the chosen and
+        Pareto trials and where early stopping fired, offers the chart kinds
+        but no Pareto front for a single objective, and loads its scripts.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    import json as json_module
+
+    experiment = router.index.experiments[0]
+    view = _page(router, study_dir["config"])
+    url = f"/run/0/{experiment.experiment_id}/{study_dir['config']}/tuning-chart"
+    status, _, body = router.resolve(url)
+    page = body.decode("utf-8")
+    data = json_module.loads(page.split('id="tuning-chart-data">', 1)[1].split("</script>", 1)[0])
+
+    assert f'href="{url}"' in view
+    assert status == 200
+    assert [t["number"] for t in data["trials"]] == [0, 1, 2]
+    assert data["objectives"] == [{"name": "average_return", "direction": "maximize"}]
+    assert {p["name"]: (p["low"], p["high"]) for p in data["parameters"]}["depth"] == (2, 10)
+    assert data["best"] == 2 and data["pareto"] == [2] and data["stopped_at"] == 3
+    assert 'value="objective-history"' in page and 'value="parameter-slice"' in page
+    assert 'value="pareto-front"' not in page
+    assert page.index("/static/figure-kit.js") < page.index("/static/tuning-chart-builder.js")
+
+
+def test_the_diagnostics_builder_offers_a_pareto_front_for_two_objectives(tmp_path: Path):
+    """With two objectives, the builder offers the Pareto front."""
+    router, _, configs = _two_by_two_study(tmp_path)
+    experiment = router.index.experiments[0]
+    run_id = configs[("Rocks", "PFT_DPW")]
+    _, _, body = router.resolve(f"/run/0/{experiment.experiment_id}/{run_id}/tuning-chart")
+
+    assert 'value="pareto-front"' in body.decode("utf-8")
+
+
+def test_a_plain_run_has_no_diagnostics_builder(router: Router, study_dir):
+    """The route answers 404 for a run that is not a tuning study."""
+    experiment = router.index.experiments[0]
+    status, _, _ = router.resolve(
+        f"/run/0/{experiment.experiment_id}/{study_dir['evaluation']}/tuning-chart"
+    )
+
+    assert status == 404

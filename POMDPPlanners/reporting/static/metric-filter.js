@@ -124,6 +124,8 @@
     var count = control.querySelector("[data-filter-count]");
     var rows = Array.prototype.slice.call(table.querySelectorAll("tbody tr[data-metric]"));
     var columnCells = Array.prototype.slice.call(table.querySelectorAll("[data-col]"));
+    var builder = control.querySelector("[data-build-chart]");
+    var builderBase = builder ? builder.getAttribute("href") : null;
 
     var metrics = picker(
       control.querySelector('[data-picker="metric"]'),
@@ -175,6 +177,22 @@
         cell.hidden = !!hiddenColumns[cell.getAttribute("data-col")];
       });
       remark(rows, hiddenColumns);
+
+      // The chart builder opens with what the table is showing: its planners,
+      // and its first metric row that is a logged metric.
+      if (builder) {
+        var names = planners.choices.filter(function (c) { return c.checked; }).map(function (c) {
+          return c.getAttribute("data-choice-name");
+        });
+        var first = rows.filter(function (row) {
+          var name = row.getAttribute("data-metric");
+          return !row.hidden && name !== "episodes" && name !== "average_return best trial";
+        })[0];
+        var query = new URLSearchParams();
+        if (names.length) query.set("planners", names.join(","));
+        if (first) query.set("metric", first.getAttribute("data-metric"));
+        builder.setAttribute("href", builderBase + (query.toString() ? "?" + query : ""));
+      }
 
       metrics.refresh();
       planners.refresh();

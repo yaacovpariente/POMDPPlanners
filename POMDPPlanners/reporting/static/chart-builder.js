@@ -15,42 +15,14 @@
   if (!dataEl || !output) return;
 
   var DATA = JSON.parse(dataEl.textContent);
-  var SVG_NS = "http://www.w3.org/2000/svg";
-
-  /* Three looks, because a figure goes to three places. Mono is what most
-     journals want and prints safely in black and white; colour uses the
-     Okabe–Ito palette, which stays distinguishable under every common form of
-     colour blindness; slide is the same drawing on a dark ground for a talk.
-     Whatever is on screen is what downloads. */
-  var STYLES = {
-    mono: {
-      label: "Paper, mono",
-      background: "#ffffff",
-      ink: "#111111",
-      muted: "#555555",
-      grid: "#e2e2e2",
-      bars: ["#4a4a4a", "#8c8c8c", "#2b2b2b", "#bdbdbd", "#6e6e6e"],
-      error: "#111111"
-    },
-    colour: {
-      label: "Paper, colour",
-      background: "#ffffff",
-      ink: "#111111",
-      muted: "#555555",
-      grid: "#e6e6e6",
-      bars: ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9"],
-      error: "#222222"
-    },
-    slide: {
-      label: "Slide, dark",
-      background: "#14161c",
-      ink: "#f4f2ee",
-      muted: "#b3aea6",
-      grid: "#2c303a",
-      bars: ["#5BB8F5", "#FF9B54", "#5FD2A6", "#E888B8", "#F2C14E", "#9D8DF1"],
-      error: "#f4f2ee"
-    }
-  };
+  // The looks, helpers and downloads every figure builder shares.
+  var kit = window.POMDPFigure;
+  var STYLES = kit.STYLES;
+  var niceTicks = kit.niceTicks;
+  var node = kit.node;
+  var format = kit.format;
+  var humanize = kit.humanize;
+  var SVG_NS = kit.SVG_NS;
 
   function style() {
     return STYLES[el.style.value] || STYLES.mono;
@@ -85,11 +57,6 @@
     return Object.keys(seen).sort();
   }
 
-  function humanize(name) {
-    var words = name.replace(/_/g, " ").trim();
-    return words.charAt(0).toUpperCase() + words.slice(1);
-  }
-
   /* Each planner's row in the controls: whether it is plotted, and what it is
      called in the figure. A run's planner names are identifiers — PFT_DPW_1s —
      and a paper wants "PFT-DPW (1 s)", so the label is the author's to write
@@ -119,41 +86,6 @@
       });
     });
     return found;
-  }
-
-  function niceTicks(low, high, count) {
-    var span = high - low;
-    if (span <= 0) return [low];
-    var raw = span / count;
-    var magnitude = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
-    var step = magnitude;
-    [1, 2, 2.5, 5, 10].some(function (factor) {
-      if (magnitude * factor >= raw) { step = magnitude * factor; return true; }
-      return false;
-    });
-    var ticks = [];
-    for (var t = Math.ceil(low / step) * step; t <= high + step * 1e-9; t += step) {
-      // Floating point leaves 0.30000000000000004 on an axis otherwise.
-      ticks.push(Math.round(t / step) * step);
-    }
-    return ticks;
-  }
-
-  function node(name, attrs, text) {
-    var element = document.createElementNS(SVG_NS, name);
-    Object.keys(attrs).forEach(function (key) {
-      element.setAttribute(key, attrs[key]);
-    });
-    if (text !== undefined) element.textContent = text;
-    return element;
-  }
-
-  function format(value) {
-    var abs = Math.abs(value);
-    if (abs === 0) return "0";
-    if (abs < 0.001 || abs >= 100000) return value.toExponential(2);
-    // Three significant figures, with the trailing zeros a paper does not want.
-    return String(parseFloat(value.toPrecision(3)));
   }
 
   function draw() {
@@ -385,60 +317,15 @@
   }
 
   function fileName(extension) {
-    var base = (el.title.value || el.metric.value || "chart")
-      .replace(/[^A-Za-z0-9_-]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    return (base || "chart") + "." + extension;
-  }
-
-  function save(blob, name) {
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    // Revoked on the next turn of the event loop: revoking immediately races
-    // the download in some browsers.
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-  }
-
-  function svgText() {
-    var svg = output.querySelector("svg");
-    if (!svg) return null;
-    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(svg);
+    return kit.fileName(el.title.value || el.metric.value || "chart", extension);
   }
 
   el.svgButton.addEventListener("click", function () {
-    var text = svgText();
-    if (!text) return;
-    save(new Blob([text], { type: "image/svg+xml" }), fileName("svg"));
+    kit.downloadSvg(output, fileName("svg"));
   });
 
   el.pngButton.addEventListener("click", function () {
-    var svg = output.querySelector("svg");
-    var text = svgText();
-    if (!svg || !text) return;
-    // Three times the drawing size: a figure placed at column width in a paper
-    // is printed at about 300 dpi, and a screen-resolution PNG looks soft there.
-    var scale = 3;
-    var width = Number(svg.getAttribute("width"));
-    var height = Number(svg.getAttribute("height"));
-    var image = new Image();
-    image.onload = function () {
-      var canvas = document.createElement("canvas");
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      var ctx = canvas.getContext("2d");
-      ctx.fillStyle = style().background;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(function (blob) {
-        if (blob) save(blob, fileName("png"));
-      }, "image/png");
-    };
-    image.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(text)));
+    kit.downloadPng(output, style().background, fileName("png"));
   });
 
   // Build the controls, then draw whenever any of them changes.
@@ -475,6 +362,21 @@
     el.metric.appendChild(option);
   });
   if (names.indexOf("average_return") !== -1) el.metric.value = "average_return";
+
+  /* A page that links here can hand over a starting point: ?planners=a,b
+     ticks only those planners, and ?metric=x picks the metric. The study
+     page's comparison uses it to open with what its table was showing. */
+  var query = new URLSearchParams(window.location.search);
+  if (query.get("planners")) {
+    var wanted = query.get("planners").split(",");
+    rows().forEach(function (row) {
+      row.querySelector("input[type=checkbox]").checked =
+        wanted.indexOf(row.getAttribute("data-policy")) !== -1;
+    });
+  }
+  if (query.get("metric") && names.indexOf(query.get("metric")) !== -1) {
+    el.metric.value = query.get("metric");
+  }
 
   function syncLabels() {
     el.yLabel.value = humanize(el.metric.value);

@@ -831,6 +831,7 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
         '<figure class="builder-canvas" id="chart-output"></figure>'
         "</div>"
         f'<script type="application/json" id="chart-data">{payload}</script>'
+        '<script src="/static/figure-kit.js"></script>'
         '<script src="/static/chart-builder.js"></script>',
     )
 
@@ -1545,6 +1546,8 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
         for path in study.plots
     )
     return (
+        f'<p><a class="tab" href="{html(tuning_chart_url(run))}">Build a chart</a> '
+        '<span class="dim">— an editable figure of these diagnostics, as SVG or PNG.</span></p>'
         '<p class="note">Hover a point to see its trial and parameters. Green marks the '
         "Pareto trials, red the chosen one. Parameter importances are not drawn: Optuna "
         "computes them from the live study, which the run does not keep.</p>"
@@ -1588,6 +1591,8 @@ def _evaluation_section(
             if compare_url
             else ""
         )
+        + f'<p><a class="tab" href="{html(chart_url(eval_run, eval_env.name))}">'
+        "Build a chart from this evaluation</a></p>"
         + _collapsible(
             f"Episodes ({len(eval_policy.episodes)})",
             _listing(
@@ -2097,7 +2102,9 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             f"{label}</label>"
             for key, label in _GROUP_LABELS
         )
-        + '<span class="dim" data-filter-count></span></div>'
+        + '<span class="dim" data-filter-count></span>'
+        f'<a class="tab" data-build-chart href="{html(chart_url(rows[0][1], rows[0][2].name))}">'
+        "Build a chart</a></div>"
     )
     eval_run, eval_env = rows[0][1], rows[0][2]
     shown = EnvironmentView(
@@ -2206,6 +2213,126 @@ def _child_runs(children: Sequence[RunView]) -> str:
         for child in children
     ]
     return "<h2>Runs in this study</h2>" + _listing(items)
+
+
+def tuning_chart_url(run: RunView) -> str:
+    """URL of a tuned planner's diagnostics chart builder."""
+    return run_url(run) + "/tuning-chart"
+
+
+def tuning_chart_data(study: tuning.TuningStudy) -> Dict[str, object]:
+    """What the diagnostics builder draws from: the trials and the study's frame.
+
+    Args:
+        study: The study.
+
+    Returns:
+        A JSON-serializable mapping.
+    """
+    return {
+        "title": study_label(study),
+        "objectives": [
+            {"name": str(name), "direction": str(direction)} for name, direction in study.objectives
+        ],
+        "parameters": [
+            {
+                "name": p.name,
+                "low": p.low,
+                "high": p.high,
+                "choices": list(p.choices) if p.choices is not None else None,
+            }
+            for p in study.parameters
+        ],
+        "best": study.best_trial_number,
+        "pareto": sorted(
+            set(study.pareto_trial_numbers) | {t.number for t in study.trials if t.is_pareto}
+        ),
+        "stopped_at": study.stopped_at_trial,
+        "trials": [
+            {
+                "number": t.number,
+                "state": t.state,
+                "params": t.params,
+                "objectives": t.objective_values,
+                "duration": t.duration_seconds,
+            }
+            for t in study.trials
+        ],
+    }
+
+
+def tuning_chart_page(
+    run: RunView, study: tuning.TuningStudy, parent: Optional[RunView] = None
+) -> str:
+    """A figure of the study's diagnostics, built by the reader.
+
+    The counterpart of :func:`chart_builder_page` for a tuning study: the
+    tuning view's charts are the site's, this one is the author's, with the
+    same text fields, looks and downloads.
+
+    Args:
+        run: The config run.
+        study: The study read from it.
+        parent: The study run, for the breadcrumbs.
+
+    Returns:
+        A complete HTML document.
+    """
+    payload = json.dumps(tuning_chart_data(study)).replace("</", "<\\/")
+    title = study_label(study)
+    crumbs: List[Tuple[str, Optional[str]]] = [
+        ("Experiments", "/"),
+        (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+    ]
+    if parent is not None:
+        crumbs.append(("Tuning study", run_url(parent)))
+    crumbs += [(title, run_url(run)), ("Chart", None)]
+    kinds = [
+        ("objective-history", "Objective over the trials"),
+        ("parameter-slice", "Objective against a parameter"),
+        ("parameter-history", "Parameter over the trials"),
+        ("trial-durations", "Trial durations"),
+    ]
+    if len(study.objectives) == 2:
+        kinds.insert(3, ("pareto-front", "Pareto front"))
+    return layout(
+        f"Chart · {title}",
+        crumbs,
+        "<h1>Build a chart</h1>"
+        f'<p class="note">Tuning of <a href="{html(run_url(run))}">{html(title)}</a>. '
+        "Everything plotted is a trial the study recorded.</p>"
+        '<div class="builder">'
+        '<form class="builder-controls" id="tuning-chart-form">'
+        '<label>Chart <select id="tc-kind">'
+        + "".join(f'<option value="{k}">{html(label)}</option>' for k, label in kinds)
+        + "</select></label>"
+        '<label data-for="objective">Objective <select id="tc-objective"></select></label>'
+        '<label data-for="parameter">Parameter <select id="tc-parameter"></select></label>'
+        '<label>Title <input id="tc-title" type="text" autocomplete="off"></label>'
+        '<label>Vertical axis <input id="tc-y" type="text" autocomplete="off"></label>'
+        '<label>Horizontal axis <input id="tc-x" type="text" autocomplete="off"></label>'
+        '<label>Style <select id="tc-style">'
+        '<option value="mono">Paper, mono</option>'
+        '<option value="colour">Paper, colour</option>'
+        '<option value="slide">Slide, dark</option>'
+        "</select></label>"
+        '<label class="check" data-for="best-line"><input id="tc-best-line" type="checkbox" '
+        "checked> Best-so-far line</label>"
+        '<label class="check" data-for="stop"><input id="tc-stop" type="checkbox" checked> '
+        "Early-stop marker</label>"
+        '<label class="check"><input id="tc-highlight" type="checkbox" checked> '
+        "Mark the chosen and Pareto trials</label>"
+        '<label class="check"><input id="tc-legend" type="checkbox" checked> Legend</label>'
+        '<div class="builder-actions">'
+        '<button type="button" id="tc-svg" class="tab">Download SVG</button>'
+        '<button type="button" id="tc-png" class="tab">Download PNG</button>'
+        "</div></form>"
+        '<figure class="builder-canvas" id="tc-output"></figure>'
+        "</div>"
+        f'<script type="application/json" id="tuning-chart-data">{payload}</script>'
+        '<script src="/static/figure-kit.js"></script>'
+        '<script src="/static/tuning-chart-builder.js"></script>',
+    )
 
 
 def not_found(message: str) -> str:

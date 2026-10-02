@@ -169,6 +169,16 @@ class Router:
         if not tail:
             return self._ok(self._run_page(run))
 
+        if tail == ["tuning-chart"]:
+            if not tuning.is_tuning_config_run(run):
+                return self._not_found("This run is not a tuning study")
+            parent = (
+                self.index.run(run.store_index, run.experiment_id, run.parent_run_id)
+                if run.parent_run_id
+                else None
+            )
+            return self._ok(pages.tuning_chart_page(run, tuning.load_study(run), parent))
+
         if tail[0] != "env" or len(tail) < 2:
             return self._not_found("Malformed run URL")
         env = run.environment(tail[1])
