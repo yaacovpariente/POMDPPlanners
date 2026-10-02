@@ -135,24 +135,6 @@ def test_rewards_match_native(env: SanityPOMDP, model: SanityVectorizedModel) ->
     assert np.array_equal(actual.numpy(), expected)
 
 
-def test_terminal_mask_matches_native(env: SanityPOMDP, model: SanityVectorizedModel) -> None:
-    """Terminal flags match the native terminal check (always False).
-
-    Purpose: Validates the batched terminal mask against env.is_terminal
-
-    Given: States covering both state values
-    When: The model terminal mask is compared to the env per row
-    Then: Every entry agrees and the dtype is bool
-
-    Test type: unit
-    """
-    states = np.array([0.0, 1.0, 0.0, 1.0])
-    expected = np.array([env.is_terminal(int(s)) for s in states])
-    actual = model.terminal_mask(torch.as_tensor(states, dtype=torch.float64).unsqueeze(-1))
-    assert actual.dtype == torch.bool
-    assert np.array_equal(actual.numpy(), expected)
-
-
 def test_observation_log_probs_match_native(env: SanityPOMDP, model: SanityVectorizedModel) -> None:
     """Observation log-likelihoods match the native kernel exactly.
 

@@ -42,7 +42,8 @@ import numpy as np
 import pytest
 import torch
 
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, Environment
+from POMDPPlanners.core.environment.vectorized_generative_model import VectorizedGenerativeModel
 from POMDPPlanners.tests.test_environments._sample_distribution_checks import (
     assert_same_distribution,
 )
@@ -834,6 +835,73 @@ def test_model_spec_builds_the_registered_class(spec: ModelSpec) -> None:
     """
     _, model = _build(spec)
     assert type(model).__name__ == spec.model_class
+
+
+@pytest.mark.parametrize("spec", [pytest.param(s, id=s.model_id) for s in MODEL_SPECS])
+def test_model_kernels_follow_the_protocol_shapes(spec: ModelSpec) -> None:
+    """Every kernel returns the shape and dtype ``VectorizedGenerativeModel`` documents.
+
+    Purpose: The checks above compare values after converting them to
+        numpy, which accepts a ``[N, 1]`` reward, a float terminal mask, or a
+        float observation key without complaint. The planner does not: it
+        indexes tree tables with the keys and masks with the terminal flag.
+        Each model test file checked its own model's shapes by hand.
+
+    Given: A registry model and a batch of reachable states.
+    When: Every protocol method is called once on the batch.
+    Then: The model satisfies the protocol; its action count matches the
+        environment's action set; next states keep the state shape;
+        observations are ``[N, do]``; rewards and observation log-probs are
+        float ``[N]`` without NaN; the terminal mask is bool ``[N]``; action
+        keys are distinct integers, one per action; observation keys are
+        integer ``[N]``, the same on a second call, and equal for equal rows
+        wherever they sit in a batch.
+
+    Test type: unit
+    """
+    env, model = _build(spec)
+    assert isinstance(model, VectorizedGenerativeModel)
+    n_actions = spec.num_actions(env, model)
+    if isinstance(env, DiscreteActionsEnvironment):
+        assert n_actions == len(env.get_actions())
+
+    live, _ = _rollout_states(spec, env, model)
+    states = _tensor([spec.row_of_state(env, state) for state in live], model)
+    count = states.shape[0]
+    actions = torch.as_tensor(np.arange(count) % n_actions, dtype=torch.int64, device=model.device)
+
+    _seed_all(0)
+    next_states = model.sample_next_states(states, actions)
+    assert tuple(next_states.shape) == tuple(states.shape)
+    observations = model.sample_observations(next_states, actions)
+    assert observations.ndim == 2 and observations.shape[0] == count
+
+    rewards = model.rewards(states, actions, next_states)
+    assert tuple(rewards.shape) == (count,) and rewards.is_floating_point()
+    assert not torch.any(torch.isnan(rewards))
+
+    mask = model.terminal_mask(states)
+    assert tuple(mask.shape) == (count,) and mask.dtype == torch.bool
+
+    log_probs = model.observation_log_probs(next_states, actions, observations)
+    assert tuple(log_probs.shape) == (count,) and log_probs.is_floating_point()
+    assert not torch.any(torch.isnan(log_probs))
+
+    action_keys = model.action_keys(torch.arange(n_actions, device=model.device))
+    assert tuple(action_keys.shape) == (n_actions,)
+    assert not action_keys.is_floating_point() and action_keys.dtype != torch.bool
+    assert len(set(action_keys.tolist())) == n_actions, "two actions share a key"
+
+    keys = model.observation_keys(observations)
+    assert tuple(keys.shape) == (count,)
+    assert not keys.is_floating_point() and keys.dtype != torch.bool
+    assert torch.equal(keys, model.observation_keys(observations.clone()))
+    # Equal rows must share a key. Distinct rows may share one too: a model
+    # with continuous observations buckets them on purpose (Push quantizes the
+    # object position), so that half is not a contract.
+    doubled = torch.cat([observations, observations.clone()])
+    doubled_keys = model.observation_keys(doubled)
+    assert torch.equal(doubled_keys[:count], doubled_keys[count:])
 
 
 def test_model_variant_declines_are_current() -> None:

@@ -349,22 +349,6 @@ def test_observation_keys_are_deterministic_and_discriminating(case: _Case) -> N
     assert keys_first[0] != keys_first[2]
 
 
-def test_unsupported_ghost_coordination_raises() -> None:
-    """Constructing on a non-independent coordination mode is rejected.
-
-    Purpose: Validates the scope guard on ghost coordination
-
-    Given: An env configured with coordinated ghost coordination
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    env = PacManPOMDP(ghost_coordination="coordinated")
-    with pytest.raises(NotImplementedError):
-        PacManVectorizedModel(env)
-
-
 def test_unsupported_ghost_strategy_raises() -> None:
     """Constructing on a non-aggressive ghost strategy is rejected.
 

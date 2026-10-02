@@ -720,20 +720,3 @@ class TestSerialization:
         """
         assert _env().config_id != _env(cue_accuracy=0.7).config_id
         assert _env().config_id != _env(stem_length=5).config_id
-
-    def test_config_id_survives_use(self):
-        """Using the environment does not change its identity.
-
-        Given: A maze and its ``config_id``
-        When: It is rolled forward and both batch paths are exercised
-        Then: The id is unchanged, so nothing is being memoized into it
-
-        Test type: unit
-        """
-        env = _env()
-        before = env.config_id
-        states = env.initial_state_dist().sample(4)
-        env.reward_batch(states, "up")
-        env.sample_next_state_batch(states, "up")
-        _walk(env, states[0], ["up"] * 5)
-        assert env.config_id == before

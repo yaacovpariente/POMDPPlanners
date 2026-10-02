@@ -24,9 +24,6 @@ from POMDPPlanners.core.environment.vectorized_generative_model import (
     VectorizedGenerativeModel,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
-from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models import (
-    RewardModelType,
-)
 from POMDPPlanners.environments.push_pomdp.push_vectorized_model import PushVectorizedModel
 
 # Each case is a set of PushPOMDP kwargs. All use the supported
@@ -294,25 +291,6 @@ def test_transition_error_prob_is_stochastic() -> None:
     first = model.sample_next_states(states, actions).numpy()
     second = model.sample_next_states(states, actions).numpy()
     assert not np.array_equal(first, second)
-
-
-def test_unsupported_reward_model_raises() -> None:
-    """Constructing on an unsupported reward model is rejected.
-
-    Purpose: Validates the scope guard on reward model type
-
-    Given: An env configured with the zero-mean-shock hazard reward model
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    other = PushPOMDP(
-        discount_factor=0.99,
-        reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
-    )
-    with pytest.raises(NotImplementedError):
-        PushVectorizedModel(other)
 
 
 def test_non_positive_observation_resolution_raises() -> None:

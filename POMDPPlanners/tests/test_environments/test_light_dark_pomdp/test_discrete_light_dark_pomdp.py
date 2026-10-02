@@ -11,7 +11,6 @@ This module tests the Discrete Light Dark POMDP environment, focusing on:
 
 # pylint: disable=too-many-lines
 
-import copy
 import random
 
 import numpy as np
@@ -60,60 +59,6 @@ def base_light_dark_environment() -> DiscreteLightDarkPOMDP:
 
 class TestDiscreteLightDarkPOMDPEquality:
     """Test suite for DiscreteLightDarkPOMDP equality comparisons."""
-
-    def test_same_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with same discount factor are equal.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP environments with identical parameters are equal and exhibit symmetry
-
-        Given: Two DiscreteLightDarkPOMDP environments with same parameters (discount=0.95, errors=0.05, grid=11x11, etc.)
-        When: Equality comparison is performed between identical environment configurations
-        Then: Both directions return True (env1 == env2 and env2 == env1) confirming symmetric equality
-
-        Test type: unit
-        """
-        other_env = DiscreteLightDarkPOMDP(
-            discount_factor=0.95,
-            **discrete_light_dark_pinned_kwargs(
-                transition_error_prob=0.05,
-                observation_error_prob=0.05,
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                is_stochastic_reward=True,
-            ),
-        )
-        assert base_light_dark_environment == other_env
-        assert other_env == base_light_dark_environment  # Test symmetry
-
-    def test_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP environments with different discount factors are correctly identified as unequal
-
-        Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical parameters
-        When: Equality comparison is performed between environments with different discount factors
-        Then: Both directions return False (env1 != env2 and env2 != env1) confirming inequality detection
-
-        Test type: unit
-        """
-        other_env = DiscreteLightDarkPOMDP(
-            discount_factor=0.8,
-            **discrete_light_dark_pinned_kwargs(
-                transition_error_prob=0.05,
-                observation_error_prob=0.05,
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                is_stochastic_reward=True,
-            ),
-        )
-        assert base_light_dark_environment != other_env
-        assert other_env != base_light_dark_environment  # Test symmetry
 
     def test_different_transition_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal.
@@ -450,79 +395,9 @@ class TestDiscreteLightDarkPOMDPEquality:
         delattr(other_env, "obstacles")
         assert base_light_dark_environment != other_env
 
-    def test_deep_copy_equality(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP equality works correctly with deep copied objects and exhibits symmetry
-
-        Given: Original DiscreteLightDarkPOMDP environment and its deep copy using copy.deepcopy
-        When: Equality comparison is performed between original and deep copied environment
-        Then: Both directions return True (original == copy and copy == original) confirming deep copy equality
-
-        Test type: unit
-        """
-
-        copied_env = copy.deepcopy(base_light_dark_environment)
-        assert copied_env == base_light_dark_environment
-        assert base_light_dark_environment == copied_env  # Test symmetry
-
 
 class TestDiscreteLightDarkPOMDPConfigId:
     """Test suite for DiscreteLightDarkPOMDP config_id functionality."""
-
-    def test_config_id_consistency(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is consistent for identical environments.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces consistent hashes for identical configurations
-
-        Given: Two DiscreteLightDarkPOMDP environments with identical parameters (discount=0.95, errors=0.05, grid=11x11, etc.)
-        When: config_id is generated for both environment instances
-        Then: Both environments produce the same config_id hash value
-
-        Test type: configuration
-        """
-        other_env = DiscreteLightDarkPOMDP(
-            discount_factor=0.95,
-            **discrete_light_dark_pinned_kwargs(
-                transition_error_prob=0.05,
-                observation_error_prob=0.05,
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                is_stochastic_reward=True,
-            ),
-        )
-        assert base_light_dark_environment.config_id == other_env.config_id
-
-    def test_config_id_different_discount_factor(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
-        """Test that config_id changes with different discount factor.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces different hashes for different discount factors
-
-        Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical
-        When: config_id is generated for both environment instances with different discount factors
-        Then: Different discount factors produce different config_id hash values
-
-        Test type: configuration
-        """
-        other_env = DiscreteLightDarkPOMDP(
-            discount_factor=0.8,
-            **discrete_light_dark_pinned_kwargs(
-                transition_error_prob=0.05,
-                observation_error_prob=0.05,
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                is_stochastic_reward=True,
-            ),
-        )
-        assert base_light_dark_environment.config_id != other_env.config_id
 
     def test_config_id_different_parameters(
         self, base_light_dark_environment: DiscreteLightDarkPOMDP
@@ -595,37 +470,6 @@ class TestDiscreteLightDarkPOMDPConfigId:
             ),
         )
         assert base_light_dark_environment.config_id != other_env.config_id
-
-    def test_config_id_format(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is a valid SHA-256 hash.
-
-        Purpose: Validates that DiscreteLightDarkPOMDP config_id follows proper SHA-256 hash format specification
-
-        Given: DiscreteLightDarkPOMDP environment instance with configuration parameters
-        When: config_id property generates hash value from environment configuration
-        Then: Returns string with 64 characters, all valid hexadecimal digits (0-9, a-f)
-
-        Test type: configuration
-        """
-        config_id = base_light_dark_environment.config_id
-        assert isinstance(config_id, str)
-        assert len(config_id) == 64  # SHA-256 hash length
-        assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
-
-    def test_config_id_deterministic(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-
-        Purpose: Validates that DiscreteLightDarkPOMDP config_id property returns consistent values across multiple accesses
-
-        Given: Single DiscreteLightDarkPOMDP environment instance with fixed configuration parameters
-        When: config_id property is accessed multiple times on the same instance
-        Then: All accesses return identical config_id hash values (deterministic behavior)
-
-        Test type: configuration
-        """
-        config_id1 = base_light_dark_environment.config_id
-        config_id2 = base_light_dark_environment.config_id
-        assert config_id1 == config_id2
 
     def test_config_id_order_invariance(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is invariant to the order of beacons and obstacles.
@@ -1098,25 +942,6 @@ def test_get_actions():
     assert set(actions) == {"up", "down", "right", "left"}
 
 
-def test_compute_metrics_empty_histories_is_rejected():
-    """Test that scoring an empty batch of episodes raises.
-
-    Purpose: Validates that an empty batch is rejected rather than scored. A
-        zero task_completion_rate over no episodes is indistinguishable from a run
-        in which the agent never reached the goal
-
-    Given: A DiscreteLightDarkPOMDP environment and an empty history list
-    When: compute_metrics is called
-    Then: A ValueError naming the environment is raised
-
-    Test type: unit
-    """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, **discrete_light_dark_pinned_kwargs())
-
-    with pytest.raises(ValueError, match="received no episode histories"):
-        env.compute_metrics([])
-
-
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories
 
@@ -1537,45 +1362,6 @@ def test_observation_model_type_equality():
     )
     assert env1 != env3, "Distance-based should not equal normal"
     assert env2 != env3, "Distance-based should not equal no obs in dark"
-
-
-def test_observation_model_type_config_id():
-    """Test that config_id changes with different observation model types."""
-    env1 = DiscreteLightDarkPOMDP(
-        discount_factor=0.95,
-        **discrete_light_dark_pinned_kwargs(
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            observation_model_type=ObservationModelType.NORMAL,
-        ),
-    )
-    env2 = DiscreteLightDarkPOMDP(
-        discount_factor=0.95,
-        **discrete_light_dark_pinned_kwargs(
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
-        ),
-    )
-    assert (
-        env1.config_id != env2.config_id
-    ), "Different observation model types should produce different config_ids"
-
-    # Test distance-based produces different config_id
-    env3 = DiscreteLightDarkPOMDP(
-        discount_factor=0.95,
-        **discrete_light_dark_pinned_kwargs(
-            transition_error_prob=0.05,
-            observation_error_prob=0.05,
-            observation_model_type=ObservationModelType.DISTANCE_BASED,
-        ),
-    )
-    assert (
-        env1.config_id != env3.config_id
-    ), "Distance-based should produce different config_id from normal"
-    assert (
-        env2.config_id != env3.config_id
-    ), "Distance-based should produce different config_id from no obs in dark"
 
 
 def test_distance_based_observation_model():

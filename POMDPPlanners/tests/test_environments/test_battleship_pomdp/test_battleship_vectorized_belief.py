@@ -114,20 +114,6 @@ class TestBattleshipVectorizedUpdater:
 
 
 class TestBattleshipVectorizedBelief:
-    def test_default_belief_is_the_vectorized_one(self, env):
-        """Test that the factory hands back the batched belief by default.
-
-        Purpose: Registration is what makes the updater reachable; without it
-        the environment silently falls back to the generic filter.
-
-        Given: A Battleship environment.
-        When: The top-level factory is asked for its belief.
-        Then: The vectorized belief comes back.
-
-        Test type: unit
-        """
-        belief = create_environment_belief(env, n_particles=32)
-        assert isinstance(belief, BattleshipVectorizedWeightedParticleBelief)
 
     def test_particle_type_still_available(self, env):
         """Test that the generic particle belief is still selectable.

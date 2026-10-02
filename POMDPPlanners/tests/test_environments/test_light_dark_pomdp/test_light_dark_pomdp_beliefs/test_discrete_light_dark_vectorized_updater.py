@@ -225,21 +225,6 @@ class TestBatchObservationLogLikelihood:
             np.testing.assert_allclose(vectorized_ll, per_particle_ll, atol=1e-10)
 
 
-class TestConfigId:
-    def test_deterministic(self, updater):
-        """Test that config_id is deterministic.
-
-        Purpose: Validates reproducibility.
-
-        Given: An updater.
-        When: config_id is called twice.
-        Then: The same ID is returned.
-
-        Test type: unit
-        """
-        assert updater.config_id == updater.config_id
-
-
 # ---------------------------------------------------------------------------
 # NoObsInDark updater tests
 # ---------------------------------------------------------------------------

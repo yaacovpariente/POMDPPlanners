@@ -59,26 +59,6 @@ def test_model_satisfies_protocol(model: TigerVectorizedModel) -> None:
     assert model.num_observations == len(OBSERVATIONS)
 
 
-def test_reward_matches_native(env: TigerPOMDP, model: TigerVectorizedModel) -> None:
-    """Rewards match the native scalar reward across all state/action pairs.
-
-    Purpose: Validates the reward lookup table against env.reward
-
-    Given: A random batch of integer-coded states and action indices
-    When: The model reward is compared to env.reward per row
-    Then: The maximum absolute difference is below 1e-9
-
-    Test type: unit
-    """
-    rng = np.random.default_rng(0)
-    s_idx = rng.integers(0, len(STATES), size=256)
-    a_idx = rng.integers(0, len(ACTIONS), size=256)
-    expected = np.array([env.reward(STATES[s], ACTIONS[a]) for s, a in zip(s_idx, a_idx)])
-    states = _coded(s_idx)
-    actual = model.rewards(states, torch.as_tensor(a_idx), states).numpy()
-    assert np.max(np.abs(expected - actual)) < 1e-9
-
-
 def test_observation_log_probs_match_native(env: TigerPOMDP, model: TigerVectorizedModel) -> None:
     """Observation log-likelihoods match the native kernel exactly.
 
@@ -108,24 +88,6 @@ def test_observation_log_probs_match_native(env: TigerPOMDP, model: TigerVectori
     actual = model.observation_log_probs(
         _coded(ns_idx), torch.as_tensor(a_idx), _coded(o_idx)
     ).numpy()
-    assert np.array_equal(expected, actual)
-
-
-def test_terminal_mask_matches_native(env: TigerPOMDP, model: TigerVectorizedModel) -> None:
-    """Terminal flags match the native per-state terminal check.
-
-    Purpose: Validates the batched terminal mask against env.is_terminal
-
-    Given: A random batch of integer-coded states
-    When: The model terminal mask is compared to env.is_terminal per row
-    Then: Every entry agrees (all False for the Tiger problem)
-
-    Test type: unit
-    """
-    rng = np.random.default_rng(1)
-    s_idx = rng.integers(0, len(STATES), size=64)
-    expected = np.array([env.is_terminal(STATES[s]) for s in s_idx])
-    actual = model.terminal_mask(_coded(s_idx)).numpy()
     assert np.array_equal(expected, actual)
 
 

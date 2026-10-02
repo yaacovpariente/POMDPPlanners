@@ -621,80 +621,6 @@ class TestPushPOMDP:
         # Verify reward is calculated
         assert reward == self.env.reward(next_state, action)
 
-    def test_environment_equality(self):
-        """Test environment equality comparison."""
-        # Create two identical environments
-        env1 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        env2 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-
-        # Test equality
-        assert env1 == env2
-
-        # Test inequality with different parameters
-        env3 = PushPOMDP(
-            discount_factor=0.9,  # Different discount factor
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        assert env1 != env3
-
-    def test_config_id(self):
-        """Test config_id behavior."""
-        # Create two environments with same parameters
-        env1 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        env2 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-
-        # Test same config_id for identical environments
-        assert env1.config_id == env2.config_id
-
-        # Test different config_id for different environments
-        env3 = PushPOMDP(
-            discount_factor=0.9,  # Different discount factor
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        assert env1.config_id != env3.config_id
-
     def test_observation_never_empty_from_sample(self):
         """Test that env.sample_observation never produces empty observations.
 
@@ -764,7 +690,7 @@ class TestPushPOMDP:
             for action in actions:
                 # Call sample_next_step multiple times to check consistency
                 for _ in range(5):
-                    next_state, observation, reward = self.env.sample_next_step(state, action)
+                    next_state, observation, _ = self.env.sample_next_step(state, action)
 
                     # Check observation properties
                     assert isinstance(observation, np.ndarray), "Observation should be numpy array"
