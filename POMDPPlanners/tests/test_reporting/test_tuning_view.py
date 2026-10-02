@@ -676,9 +676,9 @@ def test_the_study_page_compares_planners_per_environment(tmp_path: Path):
         assert f'/{run_id}"' in (rocks if env == "Rocks" else push)
     # Rocks: PFT_DPW has the best evaluation return and best-trial score,
     # POMCPOW the best completion; each figure keeps its interval.
-    assert 'class="num is-best" data-col="1" data-value="12.0">' in rocks
-    assert 'class="num is-best" data-col="0" data-value="1.0">' in rocks
-    assert 'class="num is-best" data-col="1" data-value="13.0">' in rocks
+    assert 'class="num is-best" data-col="1" data-value="12.0"' in rocks
+    assert 'class="num is-best" data-col="0" data-value="1.0"' in rocks
+    assert 'class="num is-best" data-col="1" data-value="13.0"' in rocks
     # Return, completion, best-trial return and the lower action time.
     assert rocks.count("is-best") == 4
     assert 'is-best" data-col="1" data-value="-55.0"' in push
@@ -793,7 +793,7 @@ def test_the_comparison_has_metric_and_planner_pickers(tmp_path: Path):
     assert 'data-choice-name="POMCPOW_Rocks"' in planner_picker
     assert 'data-choice-name="PFT_DPW_Rocks"' in planner_picker
     assert "data-picker-all" in metric_picker and "data-picker-none" in planner_picker
-    assert '<th class="group" data-col="1">' in rocks
+    assert '<th class="group" data-col="1" ' in rocks
 
 
 def test_each_comparison_block_carries_its_own_chart_builder(tmp_path: Path):
@@ -988,3 +988,45 @@ def test_a_tagged_evaluation_stays_reachable_when_its_links_failed(tmp_path: Pat
 
     assert listing.count('<a class="card') == 1
     assert "raw evaluation run" in page and f'/{evaluation.run_id}"' in page
+
+
+def test_comparison_tables_carry_their_numbers_for_the_csv_export(tmp_path: Path):
+    """The compare table exports as shown or in full, at the run's precision.
+
+    Given: The two-by-two study.
+    When: The study page renders.
+    Then: Each compare block has "as shown" and "all data" export buttons
+        for its table; the table names its environment and planners with
+        their episode counts; each value cell carries the logged value and
+        interval in full and the best trial's value; the reference rows are
+        left out of the export.
+    """
+    router, study_id, _ = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    rocks = page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+
+    assert 'data-export-table="compare-table-compare-Rocks" data-export-mode="shown"' in rocks
+    assert 'data-export-table="compare-table-compare-Rocks" data-export-mode="all"' in rocks
+    assert 'data-env="Rocks" data-export-name="Rocks_compare"' in rocks
+    assert 'data-planner="PFT_DPW_Rocks" data-episodes="0"' in rocks
+    assert 'data-value="12.0" data-low="10.0" data-high="14.0"' in rocks
+    assert 'data-best-trial="13.0"' in rocks
+    assert rocks.count("data-export-skip") == 2
+    assert page.count("/static/table-export.js") >= 1
+
+
+def test_every_metric_table_has_a_csv_export(router: Router, study_dir):
+    """The evaluation run's metric tables and the tuning view's export too.
+
+    Given: The fixture evaluation run and tuned planner.
+    When: The run page and the tuning view render.
+    Then: Their metric tables carry an export button, the planner headers
+        and the values the export reads.
+    """
+    run_page = _page(router, study_dir["evaluation"])
+    view = _page(router, study_dir["config"])
+
+    for page in (run_page, view):
+        assert 'data-export-mode="shown">Export CSV</button>' in page
+        assert f'data-planner="{POLICY}"' in page
+        assert 'data-value="6.25" data-low="5.0" data-high="7.5"' in page

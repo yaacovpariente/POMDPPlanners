@@ -487,6 +487,55 @@ def experiment_page(experiment: ExperimentView) -> str:
     )
 
 
+def _export_attrs(value, low=None, high=None, best_trial=None) -> str:
+    """The data attributes a value cell carries for the CSV export.
+
+    Written with ``repr`` so the export has the run's full precision, not the
+    four digits the cell shows.
+    """
+    attrs = f' data-value="{value!r}"'
+    if low is not None and high is not None:
+        attrs += f' data-low="{low!r}" data-high="{high!r}"'
+    if best_trial is not None:
+        attrs += f' data-best-trial="{best_trial!r}"'
+    return attrs
+
+
+def _export_buttons(table_id: str, filtered: bool = False) -> str:
+    """The CSV export beside a metric table, for every metric table on the site.
+
+    The CSV is long: one row per (environment, planner, metric) with value,
+    confidence bounds, episodes and, for a tuned planner, the best trial's
+    value. A long table loads into pandas or Excel the same way whatever the
+    metrics and planners were, where a wide one would change shape with them.
+
+    Args:
+        table_id: The table's id.
+        filtered: The table has filters; then the default export follows them
+            and a second button exports everything.
+
+    Returns:
+        HTML for the buttons and the shared script that handles them.
+    """
+    buttons = (
+        f'<button type="button" class="tab" data-export-table="{html(table_id)}" '
+        f'data-export-mode="shown">Export CSV{" (as shown)" if filtered else ""}</button>'
+    )
+    if filtered:
+        buttons += (
+            f'<button type="button" class="tab" data-export-table="{html(table_id)}" '
+            'data-export-mode="all">Export CSV (all data)</button>'
+        )
+    return (
+        f'<div class="table-export">{buttons}</div>'
+        '<script src="/static/table-export.js"></script>'
+    )
+
+
+def _slug(text: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in text)
+
+
 def _metric_table(run: RunView, env: EnvironmentView) -> str:
     per_policy = {p.name: run.metrics_for(env.name, p.name) for p in env.policies}
     names: List[str] = sorted(
@@ -499,7 +548,11 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
     # interval tucked in beside the number, where it reads as part of it.
     head = (
         "<tr><th rowspan='2'>Metric</th>"
-        + "".join(f"<th colspan='2' class='group'>{html(p.name)}</th>" for p in env.policies)
+        + "".join(
+            f"<th colspan='2' class='group' data-col='{i}' data-planner=\"{html(p.name)}\" "
+            f"data-episodes='{len(p.episodes)}'>{html(p.name)}</th>"
+            for i, p in enumerate(env.policies)
+        )
         + "</tr><tr>"
         + "".join("<th>Value</th><th>Confidence interval</th>" for _ in env.policies)
         + "</tr>"
@@ -508,11 +561,11 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
     rows = []
     for name in names:
         cells = [f"<td>{html(name)}</td>"]
-        for policy in env.policies:
+        for column, policy in enumerate(env.policies):
             metrics = per_policy[policy.name]
             value = metrics.get(name)
             if value is None:
-                cells.append('<td class="dim">—</td><td class="dim">—</td>')
+                cells.append(f'<td class="dim" data-col="{column}">—</td><td class="dim">—</td>')
                 continue
             low = metrics.get(name + charts.CI_LOWER_SUFFIX)
             high = metrics.get(name + charts.CI_UPPER_SUFFIX)
@@ -521,11 +574,17 @@ def _metric_table(run: RunView, env: EnvironmentView) -> str:
                 if low is not None and high is not None and high > low
                 else '<span class="dim">—</span>'
             )
-            cells.append(f'<td class="num">{value:.4g}</td><td class="num ci">{interval}</td>')
-        rows.append("<tr>" + "".join(cells) + "</tr>")
+            cells.append(
+                f'<td class="num" data-col="{column}"{_export_attrs(value, low, high)}>'
+                f'{value:.4g}</td><td class="num ci">{interval}</td>'
+            )
+        rows.append(f'<tr data-metric="{html(name)}">' + "".join(cells) + "</tr>")
 
+    table_id = f"metrics-{_slug(run.run_id[:12])}-{_slug(env.name)}"
     return (
-        '<div class="scroll"><table class="metrics">'
+        _export_buttons(table_id)
+        + f'<div class="scroll"><table class="metrics" id="{html(table_id)}" '
+        f'data-env="{html(env.name)}" data-export-name="{html(env.name)}_metrics">'
         f"<thead>{head}</thead><tbody>{''.join(rows)}</tbody></table></div>"
         '<p class="note">Intervals are the ones the run computed, at whatever '
         "confidence level it was configured with; a dash means it reported none.</p>"
@@ -2049,7 +2108,12 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         return min(present) if direction == "minimize" else max(present)
 
     def cell(
-        column: int, value: Optional[float], mark: Optional[float], low=None, high=None
+        column: int,
+        value: Optional[float],
+        mark: Optional[float],
+        low=None,
+        high=None,
+        best_trial=None,
     ) -> str:
         # The value and column ride on the cell, so the planner picker can
         # re-mark the best among the planners left showing.
@@ -2060,8 +2124,9 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             text += f' <span class="ci">({low:.3g} – {high:.3g})</span>'
         best = mark is not None and value == mark
         return (
-            f'<td class="num{" is-best" if best else ""}" data-col="{column}" '
-            f'data-value="{value!r}">{text} <span class="chip chip-ok best-chip">best</span></td>'
+            f'<td class="num{" is-best" if best else ""}" data-col="{column}"'
+            f"{_export_attrs(value, low, high, best_trial)}>"
+            f'{text} <span class="chip chip-ok best-chip">best</span></td>'
         )
 
     def direction_note(direction: Optional[str]) -> str:
@@ -2076,14 +2141,15 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
     reference_mark = best_of(best_trial, reference_direction)
     body.append(
         '<tr class="reference" data-metric="average_return best trial" data-group="outcome"'
-        f' data-direction="{reference_direction or ""}">'
+        f' data-direction="{reference_direction or ""}" data-export-skip>'
         "<td>average_return, best trial"
         '<span class="dim"> — the tuning estimate, for reference</span></td>'
         + "".join(cell(i, v, reference_mark) for i, v in enumerate(best_trial))
         + "</tr>"
     )
     body.append(
-        '<tr data-metric="episodes" data-group="outcome"><td>episodes evaluated</td>'
+        '<tr data-metric="episodes" data-group="outcome" data-export-skip>'
+        "<td>episodes evaluated</td>"
         + "".join(
             f'<td class="num" data-col="{i}">{len(r[3].episodes)}</td>' for i, r in enumerate(rows)
         )
@@ -2099,6 +2165,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
                 mark,
                 m.get(name + charts.CI_LOWER_SUFFIX),
                 m.get(name + charts.CI_UPPER_SUFFIX),
+                rows[i][0].study.best_trial_scores.get(name, (None,))[0],
             )
             for i, m in enumerate(per_planner)
         )
@@ -2108,7 +2175,8 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             f"<td>{html(name)}{direction_note(direction)}</td>{cells}</tr>"
         )
     head = "<th>Metric</th>" + "".join(
-        f'<th class="group" data-col="{i}">'
+        f'<th class="group" data-col="{i}" data-planner="{html(r[3].name)}" '
+        f'data-episodes="{len(r[3].episodes)}">'
         f'<a href="{html(run_url(r[0].run))}">{html(r[3].name)}</a></th>'
         for i, r in enumerate(rows)
     )
@@ -2130,6 +2198,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             for key, label in _GROUP_LABELS
         )
         + '<span class="dim" data-filter-count></span></div>'
+        + _export_buttons(f"compare-table-{compare_anchor(environment)}", filtered=True)
     )
     eval_run, eval_env = rows[0][1], rows[0][2]
     shown = EnvironmentView(
@@ -2143,7 +2212,8 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         f"<h2>Compare Tuned planners on {html(environment)}</h2>"
         + controls
         + '<div class="scroll"><table class="metrics compare" '
-        f'id="compare-table-{html(compare_anchor(environment))}">'
+        f'id="compare-table-{html(compare_anchor(environment))}" '
+        f'data-env="{html(environment)}" data-export-name="{html(environment)}_compare">'
         f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
         '<p class="note">Every metric the evaluation logged, with its confidence interval. '
         '"Best" is marked only where the metric says which way is better. Each planner\'s '
