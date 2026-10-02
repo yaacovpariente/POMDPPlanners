@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from inspect import signature
 from typing import (
@@ -421,6 +421,9 @@ class OptimizedPolicyResult:
         parameters_to_optimize: List of (metric_name, direction) tuples that were optimized
         optimized_metric_values: Dictionary mapping metric names to achieved values
             (None if metric value not found)
+        optimization_metadata: The study's own record -- best trial number and
+            statistics, Pareto trials, trials completed, early stopping -- or
+            None for a result built outside a tuning task.
 
     Raises:
         ValueError: If num_episodes or num_steps are non-positive, if chosen_hyper_parameters
@@ -438,6 +441,12 @@ class OptimizedPolicyResult:
     optimized_metric_values: Dict[
         str, Optional[float]
     ]  # Actual metric values achieved (None if not found)
+    # What the study found beyond the chosen planner: the best trial's number,
+    # scores and statistics, the Pareto trials, how many trials ran and whether
+    # early stopping fired. Left out of equality: it describes the search, not
+    # the result. Kept out of repr too, so a result unpickled from a cache
+    # written before this field existed still prints.
+    optimization_metadata: Optional[Dict[str, Any]] = field(default=None, compare=False, repr=False)
 
     def __post_init__(self) -> None:  # pylint: disable=too-many-branches
         """Validate all parameters at construction time."""

@@ -21,9 +21,10 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 from urllib.parse import unquote, urlparse
 
+import json
 import os
 
-from POMDPPlanners.reporting import pages
+from POMDPPlanners.reporting import pages, tuning
 from POMDPPlanners.reporting.artifacts import media_type_for
 from POMDPPlanners.reporting.scenes import scene_script_file
 from POMDPPlanners.reporting.store import RunIndex
@@ -167,7 +168,23 @@ class Router:
         tail = list(rest[3:])
 
         if not tail:
-            return self._ok(pages.run_page(run))
+            return self._ok(self._run_page(run))
+
+        if tail == ["tuning-chart.json"]:
+            if not tuning.is_tuning_config_run(run):
+                return self._not_found("This run is not a tuning study")
+            body = json.dumps(pages.tuning_chart_data(tuning.load_study(run))).encode("utf-8")
+            return HTTPStatus.OK, "application/json", body
+
+        if tail == ["tuning-chart"]:
+            if not tuning.is_tuning_config_run(run):
+                return self._not_found("This run is not a tuning study")
+            parent = (
+                self.index.run(run.store_index, run.experiment_id, run.parent_run_id)
+                if run.parent_run_id
+                else None
+            )
+            return self._ok(pages.tuning_chart_page(run, tuning.load_study(run), parent))
 
         if tail[0] != "env" or len(tail) < 2:
             return self._not_found("Malformed run URL")
@@ -202,6 +219,36 @@ class Router:
         if artifacts is None:
             return self._not_found(f"No episode {episode_index} for {policy.name}")
         return self._ok(pages.episode_page(run, env, policy, episode_index, artifacts))
+
+    def _run_page(self, run) -> str:
+        """A run's own page: the tuning view for a tuned planner, else the plain one."""
+        parent = (
+            self.index.run(run.store_index, run.experiment_id, run.parent_run_id)
+            if run.parent_run_id
+            else None
+        )
+        experiment = self.index.experiment(run.store_index, run.experiment_id)
+        group = next(
+            (
+                g
+                for g in tuning.group_studies(experiment.runs if experiment else [])
+                if g.study_run is not None and g.study_run.run_id == run.run_id
+            ),
+            None,
+        )
+        if group is not None:
+            return pages.study_page(group)
+        if tuning.is_tuning_config_run(run):
+            study = tuning.load_study(run)
+            evaluation_run = (
+                self.index.run(run.store_index, run.experiment_id, study.evaluation_run_id)
+                if study.evaluation_run_id
+                else None
+            )
+            return pages.tuning_page(
+                run, study, pages.find_evaluation(study, evaluation_run), parent
+            )
+        return pages.run_page(run, self.index.children(run), parent)
 
     def _artifact(self, rest: Sequence[str]) -> Tuple[int, str, Union[bytes, Path]]:
         run = self._lookup_run(rest)

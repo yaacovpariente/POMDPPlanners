@@ -309,8 +309,8 @@ def test_the_chart_builder_hands_over_the_metrics_and_the_choices(router: Router
     status, _, body = _get(router, f"{base}/env/{TRACE_ENV}/chart")
     assert status == HTTPStatus.OK
 
-    start = body.index('<script type="application/json" id="chart-data">') + len(
-        '<script type="application/json" id="chart-data">'
+    start = body.index('<script type="application/json" data-role="data">') + len(
+        '<script type="application/json" data-role="data">'
     )
     data = json.loads(body[start : body.index("</script>", start)])
     assert data["environment"] == TRACE_ENV
@@ -319,9 +319,10 @@ def test_the_chart_builder_hands_over_the_metrics_and_the_choices(router: Router
     assert pft["metrics"]["average_return"] == pytest.approx(-12.5)
     assert pft["metrics"]["average_return" + data["ci"]["lower"]] == pytest.approx(-18.0)
 
-    for control in ("chart-metric", "chart-title", "chart-y", "chart-x", "chart-policies"):
-        assert f'id="{control}"' in body
-    assert 'id="chart-svg"' in body and 'id="chart-png"' in body
+    # Controls are found by role inside the builder, so one page can hold several.
+    assert "data-chart-builder data-read-query" in body
+    for control in ("metric", "title", "y", "x", "policies", "svg", "png"):
+        assert f'data-role="{control}"' in body
     assert "/static/chart-builder.js" in body
 
 

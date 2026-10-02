@@ -169,6 +169,128 @@ a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   letter-spacing: 0;
 }
 .metrics td.ci { color: var(--dim); font-size: 13px; }
+span.ci { color: var(--dim); font-size: 13px; }
+
+/* Tuning view. The chosen trial's row is tinted so it can be found in a table
+   of hundreds; the range bar shows where a chosen value sits in its search
+   range, because a value pinned to an end means the range was too narrow. */
+.trials tr.best td { background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.trials .chip { margin-left: 4px; }
+
+/* Tuning charts. Marks carry a <title>, which the browser shows on hover; the
+   hover rule makes the mark under the pointer obvious in a crowd. */
+.chart-grid { stroke: var(--line); stroke-width: 1; opacity: .6; }
+.chart-line { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.chart-front { stroke: #009E73; stroke-dasharray: 4 3; }
+.chart-marker { stroke: var(--dim); stroke-width: 1; stroke-dasharray: 3 3; }
+.pt circle, .legend-dot { stroke: var(--panel); stroke-width: 1; }
+.pt-trial circle, .legend-dot.pt-trial { fill: #0072B2; fill-opacity: .75; }
+.pt-pareto circle, .legend-dot.pt-pareto { fill: #009E73; }
+.pt-best circle, .legend-dot.pt-best { fill: var(--accent); }
+.pt { cursor: default; }
+.pt:hover circle { r: 6; fill-opacity: 1; stroke: var(--ink); }
+.pt:hover .chart-ci { stroke: var(--ink); stroke-width: 2; }
+.chart-group { margin: 6px 0 14px; }
+table.compare td .chip { margin-left: 4px; }
+.compare-link { font-weight: 600; }
+.metric-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 10px; }
+.metric-filter input[type="search"] {
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.metric-filter label.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
+table.compare tr.reference td { background: var(--raise); }
+.env-filter { margin: 14px 0 4px; }
+.table-export { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin: 6px 0; }
+.inline-builder > .builder, .inline-builder > .note { margin-top: 12px; }
+.metric-filter input[type="checkbox"] { accent-color: var(--accent); }
+.metric-picker { position: relative; margin: 0; border: 0; padding: 0; background: none; }
+.metric-picker > summary {
+  list-style: none;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+}
+.metric-picker > summary::-webkit-details-marker { display: none; }
+.metric-picker > summary::after { content: " ▾"; color: var(--dim); }
+.metric-picker[open] > summary { margin-bottom: 0; }
+.metric-picker > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.metric-picker-panel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 300px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.metric-picker-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+.metric-picker fieldset { border: 0; margin: 0 0 8px; padding: 0; }
+.metric-picker legend {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+/* "Best" lives on the cell as a class, so the planner picker can move it
+   to whichever planner is best among the ones left showing. */
+table.compare .best-chip { display: none; margin-left: 4px; }
+table.compare td.is-best .best-chip { display: inline-block; }
+table.compare td.is-best .cell-value, table.compare td.is-best .ci { font-weight: 700; }
+.metric-picker label.check { display: flex; gap: 6px; align-items: center; padding: 2px 0; font-size: 13px; white-space: nowrap; }
+.chart-group > summary { font-size: 14px; color: var(--ink); font-weight: 600; }
+.pt:focus { outline: none; }
+.pt:focus circle { r: 6; stroke: var(--ink); }
+.chart-tip {
+  position: fixed;
+  z-index: 20;
+  max-width: 360px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--raise);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.legend-line { stroke-width: 2; }
+.range-bar {
+  position: relative;
+  display: inline-block;
+  width: 120px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.range-mark {
+  position: absolute;
+  top: -3px;
+  width: 4px;
+  height: 12px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
 
 /* List mode: one row per item, the same cards laid out along the row so the
    figures still line up down the page. */
