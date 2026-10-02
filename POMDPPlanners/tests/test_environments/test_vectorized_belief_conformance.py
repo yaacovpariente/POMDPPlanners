@@ -91,6 +91,7 @@ from POMDPPlanners.tests.test_environments.test_env_api_conformance import (
     ENV_BUILDERS,
     _random_action,
     _seed_all,
+    _trajectory_key,
 )
 from POMDPPlanners.utils.belief_factory import BeliefType, create_environment_belief
 
@@ -844,6 +845,112 @@ def test_vectorized_belief_is_terminal_exactly_when_the_scalar_belief_is(spec: B
             f"{spec.env_id} ({label} particles): is_terminal_belief is {vectorized_answer} "
             f"for the vectorized belief and {scalar_answer} for the scalar one; "
             f"expected {expected}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Belief factory contract, for every environment
+# ---------------------------------------------------------------------------
+
+# Particles requested from the factory in the contract checks below.
+_FACTORY_PARTICLES = 16
+
+_BELIEF_CLASS_BY_ENV = {spec.env_id: spec.belief_class for spec in BELIEF_SPECS}
+
+
+def _all_env_params() -> List[Any]:
+    return [pytest.param(env_id, builder, id=env_id) for env_id, builder in ENV_BUILDERS]
+
+
+def _assert_particle_belief_shape(env_id: str, env: Environment, belief: Any) -> None:
+    """The belief holds the requested particles, normalised weights and env-shaped samples."""
+    assert (
+        len(belief.particles) == _FACTORY_PARTICLES
+    ), f"{env_id}: asked for {_FACTORY_PARTICLES} particles, got {len(belief.particles)}"
+    weights = np.asarray(belief.normalized_weights, dtype=np.float64)
+    assert weights.shape == (_FACTORY_PARTICLES,)
+    assert np.all(np.isfinite(weights)) and np.isclose(weights.sum(), 1.0)
+    sample = belief.sample()
+    reference = env.initial_state_dist().sample()[0]
+    assert np.shape(sample) == np.shape(reference), (
+        f"{env_id}: a belief sample has shape {np.shape(sample)}, an initial state "
+        f"{np.shape(reference)}"
+    )
+
+
+@pytest.mark.parametrize("env_id,env_builder", _all_env_params())
+def test_default_belief_is_the_registered_one(env_id: str, env_builder: Any) -> None:
+    """With no belief type, the factory builds the environment's registered belief.
+
+    Purpose: Simulations call ``create_environment_belief(env)`` without a
+        type, so the default is what actually runs. The checks above always
+        ask for ``VECTORIZED_PARTICLE`` explicitly; a factory default that
+        drifted back to the slow scalar filter would pass them all. Each
+        environment's own factory test checked its default by hand.
+
+    Given: Every registered environment configuration.
+    When: The factory builds a belief with no ``belief_type``.
+    Then: It is the registered vectorized belief class for an environment in
+        ``BELIEF_SPECS``, and a ``WeightedParticleBelief`` for one declared
+        without a vectorized belief, with the requested particle count.
+
+    Test type: unit
+    """
+    env = env_builder()
+    belief = create_environment_belief(env, n_particles=_FACTORY_PARTICLES)
+    expected = _BELIEF_CLASS_BY_ENV.get(env_id, WeightedParticleBelief.__name__)
+    assert type(belief).__name__ == expected
+    _assert_particle_belief_shape(env_id, env, belief)
+
+
+@pytest.mark.parametrize("env_id,env_builder", _all_env_params())
+def test_particle_belief_type_builds_a_scalar_particle_belief(
+    env_id: str, env_builder: Any
+) -> None:
+    """``BeliefType.PARTICLE`` is available for every environment.
+
+    Purpose: The scalar ``WeightedParticleBelief`` is the reference every
+        vectorized belief is compared against, and the fallback when a
+        vectorized one cannot run a configuration. Each environment's factory
+        test checked that it can still be requested.
+
+    Given: Every registered environment configuration.
+    When: The factory builds a ``PARTICLE`` belief.
+    Then: It is a ``WeightedParticleBelief`` -- not a vectorized one -- with
+        the requested particle count, normalised weights, and samples shaped
+        like an initial state; its particles are initial states.
+
+    Test type: unit
+    """
+    env = env_builder()
+    belief = create_environment_belief(
+        env, belief_type=BeliefType.PARTICLE, n_particles=_FACTORY_PARTICLES
+    )
+    assert isinstance(belief, WeightedParticleBelief)
+    assert not isinstance(belief, VectorizedWeightedParticleBelief)
+    _assert_particle_belief_shape(env_id, env, belief)
+    reference_type = type(_trajectory_key(env.initial_state_dist().sample()[0]))
+    assert all(isinstance(_trajectory_key(p), reference_type) for p in belief.particles)
+
+
+@pytest.mark.parametrize("env_id,env_builder", _all_env_params())
+def test_unsupported_belief_type_is_rejected(env_id: str, env_builder: Any) -> None:
+    """Asking for a belief type an environment does not support raises ``ValueError``.
+
+    Purpose: A factory that silently returns some other belief for a type it
+        does not support makes an experiment labelled "Gaussian mixture" run
+        a particle filter. No environment supports ``GAUSSIAN_MIXTURE``
+        today, so it is the probe; each factory test checked its own env.
+
+    Given: Every registered environment configuration.
+    When: The factory is asked for ``BeliefType.GAUSSIAN_MIXTURE``.
+    Then: It raises ``ValueError``.
+
+    Test type: unit
+    """
+    with pytest.raises(ValueError):
+        create_environment_belief(
+            env_builder(), belief_type=BeliefType.GAUSSIAN_MIXTURE, n_particles=4
         )
 
 

@@ -37,11 +37,15 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+from POMDPPlanners.tests.test_environments._env_config_variants import base_id_of
 from POMDPPlanners.tests.test_environments._sample_distribution_checks import (
     assert_same_distribution,
 )
 from POMDPPlanners.tests.test_environments.test_env_api_conformance import (
     ENV_BUILDERS,
+    REWARD_RANGE_IN_GRID_ONLY_ENVS,
     EnvBuilder,
     _random_action,
     _seed_all,
@@ -521,3 +525,105 @@ def test_kernels_do_not_mutate_their_arguments(env_id: str, env_builder: EnvBuil
             if old != new
         ]
         assert not changed, f"{env_id}.{name} changed its {' and '.join(changed)} argument"
+
+
+# ---------------------------------------------------------------------------
+# random rollout
+# ---------------------------------------------------------------------------
+
+# Depth of the leaf-value rollouts below, and the seeds they start from.
+ROLLOUT_MAX_DEPTH = 10
+_ROLLOUT_SEEDS = (0, 1, 2, 3)
+
+
+class _UniformActionSampler(ActionSampler):
+    """Draws actions the way the harness rollouts do, from a seeded generator."""
+
+    def __init__(self, env: Environment, seed: int = 0):
+        self.env = env
+        self.rng = np.random.default_rng(seed)
+
+    def sample(self, belief_node: Any = None) -> Any:
+        return _random_action(self.env, self.rng)
+
+
+def leaf_rollout(env: Environment, state: Any, depth: int = 0, seed: int = 0) -> float:
+    """The leaf-value rollout a planner runs from ``state``.
+
+    Goes through ``random_rollout_action_sampler``, the entry point the MCTS
+    planners call, so an env with a native ``simulate_random_rollout`` is
+    checked on that and every other env on the Python fallback.
+    """
+    _seed_all(seed)
+    return random_rollout_action_sampler(
+        state=deepcopy(state),
+        depth=depth,
+        action_sampler=_UniformActionSampler(env, seed),
+        environment=env,
+        discount_factor=env.discount_factor,
+        max_depth=ROLLOUT_MAX_DEPTH,
+    )
+
+
+@pytest.mark.parametrize("env_id,env_builder", _params({}))
+def test_random_rollout_returns_zero_at_max_depth(env_id: str, env_builder: EnvBuilder) -> None:
+    """A rollout that starts at the depth limit returns exactly 0.
+
+    Purpose: A planner calls the rollout at whatever depth the tree has
+        reached. At the limit there are no steps left, so any non-zero value
+        is a reward the search never earned. Native rollouts compute the
+        steps left themselves; each env test file checked this for its own
+        override.
+
+    Given: A non-terminal state reached by a short rollout.
+    When: The leaf rollout runs with ``depth == max_depth``, and with
+        ``depth > max_depth``.
+    Then: Both return 0.0.
+
+    Test type: unit
+    """
+    env = env_builder()
+    state = _transitions(env)[0][0]
+    assert leaf_rollout(env, state, depth=ROLLOUT_MAX_DEPTH) == 0.0
+    assert leaf_rollout(env, state, depth=ROLLOUT_MAX_DEPTH + 1) == 0.0
+
+
+@pytest.mark.parametrize("env_id,env_builder", _params({}))
+def test_random_rollout_returns_a_finite_bounded_return(
+    env_id: str, env_builder: EnvBuilder
+) -> None:
+    """A rollout's return is finite and inside what the reward range allows.
+
+    Purpose: The rollout value is added straight into a node's Q estimate.
+        A NaN poisons every ancestor, and a value beyond
+        ``max|reward| * sum(gamma^k)`` means the rollout scored rewards
+        the environment says it cannot pay -- a native kernel whose reward
+        has drifted from the Python one.
+
+    Given: Non-terminal states reached by short rollouts.
+    When: The leaf rollout runs from each, from depth 0.
+    Then: Every return is finite, and when the env declares a reward range,
+        its absolute value is at most ``max(|r_min|, |r_max|)`` times the
+        discounted horizon. The bound is skipped for the light-dark envs
+        whose range is declared over in-grid states only (see
+        ``REWARD_RANGE_IN_GRID_ONLY_ENVS``).
+
+    Test type: integration
+    """
+    env = env_builder()
+    states = [triple[0] for triple in _transitions(env)][: len(_ROLLOUT_SEEDS)]
+    bounded = env.reward_range is not None and base_id_of(env_id) not in (
+        REWARD_RANGE_IN_GRID_ONLY_ENVS
+    )
+    if bounded:
+        horizon = sum(env.discount_factor**k for k in range(ROLLOUT_MAX_DEPTH))
+        limit = max(abs(env.reward_range[0]), abs(env.reward_range[1])) * horizon
+    for state, seed in zip(states, _ROLLOUT_SEEDS):
+        value = leaf_rollout(env, state, seed=seed)
+        assert np.isfinite(value), f"{env_id}: rollout from {state!r} returned {value}"
+        if bounded:
+            assert abs(value) <= limit + 1e-9, (
+                f"{env_id}: rollout from {state!r} returned {value}, beyond the "
+                f"{limit} that reward_range {env.reward_range} allows over "
+                f"{ROLLOUT_MAX_DEPTH} steps"
+            )
