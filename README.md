@@ -252,8 +252,10 @@ for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.9
 api = LocalSimulationsAPI()
 _, stats = api.run_optimize_and_evaluate(
     configs=studies,
-    evaluation_episodes=EVAL_EPISODES, evaluation_steps=NUM_STEPS,
-    optimization_n_jobs=-1, evaluation_n_jobs=-1,  # use every CPU core
+    evaluation_episodes=EVAL_EPISODES,
+    evaluation_steps=NUM_STEPS,
+    optimization_n_jobs=-1,  # use every CPU core
+    evaluation_n_jobs=-1,
     experiment_name="Tuning_RockSample_Push",
     cache_dir_path=Path("results"),
 )
