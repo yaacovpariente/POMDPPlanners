@@ -796,28 +796,90 @@ def test_the_comparison_has_metric_and_planner_pickers(tmp_path: Path):
     assert '<th class="group" data-col="1">' in rocks
 
 
-def test_comparison_and_tuning_view_link_to_the_evaluation_chart_builder(tmp_path: Path):
-    """The comparison block and the tuning view open the run's chart builder.
+def test_each_comparison_block_carries_its_own_chart_builder(tmp_path: Path):
+    """The study page builds charts in place, one builder per environment.
 
     Given: The two-by-two study.
     When: The study page and a tuning view render.
-    Then: Each comparison block and the tuning view's evaluation section link
-        to the evaluation run's chart builder for that environment, and the
-        builder loads the shared figure kit before its own script.
+    Then: Each comparison block holds a closed "Build a chart" section with a
+        builder whose embedded data is that environment's planners; builders
+        are found by role, not page-wide id, so nothing collides; the scripts
+        load once, the shared kit first; the tuning view still links to the
+        standalone builder.
     """
-    router, study_id, configs = _two_by_two_study(tmp_path)
-    study_page = _page(router, study_id)
-    view = _page(router, configs[("Push", "POMCPOW")])
-    rocks = study_page.split('id="compare-Rocks"', 1)[1].split("</section>", 1)[0]
+    # pylint: disable-next=import-outside-toplevel
+    import json as json_module
 
-    builder = rocks.split('data-build-chart href="', 1)[1].split('"', 1)[0]
-    assert builder.endswith("/env/Rocks/chart")
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    view = _page(router, configs[("Push", "POMCPOW")])
+
+    for env in ("Rocks", "Push"):
+        block = page.split(f'id="compare-{env}"', 1)[1].split("</section>", 1)[0]
+        builder = block.split("<summary>Build a chart</summary>", 1)[1]
+        data = json_module.loads(
+            builder.split('<script type="application/json" data-role="data">', 1)[1].split(
+                "</script>", 1
+            )[0]
+        )
+        assert data["environment"] == env
+        assert {p["name"] for p in data["policies"]} == {f"POMCPOW_{env}", f"PFT_DPW_{env}"}
+    assert page.count("data-chart-builder") == 2
+    assert 'id="chart-' not in page
+    assert page.count("/static/chart-builder.js") == 1
+    assert page.index("/static/figure-kit.js") < page.index("/static/chart-builder.js")
     assert "Build a chart from this evaluation" in view and "/env/Push/chart" in view
 
-    status, _, body = router.resolve(builder)
-    page = body.decode("utf-8")
-    assert status == 200
-    assert page.index("/static/figure-kit.js") < page.index("/static/chart-builder.js")
+
+def test_the_study_page_builds_tuning_charts_for_any_planner(tmp_path: Path):
+    """A study-level tuning builder offers every tuned planner and fetches its trials.
+
+    Given: The two-by-two study.
+    When: The study page renders and one planner's builder data is fetched.
+    Then: The closed "Build a tuning chart" section lists the four tuned
+        planners, each with its environment and the URL of its data, and that
+        URL answers with the planner's trial data as JSON.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    import json as json_module
+
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    page = _page(router, study_id)
+    section = page.split("<summary>Build a tuning chart</summary>", 1)[1].split("</details>", 1)[0]
+    experiment = router.index.experiments[0]
+    url = f"/run/0/{experiment.experiment_id}/{configs[('Push', 'PFT_DPW')]}/tuning-chart.json"
+
+    assert section.count("<option value=") >= 4 + 4  # four planners, plus the chart kinds
+    assert f'<option value="{url}" data-env="Push">PFT_DPW_Push on Push</option>' in section
+    status, media_type, body = router.resolve(url)
+    data = json_module.loads(body)
+    assert status == 200 and media_type == "application/json"
+    assert data["title"] == "PFT_DPW_Push on Push"
+
+
+def test_a_study_of_several_environments_has_an_environment_filter(tmp_path: Path, study_dir):
+    """Two or more environments get a filter; everything per environment is tagged.
+
+    Given: The two-by-two study, and the single-environment fixture study.
+    When: Their study pages render.
+    Then: The first has an environment dropdown listing both, and its
+        comparison blocks, planner cards and rows, and tuning-builder choices
+        carry their environment; the second has no filter.
+    """
+    # Its own folder: the fixture study is under tmp_path too, and one index
+    # over both would hold two experiments.
+    router, study_id, _ = _two_by_two_study(tmp_path / "two_envs")
+    page = _page(router, study_id)
+    single = Router(RunIndex([study_dir["root"] / "study"]))
+
+    picker = page.split('data-picker="environment"', 1)[1].split("</details>", 1)[0]
+    assert "Environments (2 of 2)" in picker
+    assert 'data-choice-name="Rocks"' in picker and 'data-choice-name="Push"' in picker
+    assert page.index("data-env-filter") < page.index('id="compare-Rocks"')
+    assert 'section class="env" id="compare-Push" data-env="Push"' in page
+    assert page.count('<a class="card" href="') >= 4
+    assert page.count(' data-env="Rocks"') >= 4  # block, card, row, builder choice
+    assert "data-env-filter" not in _page(single, study_dir["study"])
 
 
 def test_the_diagnostics_chart_builder_serves_the_study(router: Router, study_dir):
@@ -838,7 +900,11 @@ def test_the_diagnostics_chart_builder_serves_the_study(router: Router, study_di
     url = f"/run/0/{experiment.experiment_id}/{study_dir['config']}/tuning-chart"
     status, _, body = router.resolve(url)
     page = body.decode("utf-8")
-    data = json_module.loads(page.split('id="tuning-chart-data">', 1)[1].split("</script>", 1)[0])
+    data = json_module.loads(
+        page.split('<script type="application/json" data-role="data">', 1)[1].split("</script>", 1)[
+            0
+        ]
+    )
 
     assert f'href="{url}"' in view
     assert status == 200

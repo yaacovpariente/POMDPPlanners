@@ -224,6 +224,8 @@ class ListingItem:
         tags: Short labels, shown as pills on a card and joined in the table.
         footnote: A path or id, set in monospace and last.
         thumb: Optional thumbnail HTML.
+        env: The environment the item belongs to, as ``data-env`` on its card
+            and row, so a page's environment filter can hide it.
     """
 
     title: str
@@ -234,6 +236,7 @@ class ListingItem:
     tags: Sequence[str] = ()
     footnote: str = ""
     thumb: str = ""
+    env: str = ""
 
 
 def _listing(
@@ -261,7 +264,9 @@ def _listing(
     cards = []
     for item in items:
         cards.append(
-            f'<a class="card{" has-thumb" if item.thumb else ""}" href="{html(item.href)}">'
+            f'<a class="card{" has-thumb" if item.thumb else ""}" href="{html(item.href)}"'
+            + (f' data-env="{html(item.env)}"' if item.env else "")
+            + ">"
             + item.thumb
             + f'<h3 class="card-title">{html(item.title)}{" " + item.chip if item.chip else ""}</h3>'
             + (f'<p class="note">{html(item.subtitle)}</p>' if item.subtitle else "")
@@ -305,7 +310,8 @@ def _listing(
             cells.append(f'<td>{", ".join(html(t) for t in item.tags) or "—"}</td>')
         if has_footnote:
             cells.append(f"<td><code>{html(item.footnote)}</code></td>")
-        body.append("<tr>" + "".join(cells) + "</tr>")
+        env_attr = f' data-env="{html(item.env)}"' if item.env else ""
+        body.append(f"<tr{env_attr}>" + "".join(cells) + "</tr>")
 
     return (
         '<div class="listing">'
@@ -770,21 +776,6 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
     Returns:
         A complete HTML document.
     """
-    data = {
-        "environment": env.name,
-        "policies": [
-            {"name": policy.name, "metrics": run.metrics_for(env.name, policy.name)}
-            for policy in env.policies
-        ],
-        "ci": {
-            "lower": charts.CI_LOWER_SUFFIX,
-            "upper": charts.CI_UPPER_SUFFIX,
-        },
-    }
-    # In a <script type="application/json"> the only sequence that can end the
-    # element early is "</", so that is what is escaped.
-    payload = json.dumps(data).replace("</", "<\\/")
-
     return layout(
         f"Chart · {env.name}",
         [
@@ -802,37 +793,72 @@ def chart_builder_page(run: RunView, env: EnvironmentView) -> str:
         f'<a href="{html(run_url(run))}">{html(run.run_name)}</a>. '
         "Everything plotted is a metric this run logged; the error bars are its "
         "confidence intervals.</p>"
-        '<div class="builder">'
-        '<form class="builder-controls" id="chart-form">'
+        + chart_builder_html(run, env, read_query=True)
+        + '<script src="/static/figure-kit.js"></script>'
+        '<script src="/static/chart-builder.js"></script>',
+    )
+
+
+def chart_builder_html(run: RunView, env: EnvironmentView, read_query: bool = False) -> str:
+    """One planner-comparison chart builder: its controls, canvas and data.
+
+    Controls are found by role within the builder's own container, not by
+    page-wide id, so a page can carry one builder per environment. The page
+    must load ``figure-kit.js`` and ``chart-builder.js`` after it.
+
+    Args:
+        run: The run whose metrics to plot.
+        env: The environment whose planners to plot.
+        read_query: Start from ``?planners=`` and ``?metric=`` in the address,
+            for the standalone builder page.
+
+    Returns:
+        HTML for the builder.
+    """
+    data = {
+        "environment": env.name,
+        "policies": [
+            {"name": policy.name, "metrics": run.metrics_for(env.name, policy.name)}
+            for policy in env.policies
+        ],
+        "ci": {
+            "lower": charts.CI_LOWER_SUFFIX,
+            "upper": charts.CI_UPPER_SUFFIX,
+        },
+    }
+    # In a <script type="application/json"> the only sequence that can end the
+    # element early is "</", so that is what is escaped.
+    payload = json.dumps(data).replace("</", "<\\/")
+    return (
+        f'<div class="builder" data-chart-builder{" data-read-query" if read_query else ""}>'
+        '<form class="builder-controls" data-role="form">'
         "<fieldset><legend>Planners</legend>"
         '<p class="note">Tick the ones to plot; the box under each is the name it carries in the figure.</p>'
-        '<div id="chart-policies"></div></fieldset>'
-        '<label>Metric <select id="chart-metric"></select></label>'
-        '<label>Title <input id="chart-title" type="text" autocomplete="off"></label>'
-        '<label>Value axis <input id="chart-y" type="text" autocomplete="off"></label>'
-        '<label>Planner axis <input id="chart-x" type="text" autocomplete="off"></label>'
-        '<label>Style <select id="chart-style">'
+        '<div data-role="policies"></div></fieldset>'
+        '<label>Metric <select data-role="metric"></select></label>'
+        '<label>Title <input data-role="title" type="text" autocomplete="off"></label>'
+        '<label>Value axis <input data-role="y" type="text" autocomplete="off"></label>'
+        '<label>Planner axis <input data-role="x" type="text" autocomplete="off"></label>'
+        '<label>Style <select data-role="style">'
         '<option value="mono">Paper, mono</option>'
         '<option value="colour">Paper, colour</option>'
         '<option value="slide">Slide, dark</option>'
         "</select></label>"
-        '<label>Orientation <select id="chart-orient">'
+        '<label>Orientation <select data-role="orient">'
         '<option value="vertical">Vertical bars</option>'
         '<option value="horizontal">Horizontal bars</option>'
         "</select></label>"
-        '<label class="check"><input id="chart-errors" type="checkbox" checked> '
+        '<label class="check"><input data-role="errors" type="checkbox" checked> '
         "Show confidence intervals</label>"
-        '<label class="check"><input id="chart-values" type="checkbox" checked> '
+        '<label class="check"><input data-role="values" type="checkbox" checked> '
         "Print the value on each bar</label>"
         '<div class="builder-actions">'
-        '<button type="button" id="chart-svg" class="tab">Download SVG</button>'
-        '<button type="button" id="chart-png" class="tab">Download PNG</button>'
+        '<button type="button" data-role="svg" class="tab">Download SVG</button>'
+        '<button type="button" data-role="png" class="tab">Download PNG</button>'
         "</div></form>"
-        '<figure class="builder-canvas" id="chart-output"></figure>'
+        '<figure class="builder-canvas" data-role="output"></figure>'
+        f'<script type="application/json" data-role="data">{payload}</script>'
         "</div>"
-        f'<script type="application/json" id="chart-data">{payload}</script>'
-        '<script src="/static/figure-kit.js"></script>'
-        '<script src="/static/chart-builder.js"></script>',
     )
 
 
@@ -2102,9 +2128,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
             f"{label}</label>"
             for key, label in _GROUP_LABELS
         )
-        + '<span class="dim" data-filter-count></span>'
-        f'<a class="tab" data-build-chart href="{html(chart_url(rows[0][1], rows[0][2].name))}">'
-        "Build a chart</a></div>"
+        + '<span class="dim" data-filter-count></span></div>'
     )
     eval_run, eval_env = rows[0][1], rows[0][2]
     shown = EnvironmentView(
@@ -2113,7 +2137,8 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         artifacts=eval_env.artifacts,
     )
     return (
-        f'<section class="env" id="{html(compare_anchor(environment))}">'
+        f'<section class="env" id="{html(compare_anchor(environment))}" '
+        f'data-env="{html(environment)}">'
         f"<h2>Compare Tuned planners on {html(environment)}</h2>"
         + controls
         + '<div class="scroll"><table class="metrics compare" '
@@ -2123,6 +2148,11 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         '"Best" is marked only where the metric says which way is better. Each planner\'s '
         f'name opens its tuning view. <a href="{html(env_url(eval_run, eval_env.name))}">All '
         "of this environment's evaluation</a>.</p>"
+        # The builder opens from what the table shows: the page script ticks
+        # the planners and picks the metric the table has left visible.
+        + '<details class="inline-builder" data-inline-builder><summary>Build a chart</summary>'
+        + chart_builder_html(eval_run, shown)
+        + "</details>"
         + _comparison_charts(eval_run, shown)
         + _returns_chart(shown, "Discounted return per evaluation episode")
         + "</section>"
@@ -2137,7 +2167,7 @@ def _comparison_section(group: tuning.StudyGroup) -> str:
         for environment, env_rows in rows.items()
         if len(env_rows) > 1
     )
-    return blocks + ('<script src="/static/metric-filter.js"></script>' if blocks else "")
+    return blocks
 
 
 def study_page(group: tuning.StudyGroup) -> str:
@@ -2162,13 +2192,61 @@ def study_page(group: tuning.StudyGroup) -> str:
                 ("Early stopping", html(_early_stopping_text(config.study))),
                 *_config_scores(config),
             ],
+            env=config.study.environment_name or config.study.environment or "",
         )
         for config in group.configs
     ]
     evaluation = group.evaluation_run
     params = run_parameters(run.params)
     comparison = _comparison_section(group)
-    several_environments = len(_study_environments(group)) > 1
+    environments = _study_environments(group)
+    several_environments = len(environments) > 1
+    tuning_builder = (
+        '<details class="inline-builder"><summary>Build a tuning chart</summary>'
+        '<p class="note">A figure of one tuned planner\'s trials. Its data is fetched when '
+        "you pick the planner.</p>"
+        + tuning_chart_builder_html(
+            configs=[
+                (
+                    study_label(config.study),
+                    tuning_chart_json_url(config.run),
+                    config.study.environment_name or config.study.environment or "",
+                )
+                for config in group.configs
+            ]
+        )
+        + "</details>"
+        if group.configs
+        else ""
+    )
+    environment_filter = (
+        '<div class="metric-filter env-filter" data-env-filter>'
+        + _picker(
+            "environment",
+            "Environments",
+            [
+                (
+                    "",
+                    "".join(
+                        f'<label class="check"><input type="checkbox" '
+                        f'data-choice-name="{html(name)}" checked> {html(name)}</label>'
+                        for name in environments
+                    ),
+                )
+            ],
+            len(environments),
+        )
+        + '<span class="dim">Show only the environments you pick; the choice is kept '
+        "for this page.</span></div>"
+        if several_environments
+        else ""
+    )
+    scripts = (
+        '<script src="/static/figure-kit.js"></script>'
+        '<script src="/static/chart-builder.js"></script>'
+        '<script src="/static/tuning-chart-builder.js"></script>'
+        '<script src="/static/metric-filter.js"></script>'
+    )
     return layout(
         title,
         [
@@ -2187,13 +2265,16 @@ def study_page(group: tuning.StudyGroup) -> str:
             else ""
         )
         + "</p>"
+        + environment_filter
         # With several environments the comparison is what the page is for,
         # so it comes first; with one, the planners lead and it follows.
         + (comparison if several_environments else "")
         + "<h2>Tuned planners</h2>"
         + _listing(items, "No planner in this study finished tuning.")
         + ("" if several_environments else comparison)
-        + params,
+        + tuning_builder
+        + params
+        + scripts,
     )
 
 
@@ -2278,7 +2359,6 @@ def tuning_chart_page(
     Returns:
         A complete HTML document.
     """
-    payload = json.dumps(tuning_chart_data(study)).replace("</", "<\\/")
     title = study_label(study)
     crumbs: List[Tuple[str, Optional[str]]] = [
         ("Experiments", "/"),
@@ -2287,51 +2367,96 @@ def tuning_chart_page(
     if parent is not None:
         crumbs.append(("Tuning study", run_url(parent)))
     crumbs += [(title, run_url(run)), ("Chart", None)]
-    kinds = [
-        ("objective-history", "Objective over the trials"),
-        ("parameter-slice", "Objective against a parameter"),
-        ("parameter-history", "Parameter over the trials"),
-        ("trial-durations", "Trial durations"),
-    ]
-    if len(study.objectives) == 2:
-        kinds.insert(3, ("pareto-front", "Pareto front"))
     return layout(
         f"Chart · {title}",
         crumbs,
         "<h1>Build a chart</h1>"
         f'<p class="note">Tuning of <a href="{html(run_url(run))}">{html(title)}</a>. '
         "Everything plotted is a trial the study recorded.</p>"
-        '<div class="builder">'
-        '<form class="builder-controls" id="tuning-chart-form">'
-        '<label>Chart <select id="tc-kind">'
+        + tuning_chart_builder_html(data=tuning_chart_data(study))
+        + '<script src="/static/figure-kit.js"></script>'
+        '<script src="/static/tuning-chart-builder.js"></script>',
+    )
+
+
+def tuning_chart_json_url(run: RunView) -> str:
+    """URL of one tuned planner's builder data, fetched by a study page's builder."""
+    return run_url(run) + "/tuning-chart.json"
+
+
+def tuning_chart_builder_html(
+    data: Optional[Dict[str, object]] = None,
+    configs: Sequence[Tuple[str, str, str]] = (),
+) -> str:
+    """One tuning-diagnostics builder: its controls and canvas, and its data.
+
+    Either the data is embedded, for a single tuned planner, or the builder
+    offers ``configs`` to choose from and fetches the chosen one's data. The
+    page must load ``figure-kit.js`` and ``tuning-chart-builder.js`` after it.
+
+    Args:
+        data: One study's :func:`tuning_chart_data`, to embed.
+        configs: ``(label, data URL, environment)`` per tuned planner, for a
+            builder that fetches.
+
+    Returns:
+        HTML for the builder.
+    """
+    kinds = [
+        ("objective-history", "Objective over the trials"),
+        ("parameter-slice", "Objective against a parameter"),
+        ("parameter-history", "Parameter over the trials"),
+        ("pareto-front", "Pareto front"),
+        ("trial-durations", "Trial durations"),
+    ]
+    if data is not None and len(data.get("objectives") or []) != 2:  # type: ignore[arg-type]
+        kinds = [k for k in kinds if k[0] != "pareto-front"]
+    chooser = (
+        '<label>Tuned planner <select data-role="config">'
+        + "".join(
+            f'<option value="{html(url)}" data-env="{html(env)}">{html(label)}</option>'
+            for label, url, env in configs
+        )
+        + "</select></label>"
+        if configs
+        else ""
+    )
+    embedded = (
+        '<script type="application/json" data-role="data">'
+        + json.dumps(data).replace("</", "<\\/")
+        + "</script>"
+        if data is not None
+        else ""
+    )
+    return (
+        '<div class="builder" data-tuning-chart-builder>'
+        '<form class="builder-controls" data-role="form">'
+        + chooser
+        + '<label>Chart <select data-role="kind">'
         + "".join(f'<option value="{k}">{html(label)}</option>' for k, label in kinds)
         + "</select></label>"
-        '<label data-for="objective">Objective <select id="tc-objective"></select></label>'
-        '<label data-for="parameter">Parameter <select id="tc-parameter"></select></label>'
-        '<label>Title <input id="tc-title" type="text" autocomplete="off"></label>'
-        '<label>Vertical axis <input id="tc-y" type="text" autocomplete="off"></label>'
-        '<label>Horizontal axis <input id="tc-x" type="text" autocomplete="off"></label>'
-        '<label>Style <select id="tc-style">'
+        '<label data-for="objective">Objective <select data-role="objective"></select></label>'
+        '<label data-for="parameter">Parameter <select data-role="parameter"></select></label>'
+        '<label>Title <input data-role="title" type="text" autocomplete="off"></label>'
+        '<label>Vertical axis <input data-role="y" type="text" autocomplete="off"></label>'
+        '<label>Horizontal axis <input data-role="x" type="text" autocomplete="off"></label>'
+        '<label>Style <select data-role="style">'
         '<option value="mono">Paper, mono</option>'
         '<option value="colour">Paper, colour</option>'
         '<option value="slide">Slide, dark</option>'
         "</select></label>"
-        '<label class="check" data-for="best-line"><input id="tc-best-line" type="checkbox" '
-        "checked> Best-so-far line</label>"
-        '<label class="check" data-for="stop"><input id="tc-stop" type="checkbox" checked> '
+        '<label class="check" data-for="best-line"><input data-role="best-line" '
+        'type="checkbox" checked> Best-so-far line</label>'
+        '<label class="check" data-for="stop"><input data-role="stop" type="checkbox" checked> '
         "Early-stop marker</label>"
-        '<label class="check"><input id="tc-highlight" type="checkbox" checked> '
+        '<label class="check"><input data-role="highlight" type="checkbox" checked> '
         "Mark the chosen and Pareto trials</label>"
-        '<label class="check"><input id="tc-legend" type="checkbox" checked> Legend</label>'
+        '<label class="check"><input data-role="legend" type="checkbox" checked> Legend</label>'
         '<div class="builder-actions">'
-        '<button type="button" id="tc-svg" class="tab">Download SVG</button>'
-        '<button type="button" id="tc-png" class="tab">Download PNG</button>'
+        '<button type="button" data-role="svg" class="tab">Download SVG</button>'
+        '<button type="button" data-role="png" class="tab">Download PNG</button>'
         "</div></form>"
-        '<figure class="builder-canvas" id="tc-output"></figure>'
-        "</div>"
-        f'<script type="application/json" id="tuning-chart-data">{payload}</script>'
-        '<script src="/static/figure-kit.js"></script>'
-        '<script src="/static/tuning-chart-builder.js"></script>',
+        '<figure class="builder-canvas" data-role="output"></figure>' + embedded + "</div>"
     )
 
 

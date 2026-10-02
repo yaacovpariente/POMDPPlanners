@@ -124,8 +124,8 @@
     var count = control.querySelector("[data-filter-count]");
     var rows = Array.prototype.slice.call(table.querySelectorAll("tbody tr[data-metric]"));
     var columnCells = Array.prototype.slice.call(table.querySelectorAll("[data-col]"));
-    var builder = control.querySelector("[data-build-chart]");
-    var builderBase = builder ? builder.getAttribute("href") : null;
+    var section = control.closest("section");
+    var inline = section ? section.querySelector("[data-inline-builder]") : null;
 
     var metrics = picker(
       control.querySelector('[data-picker="metric"]'),
@@ -178,9 +178,17 @@
       });
       remark(rows, hiddenColumns);
 
-      // The chart builder opens with what the table is showing: its planners,
-      // and its first metric row that is a logged metric.
-      if (builder) {
+      metrics.refresh();
+      planners.refresh();
+      count.textContent = shown === rows.length ? "" : shown + " of " + rows.length + " metrics";
+    }
+
+    /* The block's chart builder opens with what the table is showing: its
+       ticked planners, and its first metric row that is a logged metric. */
+    if (inline) {
+      inline.addEventListener("toggle", function () {
+        var root = inline.querySelector("[data-chart-builder]");
+        if (!inline.open || !root || !root.chartBuilder) return;
         var names = planners.choices.filter(function (c) { return c.checked; }).map(function (c) {
           return c.getAttribute("data-choice-name");
         });
@@ -188,19 +196,48 @@
           var name = row.getAttribute("data-metric");
           return !row.hidden && name !== "episodes" && name !== "average_return best trial";
         })[0];
-        var query = new URLSearchParams();
-        if (names.length) query.set("planners", names.join(","));
-        if (first) query.set("metric", first.getAttribute("data-metric"));
-        builder.setAttribute("href", builderBase + (query.toString() ? "?" + query : ""));
-      }
-
-      metrics.refresh();
-      planners.refresh();
-      count.textContent = shown === rows.length ? "" : shown + " of " + rows.length + " metrics";
+        root.chartBuilder.select(names, first ? first.getAttribute("data-metric") : null);
+      });
     }
 
     box.addEventListener("input", apply);
     toggles.forEach(function (toggle) { toggle.addEventListener("change", apply); });
+    apply();
+  });
+
+  /* The study page's environment filter: an environment left unticked hides
+     its comparison block, its tuned planners in the list, and its planners
+     in the tuning-chart builder's choice. */
+  document.querySelectorAll("[data-env-filter]").forEach(function (control) {
+    var element = control.querySelector('[data-picker="environment"]');
+    if (!element) return;
+    var environments = picker(element, "pomdp-env-filter:" + window.location.pathname, apply);
+
+    function apply() {
+      var hidden = {};
+      environments.choices.forEach(function (choice) {
+        if (!choice.checked) hidden[choice.getAttribute("data-choice-name")] = true;
+      });
+      document.querySelectorAll("section[data-env], .listing [data-env]").forEach(function (item) {
+        item.hidden = !!hidden[item.getAttribute("data-env")];
+      });
+      document.querySelectorAll('select[data-role="config"]').forEach(function (select) {
+        var options = Array.prototype.slice.call(select.options);
+        options.forEach(function (option) {
+          option.hidden = option.disabled = !!hidden[option.getAttribute("data-env")];
+        });
+        var current = select.selectedOptions[0];
+        if (current && current.disabled) {
+          var next = options.filter(function (o) { return !o.disabled; })[0];
+          if (next) {
+            select.value = next.value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+        }
+      });
+      environments.refresh();
+    }
+
     apply();
   });
 })();

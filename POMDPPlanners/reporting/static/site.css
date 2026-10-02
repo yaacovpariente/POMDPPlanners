@@ -207,6 +207,8 @@ table.compare td .chip { margin-left: 4px; }
 }
 .metric-filter label.check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
 table.compare tr.reference td { background: var(--raise); }
+.env-filter { margin: 14px 0 4px; }
+.inline-builder > .builder, .inline-builder > .note { margin-top: 12px; }
 .metric-filter input[type="checkbox"] { accent-color: var(--accent); }
 .metric-picker { position: relative; margin: 0; border: 0; padding: 0; background: none; }
 .metric-picker > summary {

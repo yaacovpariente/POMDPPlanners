@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
 from urllib.parse import unquote, urlparse
 
+import json
 import os
 
 from POMDPPlanners.reporting import pages, tuning
@@ -168,6 +169,12 @@ class Router:
 
         if not tail:
             return self._ok(self._run_page(run))
+
+        if tail == ["tuning-chart.json"]:
+            if not tuning.is_tuning_config_run(run):
+                return self._not_found("This run is not a tuning study")
+            body = json.dumps(pages.tuning_chart_data(tuning.load_study(run))).encode("utf-8")
+            return HTTPStatus.OK, "application/json", body
 
         if tail == ["tuning-chart"]:
             if not tuning.is_tuning_config_run(run):
