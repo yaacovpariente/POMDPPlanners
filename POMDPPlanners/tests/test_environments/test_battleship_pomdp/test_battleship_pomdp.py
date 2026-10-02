@@ -502,32 +502,6 @@ class TestStepInfoChannels:
 class TestSerializationAndIdentity:
     """Round-tripping and the cache key."""
 
-    def test_round_trip_rebuilds_an_equal_environment(self, env: BattleshipPOMDP) -> None:
-        """Purpose: to_dict output must be something the constructor accepts.
-
-        Given: the default environment
-        When: it is serialized and rebuilt
-        Then: the rebuild is equal and shares its config_id
-
-        Test type: unit
-        """
-        rebuilt = BattleshipPOMDP.from_dict(env.to_dict())
-        assert rebuilt == env
-        assert rebuilt.config_id == env.config_id
-
-    def test_config_id_separates_different_geometries(self) -> None:
-        """Purpose: two different boards must not share a result cache entry.
-
-        Given: the default fleet and the same fleet with touching forbidden
-        When: their config ids are compared
-        Then: they differ
-
-        Test type: unit
-        """
-        permissive = BattleshipPOMDP(discount_factor=0.99, allow_adjacent_ships=True)
-        strict = BattleshipPOMDP(discount_factor=0.99, allow_adjacent_ships=False)
-        assert permissive.config_id != strict.config_id
-
     def test_config_id_survives_a_pickle_round_trip(self, env: BattleshipPOMDP) -> None:
         """Purpose: the layout table is dropped on pickling and rebuilt lazily.
 

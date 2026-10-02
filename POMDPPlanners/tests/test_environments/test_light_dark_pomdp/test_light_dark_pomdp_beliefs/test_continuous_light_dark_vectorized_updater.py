@@ -207,18 +207,6 @@ class TestBatchObservationLogLikelihood:
 
 
 class TestConfigId:
-    def test_config_id_deterministic(self, updater):
-        """Test that config_id is deterministic.
-
-        Purpose: Validates reproducibility of config_id.
-
-        Given: An updater.
-        When: config_id is called twice.
-        Then: The same ID is returned.
-
-        Test type: unit
-        """
-        assert updater.config_id == updater.config_id
 
     def test_config_id_differs_for_different_params(self, env):
         """Test that config_id changes when parameters differ.

@@ -112,50 +112,6 @@ def pomdp():
 class TestContinuousLightDarkPOMDPEquality:
     """Test suite for ContinuousLightDarkPOMDP equality comparisons."""
 
-    def test_same_discount_factor(
-        self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
-    ):
-        """Test that ContinuousLightDarkPOMDPs with same discount factor are equal."""
-        other_env = ContinuousLightDarkPOMDPDiscreteActions(
-            discount_factor=0.95,
-            **continuous_light_dark_discrete_actions_pinned_kwargs(
-                state_transition_cov_matrix=np.eye(2),
-                observation_cov_matrix=np.eye(2),
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                goal_state_radius=1.5,
-                beacon_radius=1.0,
-                obstacle_radius=1.5,
-            ),
-        )
-        assert base_light_dark_environment == other_env
-        assert other_env == base_light_dark_environment  # Test symmetry
-
-    def test_different_discount_factor(
-        self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
-    ):
-        """Test that ContinuousLightDarkPOMDPs with different discount factors are not equal."""
-        other_env = ContinuousLightDarkPOMDPDiscreteActions(
-            discount_factor=0.8,
-            **continuous_light_dark_discrete_actions_pinned_kwargs(
-                state_transition_cov_matrix=np.eye(2),
-                observation_cov_matrix=np.eye(2),
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                goal_state_radius=1.5,
-                beacon_radius=1.0,
-                obstacle_radius=1.5,
-            ),
-        )
-        assert base_light_dark_environment != other_env
-        assert other_env != base_light_dark_environment  # Test symmetry
-
     def test_different_covariance_matrices(
         self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
     ):
@@ -473,31 +429,6 @@ def test_reward_range_is_the_bound_over_in_grid_states():
     expected_max2 = -3.0 + 100.0
 
     assert env2.reward_range == (expected_min2, expected_max2)
-
-
-def test_compute_metrics_empty_histories_is_rejected():
-    """Test that scoring an empty batch of episodes raises.
-
-    Purpose: Validates that an empty batch is rejected rather than scored. A
-        zero task_completion_rate over no episodes is indistinguishable from a run
-        in which the agent never reached the goal
-
-    Given: A ContinuousLightDarkPOMDPDiscreteActions environment and an empty
-        history list
-    When: compute_metrics is called
-    Then: A ValueError naming the environment is raised
-
-    Test type: unit
-    """
-    env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        **continuous_light_dark_discrete_actions_pinned_kwargs(
-            goal_state_radius=1.5, obstacle_radius=1.5
-        ),
-    )
-
-    with pytest.raises(ValueError, match="received no episode histories"):
-        env.compute_metrics([])
 
 
 def test_compute_metrics():

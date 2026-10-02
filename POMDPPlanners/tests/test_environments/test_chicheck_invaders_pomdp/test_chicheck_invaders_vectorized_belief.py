@@ -127,20 +127,6 @@ class TestChicheckInvadersVectorizedUpdater:
 
 
 class TestChicheckInvadersVectorizedBelief:
-    def test_default_belief_is_the_vectorized_one(self, env):
-        """Test that the factory hands back the batched belief by default.
-
-        Purpose: Registration is what makes the updater reachable.
-
-        Given: A Chicheck Invaders environment.
-        When: The top-level factory is asked for its belief.
-        Then: The vectorized belief comes back.
-
-        Test type: unit
-        """
-        assert isinstance(
-            create_environment_belief(env, n_particles=32), ChicheckInvadersVectorizedBelief
-        )
 
     def test_scalar_filter_still_available(self, env):
         """Test that the scalar filter is still selectable.

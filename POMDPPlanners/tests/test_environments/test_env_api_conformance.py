@@ -22,9 +22,9 @@ to this file, were tested for at most a handful of environments:
   call must still return a usable number rather than a silent bogus one.
 * serialization — ``to_dict`` / ``from_dict`` must round-trip and
   ``config_id`` must survive the trip and be stable across two identical
-  constructions. ``test_environment_serialization.py`` hand-writes one
-  block per env, so a new env gets zero coverage until someone
-  remembers to add one; the parametrized test here closes that gap.
+  constructions; a pickled or deep-copied env must stay the same env.
+  These used to be hand-written per env, so a new env got no coverage
+  until someone remembered to add a block.
 * ``step_info`` — must consume no randomness (a single draw there shifts
   the RNG stream for every later transition and observation), and must
   tolerate the terminal bookkeeping step's ``action=None,
@@ -51,7 +51,9 @@ turns green automatically the moment the fix lands.
 """
 
 import importlib
+import pickle
 import random
+import re
 from copy import deepcopy
 from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple
@@ -146,6 +148,9 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
 
 EnvBuilder = Callable[[], Environment]
 
+# What config_id must look like: config_to_id returns a SHA-256 hex digest.
+_SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
 
 def _build_tiger(**overrides: Any) -> TigerPOMDP:
     return TigerPOMDP(discount_factor=0.95, **tiger_pinned_kwargs(**overrides))
@@ -167,6 +172,16 @@ def _build_mountain_car(**overrides: Any) -> MountainCarPOMDP:
 
 def _build_push(**overrides: Any) -> PushPOMDP:
     return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(**overrides))
+
+
+def _build_push_with_failed_actions() -> PushPOMDP:
+    """Push where one action in five is replaced by a random other one.
+
+    The pinned configuration never fails an action, and the sweep flips only
+    enum and bool switches, so without this entry no harness reaches the
+    failed-action branch of the transition, its density or its batch path.
+    """
+    return _build_push(transition_error_prob=0.2)
 
 
 def _build_continuous_push(**overrides: Any) -> ContinuousPushPOMDP:
@@ -331,6 +346,7 @@ HAND_WRITTEN_ENV_BUILDERS: List[Tuple[str, Callable[..., Environment]]] = [
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
     ("PacManPOMDP", _build_pacman),
     ("PushPOMDP", _build_push),
+    ("PushPOMDP[transition_error_prob=0.2]", _build_push_with_failed_actions),
     ("RockSamplePOMDP", _build_rock_sample),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
     ("SanityPOMDP", _build_sanity),
@@ -596,15 +612,27 @@ def _discrete_action_env_params() -> List[pytest.param]:  # type: ignore[valid-t
     return discrete
 
 
+# Probability that a random ContinuousLaserTag action fires the tag. High
+# enough that a 15-step rollout almost always tags at least once, so the
+# tag branch -- the reward, the terminal check, the failed-tag penalty -- is
+# on every path the harnesses compare.
+_TAG_PROBABILITY = 0.3
+
+
 def _sample_action(env: Environment) -> Any:
     """Return one valid action for ``env``.
 
-    For discrete-action envs we use the first enumerated action; for
-    continuous-action envs we hand-pick a 2-D unit vector, which is the
-    action shape the three continuous envs in the registry all accept.
+    Discrete-action envs use the first enumerated action. Continuous envs
+    take a 2-D unit vector, except ContinuousLaserTag, whose action is
+    ``[dx, dy, tag_flag]``: it gets the same move with the tag off. A move
+    is what reaches a dangerous area, which the recorded
+    ``REWARD_BATCH_WITHOUT_NEXT_STATE_BROKEN_ENVS`` gap needs; a tag holds
+    the robot still. The tag is exercised through ``_random_action``.
     """
     if isinstance(env, DiscreteActionsEnvironment):
         return env.get_actions()[0]
+    if isinstance(env, ContinuousLaserTagPOMDP):
+        return np.array([1.0, 0.0, 0.0])
     if env.space_info.action_space is SpaceType.CONTINUOUS:
         return np.array([1.0, 0.0])
     raise NotImplementedError(
@@ -615,16 +643,20 @@ def _sample_action(env: Environment) -> Any:
 def _random_action(env: Environment, rng: np.random.Generator) -> Any:
     """Draw one valid action for ``env`` from ``rng``.
 
-    Discrete envs draw uniformly from ``get_actions()``; continuous envs
-    get a random 2-D unit vector, the action shape every continuous env
-    in the registry accepts.
+    Discrete envs draw uniformly from ``get_actions()``. Continuous envs get
+    a random 2-D unit vector; ContinuousLaserTag appends its tag flag, set
+    with probability ``_TAG_PROBABILITY``.
     """
     if isinstance(env, DiscreteActionsEnvironment):
         actions = env.get_actions()
         return actions[int(rng.integers(len(actions)))]
     vector = rng.normal(size=2)
     norm = float(np.linalg.norm(vector))
-    return vector / norm if norm > 0.0 else np.array([1.0, 0.0])
+    direction = vector / norm if norm > 0.0 else np.array([1.0, 0.0])
+    if isinstance(env, ContinuousLaserTagPOMDP):
+        tag_flag = 1.0 if rng.random() < _TAG_PROBABILITY else 0.0
+        return np.append(direction, tag_flag)
+    return direction
 
 
 def _trajectory_key(value: Any) -> Any:
@@ -1371,10 +1403,10 @@ def test_reward_requires_next_state_is_honored(env_builder: EnvBuilder) -> None:
 def test_serialization_round_trip_preserves_config_id(env_builder: EnvBuilder) -> None:
     """``from_dict(to_dict(env))`` rebuilds an env with the same ``config_id``.
 
-    Purpose: ``test_environment_serialization.py`` hand-writes one block
-        per environment, so a newly added env has zero serialization
-        coverage until someone remembers to add another block. This
-        parametrized round-trip closes that gap for every env in the
+    Purpose: The round trip used to be tested by one hand-written block
+        per environment, so a newly added env had no serialization
+        coverage until someone remembered to add another block. This
+        parametrized round-trip covers every env in the
         registry. ``config_id`` is the identity experiment caches and
         result tables key on, so a round-trip that changes it makes a
         reloaded env look like a different environment.
@@ -1382,8 +1414,10 @@ def test_serialization_round_trip_preserves_config_id(env_builder: EnvBuilder) -
     Given: A freshly built environment.
     When: It is serialized with ``to_dict`` and rebuilt with
         ``from_dict``.
-    Then: The rebuild succeeds, produces an instance of the same class,
-        and carries the original's ``config_id`` and discount factor.
+    Then: The dict records the env's ``config_id``; the rebuild succeeds,
+        produces an instance of the same class, carries the original's
+        ``config_id`` and discount factor, and steps exactly like the
+        original under one seed.
 
     Test type: integration
     """
@@ -1392,10 +1426,15 @@ def test_serialization_round_trip_preserves_config_id(env_builder: EnvBuilder) -
     rebuilt = type(env).from_dict(data)
 
     assert isinstance(rebuilt, type(env))
+    assert data["config_id"] == env.config_id
     assert rebuilt.discount_factor == env.discount_factor
     assert rebuilt.config_id == env.config_id, (
         f"{type(env).__name__} config_id changed across a to_dict/from_dict round trip: "
         f"{env.config_id} -> {rebuilt.config_id}"
+    )
+    assert _rollout(rebuilt, seed=4) == _rollout(env, seed=4), (
+        f"{type(env).__name__} rebuilt by from_dict(to_dict(env)) steps differently "
+        "from the original under the same seed"
     )
 
 
@@ -1443,7 +1482,7 @@ def test_equality_agrees_with_hash_and_config_id(env_builder: EnvBuilder) -> Non
     Given: Two environments built from the same builder with identical
         pinned kwargs.
     When: They are compared, hashed, and their ``config_id`` read.
-    Then: They are equal, their hashes match, and their ``config_id``
+    Then: They are equal in both directions, their hashes match, and their ``config_id``
         values match — all three agreeing.
 
     Test type: integration
@@ -1454,6 +1493,7 @@ def test_equality_agrees_with_hash_and_config_id(env_builder: EnvBuilder) -> Non
         f"{type(first).__name__} instances built from identical config are not equal; "
         "__eq__ is comparing something that is not configuration"
     )
+    assert second == first
     assert hash(first) == hash(second)
     assert first.config_id == second.config_id
 
@@ -1501,7 +1541,8 @@ def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) 
     Given: Two environments from the same builder differing only in
         ``discount_factor``.
     When: They are compared.
-    Then: They are not equal, and their ``config_id`` values differ.
+    Then: They are not equal in either direction, and their ``config_id``
+        values differ.
 
     Test type: integration
     """
@@ -1512,6 +1553,7 @@ def test_inequality_survives_a_changed_discount_factor(env_builder: EnvBuilder) 
     assert first != second, (
         f"{type(first).__name__} compares equal to an env with a different " "discount factor"
     )
+    assert second != first
     assert first.config_id != second.config_id
 
 
@@ -1529,7 +1571,8 @@ def test_inequality_survives_a_changed_config_sub_object(env_builder: EnvBuilder
     Given: Two environments from the same builder, with one scalar
         attribute inside a config sub-object perturbed on the second.
     When: They are compared.
-    Then: They are not equal, and their ``config_id`` values differ —
+    Then: They are not equal in either direction, and their ``config_id``
+        values differ.—
         equality and the config hash agreeing on the difference.
 
     Test type: integration
@@ -1620,6 +1663,273 @@ def test_config_id_survives_using_the_environment(env_builder: EnvBuilder) -> No
         f"{type(env).__name__}.config_id changed from {before} to {env.config_id} after "
         "the env was used; a lazily populated attribute is leaking into the config hash"
     )
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_config_id_is_a_sha256_hex_digest(env_builder: EnvBuilder) -> None:
+    """``config_id`` is a 64-character lowercase hex digest.
+
+    Purpose: ``config_id`` names cache directories and keys result tables.
+        Each env test file used to check the format for its own env; an env
+        that overrides ``config_id`` -- or a ``config_to_id`` change -- would
+        break every cache path, so the format is checked for all of them.
+
+    Given: A freshly built environment.
+    When: ``config_id`` is read.
+    Then: It is a string of 64 lowercase hexadecimal characters.
+
+    Test type: unit
+    """
+    config_id = env_builder().config_id
+    assert isinstance(config_id, str)
+    assert _SHA256_HEX.fullmatch(config_id), f"config_id is not a SHA-256 hex digest: {config_id!r}"
+
+
+# ---------------------------------------------------------------------------
+# pickle and deepcopy
+# ---------------------------------------------------------------------------
+
+
+def _pickle_copy(value: Any) -> Any:
+    return pickle.loads(pickle.dumps(value))
+
+
+_COPIERS = [
+    pytest.param(_pickle_copy, id="pickle"),
+    pytest.param(deepcopy, id="deepcopy"),
+]
+
+
+@pytest.mark.parametrize("copier", _COPIERS)
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_copy_of_a_used_environment_keeps_its_identity_and_behaviour(
+    env_builder: EnvBuilder, copier: Callable[[Any], Any]
+) -> None:
+    """A pickled or deep-copied env, taken after use, is the same env.
+
+    Purpose: Parallel simulation ships environments to worker processes by
+        pickle, and planners deep-copy them. Several environments hold native
+        kernel caches that they drop in ``__getstate__`` and rebuild lazily; a
+        cache that survives the copy pointing at the wrong object, or one
+        that is not rebuilt, changes the model in the worker. The env test
+        files checked this for a dozen environments by hand, each on a fresh
+        env whose caches were still empty.
+
+    Given: An environment that has already been rolled forward, so its
+        lazily built caches are populated.
+    When: It is copied with ``pickle`` or ``deepcopy``, together with one of
+        its states and one of its observations.
+    Then: The copy compares equal to the original, has the same
+        ``config_id``, steps exactly like the original under one seed, and
+        the copied state and observation equal the originals.
+
+    Test type: integration
+    """
+    env = env_builder()
+    _rollout(env, seed=0)
+
+    clone = copier(env)
+
+    assert clone == env, f"{type(env).__name__} does not compare equal to its own copy"
+    assert env == clone
+    assert clone.config_id == env.config_id
+    assert _rollout(clone, seed=5) == _rollout(env, seed=5), (
+        f"{type(env).__name__} copied after use steps differently from the original "
+        "under the same seed"
+    )
+
+    state, action, next_state = _one_transition(env, seed=6)
+    observation = env.sample_observation(next_state=next_state, action=action)
+    assert _trajectory_key(copier(state)) == _trajectory_key(state)
+    assert env.is_equal_observation(copier(observation), observation)
+
+
+# ---------------------------------------------------------------------------
+# hash / equality: unequal values stay apart
+# ---------------------------------------------------------------------------
+
+
+# Rollouts that supply observations for the pairwise hash check.
+_HASH_SEPARATION_SEEDS = (0, 1, 2)
+_HASH_SEPARATION_STEPS = 6
+
+
+def _rollout_observations(env: Environment) -> List[Any]:
+    """Observations emitted along short seeded random rollouts."""
+    observations: List[Any] = []
+    for seed in _HASH_SEPARATION_SEEDS:
+        _seed_all(seed)
+        action_rng = np.random.default_rng(seed)
+        state = env.initial_state_dist().sample()[0]
+        for _ in range(_HASH_SEPARATION_STEPS):
+            if env.is_terminal(state):
+                break
+            action = _random_action(env, action_rng)
+            state, observation, _ = env.sample_next_step(state, action)
+            observations.append(observation)
+    return observations
+
+
+@pytest.mark.parametrize("env_builder", _hash_observation_env_params())
+def test_hash_observation_separates_unequal_observations(env_builder: EnvBuilder) -> None:
+    """Two observations hash alike exactly when ``is_equal_observation`` says they are equal.
+
+    Purpose: Tree planners key observation children by ``hash_observation``.
+        ``test_hash_observation_consistent_with_equality`` checks that equal
+        observations share a key; this checks the other half. Two different
+        observations that share a key are merged into one child, so the
+        planner conditions one branch on an observation it never received.
+
+    Given: Observations emitted along short seeded random rollouts.
+    When: Every pair is compared with ``is_equal_observation`` and hashed.
+    Then: Each pair's keys are equal if and only if the pair is equal.
+
+    Test type: integration
+    """
+    env = env_builder()
+    observations = _rollout_observations(env)
+    keys = [env.hash_observation(observation) for observation in observations]
+    for i, first in enumerate(observations):
+        for j in range(i + 1, len(observations)):
+            equal = bool(env.is_equal_observation(first, observations[j]))
+            assert (keys[i] == keys[j]) == equal, (
+                f"{type(env).__name__}: is_equal_observation says {equal} but the hash keys "
+                f"{'differ' if equal else 'collide'} for {first!r} and {observations[j]!r}"
+            )
+
+
+def _continuous_action_env_params() -> List[pytest.param]:  # type: ignore[valid-type]
+    """Param list filtered to envs whose actions are not enumerated."""
+    return [
+        pytest.param(builder, id=env_id)
+        for env_id, builder in ENV_BUILDERS
+        if not isinstance(builder(), DiscreteActionsEnvironment)
+    ]
+
+
+@pytest.mark.parametrize("env_builder", _continuous_action_env_params())
+def test_hash_action_separates_distinct_continuous_actions(env_builder: EnvBuilder) -> None:
+    """Distinct continuous actions hash to distinct keys.
+
+    Purpose: Progressive-widening planners (POMCPOW, PFT-DPW) key each
+        sampled action's child by ``hash_action``. The discrete-action test
+        covers enumerated action sets; for a continuous env two different
+        sampled actions that share a key would be merged into one child.
+
+    Given: A continuous-action environment and a handful of random actions.
+    When: Each is hashed.
+    Then: The keys are pairwise distinct.
+
+    Test type: integration
+    """
+    env = env_builder()
+    rng = np.random.default_rng(0)
+    actions = [_random_action(env, rng) for _ in range(8)]
+    keys = {env.hash_action(action) for action in actions}
+    assert len(keys) == len(
+        actions
+    ), f"{type(env).__name__}.hash_action collided across {len(actions)} distinct actions"
+
+
+# ---------------------------------------------------------------------------
+# metrics over a list of histories
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_compute_metrics_rejects_an_empty_history_list(env_builder: EnvBuilder) -> None:
+    """``compute_metrics([])`` raises rather than reporting a metric over nothing.
+
+    Purpose: A metric averaged over no episodes is invented. The base class
+        rejects an empty list, but environments with a bespoke
+        ``compute_metrics`` reimplement the guard, and
+        ``test_step_info_migration`` checks it only for environments that
+        declare metric specs.
+
+    Given: A freshly built environment.
+    When: ``compute_metrics([])`` is called.
+    Then: It raises ``ValueError`` saying it received no episode histories.
+
+    Test type: unit
+    """
+    env = env_builder()
+    with pytest.raises(ValueError, match="received no episode histories"):
+        env.compute_metrics([])
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_compute_metrics_produces_exactly_the_declared_names(env_builder: EnvBuilder) -> None:
+    """``compute_metrics`` produces the names ``get_metric_names`` declares, in that order.
+
+    Purpose: ``test_declared_metric_names_are_emitted`` checks that no
+        declared name is missing. A produced name that is not declared is
+        the other half: hyperparameter search never offers it, and result
+        tables keyed on the declared list drop it. The env test files
+        checked this both ways, each for its own environment.
+
+    Given: A short seeded random rollout packaged as one ``History``.
+    When: ``compute_metrics([history])`` is evaluated.
+    Then: The produced names equal ``get_metric_names()``, in order.
+
+    Test type: integration
+    """
+    env = env_builder()
+    history = _rollout_history(env, seed=3)
+    produced = [metric.name for metric in env.compute_metrics([history])]
+    assert produced == list(env.get_metric_names())
+
+
+# ---------------------------------------------------------------------------
+# observation_log_probability output shape
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("env_builder", _all_env_params())
+def test_observation_log_probability_returns_one_value_per_observation(
+    env_builder: EnvBuilder,
+) -> None:
+    """``observation_log_probability`` returns a 1-D array, one entry per observation.
+
+    Purpose: The base class documents a ``(N,)`` result. Every caller in
+        the harnesses reads entry ``[0]`` of a one-observation call, so a
+        result of the wrong length -- or a scalar -- passes them. Particle
+        filters score several candidate observations at once and index the
+        result by position.
+
+        An empty observation list is not checked: no caller passes one, and
+        about half the environments reject it (a shape check on the stacked
+        array) rather than returning ``(0,)``.
+
+    Given: One transition and three observations sampled from its next state.
+    When: ``observation_log_probability`` scores the three together.
+    Then: The result has shape ``(3,)``, its entries match one-at-a-time
+        calls, and none is NaN.
+
+    Test type: unit
+    """
+    env = env_builder()
+    _, action, next_state = _one_transition(env, seed=2)
+    observations = [env.sample_observation(next_state=next_state, action=action) for _ in range(3)]
+
+    together = np.asarray(
+        env.observation_log_probability(
+            next_state=next_state, action=action, observations=observations
+        ),
+        dtype=np.float64,
+    )
+    assert together.shape == (3,)
+    assert not np.any(np.isnan(together))
+    one_at_a_time = [
+        float(
+            np.asarray(
+                env.observation_log_probability(
+                    next_state=next_state, action=action, observations=[observation]
+                )
+            ).ravel()[0]
+        )
+        for observation in observations
+    ]
+    np.testing.assert_allclose(together, one_at_a_time, rtol=1e-9, atol=1e-9)
 
 
 # ---------------------------------------------------------------------------

@@ -18,6 +18,8 @@ terminal state.
 It states no rule about what a terminal state *should* do. Environments
 differ -- some absorb, some keep moving, some pay a reward after the end --
 and each is free to. What must hold is that an environment's own paths agree.
+The one exception is the leaf-value rollout: a planner asks a terminal leaf
+for its value, and a rollout from there must earn nothing.
 
 Terminal states come from
 :mod:`~POMDPPlanners.tests.test_environments._terminal_states`: found by
@@ -44,6 +46,10 @@ from POMDPPlanners.tests.test_environments._terminal_states import (
     probe_terminal_transitions,
     terminal_states,
     terminal_transitions,
+)
+from POMDPPlanners.tests.test_environments.test_env_kernel_conformance import (
+    ROLLOUT_MAX_DEPTH,
+    leaf_rollout,
 )
 from POMDPPlanners.tests.test_environments.test_env_api_conformance import (
     ENV_BUILDERS,
@@ -446,4 +452,37 @@ def test_reward_batch_agrees_with_reward_on_the_step_into_a_terminal_state(
     for transition in transitions:
         _assert_reward_batch_matches_reward(
             env, [transition.state], transition.action, next_sources=[transition.terminal]
+        )
+
+
+# ---------------------------------------------------------------------------
+# random rollout from a terminal state
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("env_id,env_builder", _params({}))
+def test_random_rollout_from_a_terminal_state_returns_zero(
+    env_id: str, env_builder: EnvBuilder
+) -> None:
+    """A leaf rollout from a terminal state earns nothing.
+
+    Purpose: A tree leaf can hold a terminal state, and the planner still
+        asks it for a rollout value. The episode is over there, so any reward
+        the rollout collects is value the agent can never receive -- it pulls
+        the search toward or away from ending the episode for no reason. Native
+        rollout kernels test termination themselves, apart from ``is_terminal``.
+
+    Given: The terminal states ``terminal_states`` supplies.
+    When: The leaf rollout runs from each, from depth 0.
+    Then: It returns 0.0.
+
+    Test type: integration
+    """
+    env = env_builder()
+    terminal, _ = _terminal_and_live(env_id, env)
+    for state in terminal:
+        value = leaf_rollout(env, state)
+        assert value == 0.0, (
+            f"{env_id}: a {ROLLOUT_MAX_DEPTH}-step rollout from the terminal state "
+            f"{state!r} returned {value}"
         )

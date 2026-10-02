@@ -84,35 +84,6 @@ class TestRockSampleState:
         assert isinstance(state, np.ndarray)
         assert len(state) == 4  # 2 for robot pos + 2 for rocks
 
-    def test_state_validation_invalid_robot_pos(self):
-        """Test state validation with invalid robot position.
-
-        Purpose: Validates proper error handling for malformed robot positions
-
-        Given: Invalid robot position (not tuple of two integers)
-        When: create_rock_sample_state is called
-        Then: Function handles the input (numpy array creation doesn't validate types)
-
-        Test type: unit
-        """
-        # Numpy arrays accept various inputs, validation happens at usage level
-        # These no longer raise errors during creation
-        pass
-
-    def test_state_validation_invalid_rocks(self):
-        """Test state validation with invalid rock states.
-
-        Purpose: Validates proper error handling for malformed rock states
-
-        Given: Invalid rock states (not tuple)
-        When: create_rock_sample_state is called
-        Then: Function handles the input (numpy array creation doesn't validate types)
-
-        Test type: unit
-        """
-        # Numpy arrays accept various inputs, validation happens at usage level
-        pass
-
     def test_state_equality(self):
         """Test state equality comparison.
 

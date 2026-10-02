@@ -92,36 +92,6 @@ class TestSanityPOMDPInitialization:
 class TestSanityPOMDPEquality:
     """Test suite for SanityPOMDP equality comparisons."""
 
-    def test_same_environment_equality(self, sanity_pomdp):
-        """Test that identical environments are equal.
-
-        Purpose: Validates equality comparison for same environment
-
-        Given: Objects with same or different configurations
-        When: Equality comparison is performed
-        Then: Objects are correctly identified as equal or unequal
-
-        Test type: unit
-        """
-        other_env = SanityPOMDP(discount_factor=0.95)
-        assert sanity_pomdp == other_env
-        assert other_env == sanity_pomdp  # Test symmetry
-
-    def test_different_discount_factor(self, sanity_pomdp):
-        """Test that environments with different discount factors are not equal.
-
-        Purpose: Validates that environment equality comparison correctly identifies different discount factors
-
-        Given: SanityPOMDP with discount_factor=0.95 and another with discount_factor=0.8
-        When: Equality comparison is performed
-        Then: Environments are not equal, confirming discount factor sensitivity
-
-        Test type: unit
-        """
-        other_env = SanityPOMDP(discount_factor=0.8)
-        assert sanity_pomdp != other_env
-        assert other_env != sanity_pomdp  # Test symmetry
-
     def test_different_debug_mode(self, sanity_pomdp):
         """Test that environments with different debug modes are not equal.
 
@@ -156,34 +126,6 @@ class TestSanityPOMDPEquality:
 class TestSanityPOMDPConfigId:
     """Test suite for SanityPOMDP config_id functionality."""
 
-    def test_config_id_consistency(self, sanity_pomdp):
-        """Test that config_id is consistent for identical environments.
-
-        Purpose: Validates that SanityPOMDP config_id generates consistent identifiers for identical configurations
-
-        Given: Two SanityPOMDP environments with identical discount_factor=0.95 and debug=False
-        When: Config IDs are generated for both environments
-        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
-
-        Test type: configuration
-        """
-        other_env = SanityPOMDP(discount_factor=0.95)
-        assert sanity_pomdp.config_id == other_env.config_id
-
-    def test_config_id_different_discount_factor(self, sanity_pomdp):
-        """Test that config_id changes with different discount factors.
-
-        Purpose: Validates that SanityPOMDP config_id generates different identifiers for different discount factors
-
-        Given: Two SanityPOMDP environments with different discount factors (0.95 vs 0.8)
-        When: Config IDs are generated for both environments
-        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
-
-        Test type: configuration
-        """
-        other_env = SanityPOMDP(discount_factor=0.8)
-        assert sanity_pomdp.config_id != other_env.config_id
-
     def test_config_id_different_debug_mode(self, sanity_pomdp):
         """Test that config_id changes with different debug modes.
 
@@ -197,37 +139,6 @@ class TestSanityPOMDPConfigId:
         """
         other_env = SanityPOMDP(discount_factor=0.95, debug=True)
         assert sanity_pomdp.config_id != other_env.config_id
-
-    def test_config_id_format(self, sanity_pomdp):
-        """Test that config_id is a valid SHA-256 hash.
-
-        Purpose: Validates that SanityPOMDP config_id generates properly formatted SHA-256 hash identifiers
-
-        Given: A SanityPOMDP environment with specific configuration
-        When: Config ID is generated for the environment
-        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
-
-        Test type: configuration
-        """
-        config_id = sanity_pomdp.config_id
-        assert isinstance(config_id, str)
-        assert len(config_id) == 64  # SHA-256 hash length
-        assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
-
-    def test_config_id_deterministic(self, sanity_pomdp):
-        """Test that config_id is deterministic (same input always produces same output).
-
-        Purpose: Validates that SanityPOMDP config_id generates deterministic identifiers for identical configurations
-
-        Given: A SanityPOMDP environment with specific configuration
-        When: Config ID is generated multiple times for the same environment
-        Then: All generated config_ids are identical, demonstrating deterministic behavior
-
-        Test type: configuration
-        """
-        config_id1 = sanity_pomdp.config_id
-        config_id2 = sanity_pomdp.config_id
-        assert config_id1 == config_id2
 
 
 class TestSanityPOMDPActions:
@@ -628,24 +539,6 @@ class TestSanityPOMDPModels:
         assert isinstance(dist, SanityInitialObservationDist)
 
 
-class TestSanityPOMDPTerminal:
-    """Test suite for SanityPOMDP terminal state detection."""
-
-    def test_is_terminal(self, sanity_pomdp):
-        """Test that no states are terminal.
-
-        Purpose: Validates that SanityPOMDP correctly identifies that no states are terminal
-
-        Given: A SanityPOMDP environment and states [0, 1]
-        When: is_terminal method is called for each state
-        Then: All states return False, confirming that SanityPOMDP has no terminal states
-
-        Test type: unit
-        """
-        for state in [0, 1]:
-            assert not sanity_pomdp.is_terminal(state)
-
-
 class TestSanityPOMDPObservationEquality:
     """Test suite for SanityPOMDP observation equality."""
 
@@ -720,21 +613,6 @@ class TestSanityPOMDPSampleNextStep:
 
 class TestSanityPOMDPMetrics:
     """Test suite for SanityPOMDP compute_metrics functionality."""
-
-    def test_compute_metrics_empty_histories(self, sanity_pomdp):
-        """Test metrics computation with empty histories.
-
-        Purpose: Validates that an empty batch is rejected rather than scored,
-            even for an environment that declares no metrics of its own
-
-        Given: A SanityPOMDP environment and empty history list []
-        When: compute_metrics method is called with empty histories
-        Then: A ValueError naming the environment is raised
-
-        Test type: unit
-        """
-        with pytest.raises(ValueError, match="received no episode histories"):
-            sanity_pomdp.compute_metrics([])
 
     def test_compute_metrics_with_histories(self, sanity_pomdp):
         """Test metrics computation with sample histories.

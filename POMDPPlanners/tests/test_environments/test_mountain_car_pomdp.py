@@ -9,7 +9,6 @@ This module tests the MountainCar POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import copy
 import random
 
 import numpy as np
@@ -738,36 +737,6 @@ class TestMountainCarPOMDPEquality:
     Test type: unit
     """
 
-    def test_same_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with same discount factor are equal.
-
-        Purpose: Validates that environment equality comparison works correctly for identical configurations
-
-        Given: Two MountainCarPOMDP environments with identical discount_factor=0.95
-        When: Equality comparison is performed
-        Then: Both environments are equal, confirming symmetry of equality relation
-
-        Test type: unit
-        """
-        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
-        assert base_mountain_car_environment == other_env
-        assert other_env == base_mountain_car_environment  # Test symmetry
-
-    def test_different_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with different discount factors are not equal.
-
-        Purpose: Validates that environment equality comparison correctly identifies different configurations
-
-        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8
-        When: Equality comparison is performed
-        Then: Environments are not equal, confirming symmetry of inequality relation
-
-        Test type: unit
-        """
-        other_env = MountainCarPOMDP(discount_factor=0.8, **mountain_car_pinned_kwargs())
-        assert base_mountain_car_environment != other_env
-        assert other_env != base_mountain_car_environment  # Test symmetry
-
     def test_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that MountainCarPOMDPs with different parameters are not equal.
 
@@ -868,21 +837,6 @@ class TestMountainCarPOMDPEquality:
         delattr(other_env, "cov_matrix")
         assert base_mountain_car_environment != other_env
 
-    def test_deep_copy_equality(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that a deep copy of MountainCarPOMDP is equal to original.
-
-        Purpose: Validates that deep copying preserves environment equality
-
-        Given: MountainCarPOMDP environment and its deep copy
-        When: Equality comparison is performed between original and copy
-        Then: Both environments are equal, confirming deep copy preserves all attributes
-
-        Test type: unit
-        """
-        copied_env = copy.deepcopy(base_mountain_car_environment)
-        assert copied_env == base_mountain_car_environment
-        assert base_mountain_car_environment == copied_env  # Test symmetry
-
 
 class TestMountainCarPOMDPConfigId:
     """Test that config_id changes with different configurations.
@@ -895,36 +849,6 @@ class TestMountainCarPOMDPConfigId:
 
     Test type: configuration
     """
-
-    def test_config_id_consistency(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is consistent for identical environments.
-
-        Purpose: Validates that config_id generates consistent identifiers for identical configurations
-
-        Given: Two MountainCarPOMDP environments with identical parameters
-        When: Config IDs are generated for both environments
-        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
-
-        Test type: configuration
-        """
-        other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
-        assert base_mountain_car_environment.config_id == other_env.config_id
-
-    def test_config_id_different_discount_factor(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
-        """Test that config_id changes with different discount factor.
-
-        Purpose: Validates that config_id generates different identifiers for different discount factors
-
-        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8
-        When: Config IDs are generated for both environments
-        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
-
-        Test type: configuration
-        """
-        other_env = MountainCarPOMDP(discount_factor=0.8, **mountain_car_pinned_kwargs())
-        assert base_mountain_car_environment.config_id != other_env.config_id
 
     def test_config_id_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that config_id changes with different parameters.
@@ -964,37 +888,6 @@ class TestMountainCarPOMDPConfigId:
         other_env = MountainCarPOMDP(discount_factor=0.95, **mountain_car_pinned_kwargs())
         other_env.gravity = 0.003  # Different from 0.0025
         assert base_mountain_car_environment.config_id != other_env.config_id
-
-    def test_config_id_format(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is a valid SHA-256 hash.
-
-        Purpose: Validates that config_id generates properly formatted SHA-256 hash identifiers
-
-        Given: MountainCarPOMDP environment with specific configuration
-        When: Config ID is generated for the environment
-        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
-
-        Test type: configuration
-        """
-        config_id = base_mountain_car_environment.config_id
-        assert isinstance(config_id, str)
-        assert len(config_id) == 64  # SHA-256 hash length
-        assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
-
-    def test_config_id_deterministic(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-
-        Purpose: Validates that config_id generates deterministic identifiers for identical configurations
-
-        Given: MountainCarPOMDP environment with specific configuration
-        When: Config ID is generated multiple times for the same environment
-        Then: All generated config_ids are identical, demonstrating deterministic behavior
-
-        Test type: configuration
-        """
-        config_id1 = base_mountain_car_environment.config_id
-        config_id2 = base_mountain_car_environment.config_id
-        assert config_id1 == config_id2
 
 
 def test_get_metric_names():

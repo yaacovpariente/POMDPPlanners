@@ -23,8 +23,6 @@ from POMDPPlanners.core.environment.vectorized_generative_model import (
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
-    ObservationModelType,
-    RewardModelType,
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model import (
     ContinuousLightDarkVectorizedModel,
@@ -279,62 +277,6 @@ def test_reward_hazard_expectation_matches_native() -> None:
     env_mean = float(np.mean(env.reward_batch(batch, np.array([1.0, 0.0]), next_states=batch)))
     model_mean = float(model.rewards(_tensor(batch), _action_indices(20000), _tensor(batch)).mean())
     assert abs(env_mean - model_mean) < 0.1
-
-
-def test_unsupported_reward_model_raises() -> None:
-    """Constructing on an unsupported reward model is rejected.
-
-    Purpose: Validates the scope guard on reward model type
-
-    Given: An env configured with the distance-decayed hazard reward model
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    other = ContinuousLightDarkPOMDP(
-        discount_factor=0.95,
-        is_obstacle_hit_terminal=False,
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-    )
-    with pytest.raises(NotImplementedError):
-        ContinuousLightDarkVectorizedModel(other)
-
-
-def test_unsupported_observation_model_raises() -> None:
-    """Constructing on an unsupported observation model is rejected.
-
-    Purpose: Validates the scope guard on observation model type
-
-    Given: An env configured with the no-observation-in-dark model
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    other = ContinuousLightDarkPOMDP(
-        discount_factor=0.95,
-        is_obstacle_hit_terminal=False,
-        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
-    )
-    with pytest.raises(NotImplementedError):
-        ContinuousLightDarkVectorizedModel(other)
-
-
-def test_default_hazard_terminal_config_raises() -> None:
-    """The default draw-coupled hazard-terminal config is rejected.
-
-    Purpose: Validates the scope guard on the hazard-terminal absorbing slot
-
-    Given: An env left at the default is_obstacle_hit_terminal=True
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    other = ContinuousLightDarkPOMDP(discount_factor=0.95)
-    with pytest.raises(NotImplementedError):
-        ContinuousLightDarkVectorizedModel(other)
 
 
 def test_observation_keys_are_deterministic_and_discriminating() -> None:
