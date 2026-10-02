@@ -188,16 +188,87 @@ the chart as an image, and playing every episode at once with Live.
 
 https://github.com/user-attachments/assets/3b305863-5180-454d-bb47-0a9dd13d76cf
 
-For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
-accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
-best configuration to evaluation automatically.
-
 Long-running experiments can report progress to Slack and a local progress
 database, including detection of crashed or stalled runs — set
 `SLACK_WEBHOOK_URL` in your environment and notifications are picked up
 automatically. See
 [`NotificationConfig`](POMDPPlanners/simulations/simulations_deployment/run_progress/config.py)
 for details.
+
+### Parameter tuning
+
+`LocalSimulationsAPI.run_optimize_and_evaluate` tunes each planner with an
+Optuna study, then runs every tuned planner again on fresh episodes. The fresh
+run matters: the best tuning score is the luckiest of many noisy trials, so it
+overstates how good the chosen parameters are.
+
+The example below tunes POMCPOW and PFT-DPW on two environments, RockSample
+and Push, and compares the tuned planners on each. The search ranges come from
+`PlannersHyperparamConfigs`, each trial is scored on average return and task
+completion rate, and early stopping ends a study once its best trials stop
+improving. Each planner's name carries its environment, because the evaluation
+requires planner names to be unique across environments.
+Save it as `tune_planners.py` and run `python tune_planners.py`.
+
+```python
+from pathlib import Path
+
+from POMDPPlanners.environments import PushPOMDP, RockSamplePOMDP
+from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
+from POMDPPlanners.configs.experiment_configs import AverageReturnParameterToOptimizeMapper
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    EarlyStoppingConfig, HyperParameterRunParams)
+from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+N_TRIALS = 2            # at most this many Optuna trials per planner
+EPISODES_PER_TRIAL = 2  # episodes that score one trial
+EVAL_EPISODES = 4       # fresh episodes for each tuned planner
+NUM_STEPS = 30          # step limit per episode
+
+configs = PlannersHyperparamConfigs(discount_factor=0.95)
+studies = []
+for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.95)):
+    belief = create_environment_belief(env, n_particles=200)
+    sampler = DiscreteActionSampler(env.get_actions())
+    for planner in (
+        configs.pomcpow_config(env, sampler, name=f"POMCPOW_{env.name}", time_out_in_seconds=1),
+        configs.pft_dpw_config(env, sampler, name=f"PFT_DPW_{env.name}", time_out_in_seconds=1),
+    ):
+        studies.append(HyperParameterRunParams(
+            environment=env, belief=belief, hyper_param_planner_config=planner,
+            num_episodes=EPISODES_PER_TRIAL, num_steps=NUM_STEPS, n_trials=N_TRIALS,
+            parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
+            early_stopping=EarlyStoppingConfig(patience=100, min_trials=50),
+        ))
+
+api = LocalSimulationsAPI()
+_, stats = api.run_optimize_and_evaluate(
+    configs=studies,
+    evaluation_episodes=EVAL_EPISODES, evaluation_steps=NUM_STEPS,
+    optimization_n_jobs=-1, evaluation_n_jobs=-1,  # use every CPU core
+    experiment_name="Tuning_RockSample_Push",
+    cache_dir_path=Path("results"),
+)
+print(stats[["environment", "policy", "average_return", "task_completion_rate"]])
+```
+
+These constants are the quick setting we ran: 2 trials of 2 episodes per
+planner and 4 evaluation episodes, which takes about three minutes. Early
+stopping cannot fire that early, so every trial runs. For a real study raise
+them, for example to `N_TRIALS = 300`, `EPISODES_PER_TRIAL = 128` and
+`EVAL_EPISODES = 100`. That allows up to 38,400 tuning episodes per planner and
+takes hours, and early stopping then decides how many trials actually run.
+
+In `pomdp-report serve results`, the `Tuning_RockSample_Push` experiment shows
+the whole study as one card. Its page has a "Compare Tuned planners" block for
+each environment, listing every evaluation metric with its confidence interval
+and filters for metrics, planners and environments. Each tuned planner opens a
+tuning view with its trials, diagnostic charts and evaluation episodes, and
+both pages can build a figure and download it as SVG, PNG or CSV. These pages
+need the results-site changes from
+[#318](https://github.com/yaacovpariente/POMDPPlanners/pull/318).
 
 ## Tutorial Notebooks
 
