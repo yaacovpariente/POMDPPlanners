@@ -378,6 +378,10 @@ VARIANT_BELIEF_OVERRIDES: Dict[str, Dict[str, Any]] = {
     "DiscreteLightDarkPOMDP[observation_model_type=NO_OBS_IN_DARK]": _light_dark_reading_model(
         "DiscreteLightDarkNoObsInDarkVectorizedUpdater"
     ),
+    # The batch path draws the failed action from the native RNG; the scalar
+    # step draws it from numpy. The pinned Push never fails an action, so it
+    # draws nothing and shares the stream trivially.
+    "PushPOMDP[transition_error_prob=0.2]": {"transition_shares_rng": False},
 }
 
 

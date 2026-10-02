@@ -174,6 +174,16 @@ def _build_push(**overrides: Any) -> PushPOMDP:
     return PushPOMDP(discount_factor=0.95, **push_pinned_kwargs(**overrides))
 
 
+def _build_push_with_failed_actions() -> PushPOMDP:
+    """Push where one action in five is replaced by a random other one.
+
+    The pinned configuration never fails an action, and the sweep flips only
+    enum and bool switches, so without this entry no harness reaches the
+    failed-action branch of the transition, its density or its batch path.
+    """
+    return _build_push(transition_error_prob=0.2)
+
+
 def _build_continuous_push(**overrides: Any) -> ContinuousPushPOMDP:
     return ContinuousPushPOMDP(discount_factor=0.95, **continuous_push_pinned_kwargs(**overrides))
 
@@ -336,6 +346,7 @@ HAND_WRITTEN_ENV_BUILDERS: List[Tuple[str, Callable[..., Environment]]] = [
     ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
     ("PacManPOMDP", _build_pacman),
     ("PushPOMDP", _build_push),
+    ("PushPOMDP[transition_error_prob=0.2]", _build_push_with_failed_actions),
     ("RockSamplePOMDP", _build_rock_sample),
     ("SafeAntVelocityPOMDP", _build_safety_ant),
     ("SanityPOMDP", _build_sanity),
@@ -601,15 +612,27 @@ def _discrete_action_env_params() -> List[pytest.param]:  # type: ignore[valid-t
     return discrete
 
 
+# Probability that a random ContinuousLaserTag action fires the tag. High
+# enough that a 15-step rollout almost always tags at least once, so the
+# tag branch -- the reward, the terminal check, the failed-tag penalty -- is
+# on every path the harnesses compare.
+_TAG_PROBABILITY = 0.3
+
+
 def _sample_action(env: Environment) -> Any:
     """Return one valid action for ``env``.
 
-    For discrete-action envs we use the first enumerated action; for
-    continuous-action envs we hand-pick a 2-D unit vector, which is the
-    action shape the three continuous envs in the registry all accept.
+    Discrete-action envs use the first enumerated action. Continuous envs
+    take a 2-D unit vector, except ContinuousLaserTag, whose action is
+    ``[dx, dy, tag_flag]``: it gets the same move with the tag off. A move
+    is what reaches a dangerous area, which the recorded
+    ``REWARD_BATCH_WITHOUT_NEXT_STATE_BROKEN_ENVS`` gap needs; a tag holds
+    the robot still. The tag is exercised through ``_random_action``.
     """
     if isinstance(env, DiscreteActionsEnvironment):
         return env.get_actions()[0]
+    if isinstance(env, ContinuousLaserTagPOMDP):
+        return np.array([1.0, 0.0, 0.0])
     if env.space_info.action_space is SpaceType.CONTINUOUS:
         return np.array([1.0, 0.0])
     raise NotImplementedError(
@@ -620,16 +643,20 @@ def _sample_action(env: Environment) -> Any:
 def _random_action(env: Environment, rng: np.random.Generator) -> Any:
     """Draw one valid action for ``env`` from ``rng``.
 
-    Discrete envs draw uniformly from ``get_actions()``; continuous envs
-    get a random 2-D unit vector, the action shape every continuous env
-    in the registry accepts.
+    Discrete envs draw uniformly from ``get_actions()``. Continuous envs get
+    a random 2-D unit vector; ContinuousLaserTag appends its tag flag, set
+    with probability ``_TAG_PROBABILITY``.
     """
     if isinstance(env, DiscreteActionsEnvironment):
         actions = env.get_actions()
         return actions[int(rng.integers(len(actions)))]
     vector = rng.normal(size=2)
     norm = float(np.linalg.norm(vector))
-    return vector / norm if norm > 0.0 else np.array([1.0, 0.0])
+    direction = vector / norm if norm > 0.0 else np.array([1.0, 0.0])
+    if isinstance(env, ContinuousLaserTagPOMDP):
+        tag_flag = 1.0 if rng.random() < _TAG_PROBABILITY else 0.0
+        return np.append(direction, tag_flag)
+    return direction
 
 
 def _trajectory_key(value: Any) -> Any:
