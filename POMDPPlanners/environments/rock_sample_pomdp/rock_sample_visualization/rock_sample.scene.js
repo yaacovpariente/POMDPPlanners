@@ -41,6 +41,9 @@
   // regular polygons of this many sides, so their edges share vertices exactly
   // and the seam between pad and basin cannot open.
   var HAZARD_SEGMENTS = 80;
+  // The composite's exposure (see the registration at the bottom). The smoke
+  // needs it too, to come out the same grey as in every other scene.
+  var EXPOSURE = 0.105;
 
   // The rover moves for this fraction of a step and rests for the remainder.
   // The rest is where a check or a drill happens.
@@ -852,6 +855,13 @@
     rover.scale.setScalar(1.3);
     scene.add(rover);
 
+    /* Smoke, only when a hazard ended the episode. A separate group, not part
+       of the rover, so it rises straight up however the hull is tipped. */
+    var smoke = payload.ended_in_danger_zone
+      ? V.createSmoke({ exposure: EXPOSURE, scale: 1.3, base: 0.7, seed: 1309 })
+      : null;
+    if (smoke) scene.add(smoke.group);
+
     // The hull rides on the wheels, so it can bob and pitch without moving them.
     var hull = new THREE.Group();
     rover.add(hull);
@@ -1399,6 +1409,16 @@
         rover.position.set(px, 0, pz);
         rover.rotation.y = -heading;
 
+        /* A hazard that ends the episode wrecks the rover: through the last
+           step the smoke builds and the struggle dies away, so it comes to
+           rest smoking on the rubble rather than still fighting it. */
+        var wreck = smoke ? clamp((t - (path.length - 1.6)) / 0.6, 0, 1) : 0;
+        if (smoke) {
+          smoke.group.position.set(px, 0, pz);
+          smoke.update(reduceMotion ? 1.7 : elapsed, wreck);
+        }
+        pose.rough *= 1 - wreck;
+
         var moving = pose.moving ? 1 : 0;
         var rough = rideTerrain(pose, dt, elapsed, moving);
 
@@ -1470,6 +1490,6 @@
     build: build,
     // Real lumens blow out instantly, so the camera stops down. Tuned for four
     // 2100 lm masts over a small pad; it is not a knob to remove.
-    exposure: 0.105
+    exposure: EXPOSURE
   };
 })(window);

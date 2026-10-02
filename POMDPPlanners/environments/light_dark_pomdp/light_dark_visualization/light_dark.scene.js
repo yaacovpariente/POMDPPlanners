@@ -36,6 +36,10 @@
   // is a draw cost with no extra information at this scale.
   var MAX_DRAWN_PARTICLES = 420;
 
+  // The composite's exposure (see the registration at the bottom). The smoke
+  // needs it too, to come out the same grey as in every other scene.
+  var EXPOSURE = 0.155;
+
   function groundCanvas(seed) {
     var s = 1024;
     var cv = document.createElement("canvas");
@@ -357,6 +361,13 @@
     // Rover
     var rover = new THREE.Group();
     scene.add(rover);
+
+    /* Smoke, only when a hazard ended the episode. It is a separate group, not
+       part of the rover, so it rises straight up however the hull is tipped. */
+    var smoke = payload.ended_in_danger_zone
+      ? V.createSmoke({ exposure: EXPOSURE, base: 0.45, seed: 1301 })
+      : null;
+    if (smoke) scene.add(smoke.group);
     var hull = new THREE.Group();
     rover.add(hull);
     var paintMat = new THREE.MeshStandardMaterial({ color: COLORS.rover, roughness: 0.46, metalness: 0.38 });
@@ -727,7 +738,15 @@
         /* The struggle is attitude only: the hull pitches, rolls and jolts on
            the rubble and the wheels spin ahead of the ground and catch. None of
            it moves the rover off the recorded state. */
-        var rough = sample.rough;
+        /* A hazard that ends the episode wrecks the rover: through the last
+           step the smoke builds and the struggle dies away, so it comes to
+           rest smoking rather than still fighting the ground. */
+        var wreck = smoke ? clamp((t - (payload.states.length - 1.6)) / 0.6, 0, 1) : 0;
+        if (smoke) {
+          smoke.group.position.set(px, 0, pz);
+          smoke.update(reduceMotion ? 1.7 : elapsed, wreck);
+        }
+        var rough = sample.rough * (1 - wreck);
         var moving = playing ? 1 : 0;
         var judder = rough * (Math.sin(elapsed * 23.0) * 0.6 + Math.sin(elapsed * 37.0 + 1.7) * 0.4);
         var snap = clamp(dt * (8 + rough * 26), 0, 1);      // stiffer, so it jolts
@@ -792,6 +811,6 @@
     build: build,
     // Real lumens blow out instantly, so the camera stops down. Tuned for this
     // scene's lamp power; it is not a knob to remove.
-    exposure: 0.155
+    exposure: EXPOSURE
   };
 })(window);
