@@ -20,7 +20,10 @@ separately:
   a belief stacks them into one array.
 
 It also checks that a kernel leaves the state and action it was given
-untouched, which every caller that reuses a particle assumes.
+untouched, which every caller that reuses a particle assumes, and that the
+leaf-value rollout planners call -- an env's native ``simulate_random_rollout``
+or the Python fallback -- returns 0 at the depth limit and a finite return
+inside what ``reward_range`` allows.
 
 Every test is parametrized over ``ENV_BUILDERS`` and uses the ``Environment``
 interface only, so each runs on every configuration variant as well.

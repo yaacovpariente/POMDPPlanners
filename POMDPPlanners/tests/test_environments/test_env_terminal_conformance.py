@@ -18,6 +18,8 @@ terminal state.
 It states no rule about what a terminal state *should* do. Environments
 differ -- some absorb, some keep moving, some pay a reward after the end --
 and each is free to. What must hold is that an environment's own paths agree.
+The one exception is the leaf-value rollout: a planner asks a terminal leaf
+for its value, and a rollout from there must earn nothing.
 
 Terminal states come from
 :mod:`~POMDPPlanners.tests.test_environments._terminal_states`: found by
