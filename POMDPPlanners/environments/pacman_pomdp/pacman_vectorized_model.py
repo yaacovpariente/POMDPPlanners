@@ -217,7 +217,7 @@ class PacManVectorizedModel:
         del actions  # Reward is action-independent given (state, next_state).
         num_rows = states.shape[0]
         reward = torch.full((num_rows,), self._step_penalty, dtype=self.dtype, device=self.device)
-        reward = reward + self._reward_collision(next_states) * self._collision_penalty
+        reward = reward + self._reward_collision(states, next_states) * self._collision_penalty
         got_pellet = next_states[:, self._idx_score] > states[:, self._idx_score]
         reward = reward + got_pellet.to(self.dtype) * self._pellet_reward
         won = (next_states[:, self._idx_terminal] > 0.5) & (
@@ -354,14 +354,23 @@ class PacManVectorizedModel:
         std = torch.clamp(std, max=self._max_obs_noise)
         return torch.clamp(std, min=1e-6)
 
-    def _reward_collision(self, next_states: Tensor) -> Tensor:
+    def _reward_collision(self, states: Tensor, next_states: Tensor) -> Tensor:
+        # Same-cell collision OR pacman-ghost swap, the rule the transition
+        # ends the episode on (see ``_transition_collision``).
         num_rows = next_states.shape[0]
         pac = next_states[:, self._idx_pac_row : self._idx_pac_col + 1]
+        old_pac = states[:, self._idx_pac_row : self._idx_pac_col + 1]
         ghosts = next_states[:, self._idx_ghosts_start : self._idx_ghosts_end].view(
             num_rows, self._num_ghosts, 2
         )
+        old_ghosts = states[:, self._idx_ghosts_start : self._idx_ghosts_end].view(
+            num_rows, self._num_ghosts, 2
+        )
         same_cell = (ghosts == pac.unsqueeze(1)).all(dim=-1)
-        return same_cell.any(dim=1).to(self.dtype)
+        swap = (old_ghosts == pac.unsqueeze(1)).all(dim=-1) & (ghosts == old_pac.unsqueeze(1)).all(
+            dim=-1
+        )
+        return (same_cell | swap).any(dim=1).to(self.dtype)
 
     def _danger_contribution(self, next_states: Tensor) -> Tensor:
         num_rows = next_states.shape[0]

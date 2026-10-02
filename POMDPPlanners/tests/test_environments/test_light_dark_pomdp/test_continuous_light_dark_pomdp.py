@@ -3173,3 +3173,39 @@ class TestContinuousLightDarkRewardNextStateConsistency:
             f"Discrete wrapper should thread next_state; got hit="
             f"{reward_hit:.3f} vs clean={reward_clean:.3f}"
         )
+
+
+@pytest.mark.parametrize(
+    "reward_model_type",
+    [RewardModelType.CONSTANT_HAZARD_PENALTY, RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY],
+    ids=lambda reward_model_type: reward_model_type.name,
+)
+def test_env_pickled_before_reward_model_type_was_stored_still_serializes(reward_model_type):
+    """An env unpickled from an older pickle round-trips through ``to_dict``.
+
+    Purpose: ``to_dict`` writes the reward model type from a private attribute
+        that older pickles do not carry -- a joblib cache entry written before
+        the attribute existed, for instance. ``__setstate__`` recovers it from
+        the reward variant code those pickles do hold. Without that,
+        ``to_dict`` raises on such an env, and with a constant-penalty default
+        it would rebuild the wrong reward model.
+
+    Given: An env's pickled state with the reward-model-type attribute removed,
+        as an older version would have written it.
+    When: The state is restored into a new instance, and the instance goes
+        through ``to_dict`` and ``from_dict``.
+    Then: The rebuilt env compares equal to the original and has its
+        ``config_id``.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, reward_model_type=reward_model_type)
+    old_state = env.__getstate__()
+    del old_state["_reward_model_type"]
+
+    restored = ContinuousLightDarkPOMDP.__new__(ContinuousLightDarkPOMDP)
+    restored.__setstate__(old_state)
+    rebuilt = ContinuousLightDarkPOMDP.from_dict(restored.to_dict())
+
+    assert rebuilt == env
+    assert rebuilt.config_id == env.config_id

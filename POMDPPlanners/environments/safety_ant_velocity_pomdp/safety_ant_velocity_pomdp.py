@@ -28,7 +28,7 @@ from enum import Enum
 from math import hypot
 from pathlib import Path
 from collections.abc import Hashable
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -231,8 +231,14 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # ``hypot`` outperforms ``numpy.linalg.norm`` for fixed 2-D inputs:
         # cProfile attributed ~25% of POMCPOW wall time to the norm calls
         # in this method plus ``is_terminal``.
-        del action, next_state
-        speed = hypot(float(state[2]), float(state[3]))
+        #
+        # A step is scored by the speed it ends at: given the realised
+        # ``next_state``, that is the state scored, as in ``sample_next_step``,
+        # the native rollout and the torch model. Without one -- the episode
+        # driver's pre-transition call -- the state itself is scored.
+        del action
+        scored = state if next_state is None else next_state
+        speed = hypot(float(scored[2]), float(scored[3]))
         reward = speed * self.movement_reward_scale
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
@@ -244,8 +250,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         action: int,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
-        del action, next_states
-        states_arr = np.asarray(states)
+        # Same rule as ``reward``: the realised next states when given.
+        del action
+        states_arr = np.asarray(states if next_states is None else next_states)
         speeds = np.linalg.norm(states_arr[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale
         rewards[speeds > self.safe_velocity_threshold] += self.safety_violation_penalty
@@ -548,12 +555,3 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             safety_violation_penalty=float(self.safety_violation_penalty),
             movement_reward_scale=float(self.movement_reward_scale),
         )
-
-    def sample_next_step(
-        self, state: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray, float]:
-        next_state = self.sample_next_state(state=state, action=action)
-        next_observation = self.sample_observation(next_state=next_state, action=action)
-        reward = self.reward(state=next_state, action=action)
-
-        return next_state, next_observation, reward

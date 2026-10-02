@@ -521,6 +521,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         # (the POMCPOW hot path). RNG draws are issued from numpy in the same
         # order and quantity as the original Python implementation, then
         # forwarded to C++ to preserve byte-identical reproducibility.
+        if float(state[4]) != 0.0:
+            # A terminal state is absorbing, as it is on the batch path and in
+            # the vectorized updater. No RNG draw is consumed.
+            absorbed = np.asarray(state, dtype=np.float64)
+            if n_samples == 1:
+                return absorbed.copy()
+            return [absorbed.copy() for _ in range(n_samples)]
         if n_samples == 1:
             params = self._get_native_step_params()
             if params is not None:
@@ -899,6 +906,11 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-pub
         # Inlined from the deleted LaserTagStateTransition._compute_transition_probability_for_action.
         if not isinstance(next_state, np.ndarray) or len(next_state) != 5:
             return 0.0
+
+        if float(state[4]) != 0.0:
+            # A terminal state is absorbing, as in ``sample_next_state``: the
+            # only possible next state is the state itself.
+            return 1.0 if np.array_equal(np.asarray(next_state), np.asarray(state)) else 0.0
 
         robot_current = (int(state[0]), int(state[1]))
         opponent_current = (int(state[2]), int(state[3]))
