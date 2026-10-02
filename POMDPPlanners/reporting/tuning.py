@@ -17,7 +17,7 @@ import ast
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from POMDPPlanners.core.simulation import tuning_run_layout as layout
 from POMDPPlanners.reporting.store import RunView
@@ -322,3 +322,108 @@ def load_study(run: RunView) -> TuningStudy:
         evaluation_run_id=evaluation_run_id,
         has_summary=False,
     )
+
+
+@dataclass(frozen=True)
+class TunedConfig:
+    """One tuned planner within a study: its run, its study, its evaluation run."""
+
+    run: RunView
+    study: TuningStudy
+    evaluation_run: Optional[RunView] = None
+
+
+@dataclass(frozen=True)
+class StudyGroup:
+    """One tuning study as a reader thinks of it, rather than as MLflow stores it.
+
+    MLflow keeps a study as a parent run, one child per tuned planner, and an
+    evaluation child. Listed flat, that is three cards for one piece of work,
+    two of them saying the same thing; grouped, it is one.
+
+    Attributes:
+        study_run: The parent run, or ``None`` for a config run with no parent
+            in the experiment (an older run, or one moved without its parent).
+        configs: The tuned planners, oldest first.
+        member_ids: Every run id the group stands for, the parent included.
+    """
+
+    study_run: Optional[RunView]
+    configs: List[TunedConfig]
+    member_ids: frozenset
+
+    @property
+    def anchor(self) -> RunView:
+        """The run the group's card is dated and sorted by."""
+        return self.study_run if self.study_run is not None else self.configs[0].run
+
+    @property
+    def evaluation_run(self) -> Optional[RunView]:
+        """The study's evaluation run, shared by its configs."""
+        return next((c.evaluation_run for c in self.configs if c.evaluation_run), None)
+
+
+def group_studies(runs: Sequence[RunView]) -> List[StudyGroup]:
+    """Gather an experiment's tuning runs into one group per study.
+
+    A run is a study when it is tagged as one or when any of its children is
+    a config run, which is how studies logged before the tags are found. Its
+    config children, and every evaluation run they name or that is tagged
+    under it, belong to the group. Runs that are no part of a study are left
+    out, so an experiment without tuning yields no groups at all.
+
+    Args:
+        runs: Every run of one experiment.
+
+    Returns:
+        The groups, newest first.
+    """
+    by_id = {r.run_id: r for r in runs}
+    children: Dict[str, List[RunView]] = {}
+    for run in runs:
+        if run.parent_run_id:
+            children.setdefault(run.parent_run_id, []).append(run)
+
+    groups: List[StudyGroup] = []
+    claimed: set = set()
+    for run in runs:
+        configs = [c for c in children.get(run.run_id, []) if is_tuning_config_run(c)]
+        if run.run_kind != layout.RUN_KIND_STUDY and not configs:
+            continue
+        groups.append(_group(run, configs, children.get(run.run_id, []), by_id))
+        claimed |= groups[-1].member_ids
+    # A config run whose parent is not here still stands as a study of one.
+    for run in runs:
+        if run.run_id in claimed or not is_tuning_config_run(run):
+            continue
+        if run.parent_run_id in by_id:
+            continue
+        groups.append(_group(None, [run], [], by_id))
+        claimed |= groups[-1].member_ids
+    groups.sort(key=lambda g: g.anchor.start_time or 0, reverse=True)
+    return groups
+
+
+def _group(
+    study_run: Optional[RunView],
+    config_runs: Sequence[RunView],
+    siblings: Sequence[RunView],
+    by_id: Dict[str, RunView],
+) -> StudyGroup:
+    configs = []
+    members = {study_run.run_id} if study_run is not None else set()
+    for run in sorted(config_runs, key=lambda r: r.start_time or 0):
+        study = load_study(run)
+        evaluation = by_id.get(study.evaluation_run_id or "")
+        configs.append(TunedConfig(run=run, study=study, evaluation_run=evaluation))
+        members.add(run.run_id)
+        if evaluation is not None:
+            members.add(evaluation.run_id)
+    # The evaluation is a child of the study run, tagged as one, even when no
+    # config names it -- a link that failed to write must not make it a stray.
+    members |= {
+        r.run_id
+        for r in siblings
+        if r.run_kind == layout.RUN_KIND_EVALUATION or is_tuning_config_run(r)
+    }
+    return StudyGroup(study_run=study_run, configs=configs, member_ids=frozenset(members))

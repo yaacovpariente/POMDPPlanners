@@ -349,12 +349,23 @@ def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -
     for experiment in experiments:
         latest = experiment.runs[0] if experiment.runs else None
         envs = sorted({e.name for run in experiment.runs for e in run.environments})
+        groups = tuning.group_studies(experiment.runs)
+        if groups:
+            # A study is several MLflow runs; counting them would count one
+            # piece of work three times.
+            members = set().union(*(g.member_ids for g in groups))
+            others = sum(1 for r in experiment.runs if r.run_id not in members)
+            counts = [("Tuning studies", str(len(groups)))] + (
+                [("Other runs", str(others))] if others else []
+            )
+        else:
+            counts = [("Runs", str(len(experiment.runs)))]
         items.append(
             ListingItem(
                 title=experiment.name,
                 href=_url("experiment", experiment.store_index, experiment.experiment_id),
-                fields=[
-                    ("Runs", str(len(experiment.runs))),
+                fields=counts
+                + [
                     ("Latest run", _timestamp(latest.start_time if latest else None)),
                 ],
                 tags=envs,
@@ -373,9 +384,24 @@ def index_page(experiments: Sequence[ExperimentView], roots: Sequence[object]) -
 
 
 def experiment_page(experiment: ExperimentView) -> str:
-    """One experiment's runs."""
+    """One experiment's runs, with each tuning study as one entry.
+
+    A tuning study is stored as a parent run, a run per tuned planner and an
+    evaluation run. Listed one card per run, one study reads as three pieces
+    of work, two of them repeating the third; so its runs are folded into a
+    single card, and the parts are reached from inside it. An experiment with
+    no tuning study lists exactly as it always has.
+    """
+    groups = tuning.group_studies(experiment.runs)
+    anchors = {g.anchor.run_id: g for g in groups}
+    hidden = set().union(*(g.member_ids for g in groups)) if groups else set()
     items = []
     for run in experiment.runs:
+        if run.run_id in anchors:
+            items.append(_study_item(anchors[run.run_id]))
+            continue
+        if run.run_id in hidden:
+            continue
         episodes = sum(len(p.episodes) for e in run.environments for p in e.policies)
         items.append(
             ListingItem(
@@ -395,7 +421,13 @@ def experiment_page(experiment: ExperimentView) -> str:
         experiment.name,
         [("Experiments", "/"), (experiment.name, None)],
         f'<div class="page-head"><h1>{html(experiment.name)}</h1>{_layout_toggle()}</div>'
-        f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
+        + (
+            f'<p class="note">{len(items)} entr{"y" if len(items) == 1 else "ies"}, newest '
+            "first. A tuning study is one entry: its tuned planners and its evaluation are "
+            "inside it.</p>"
+            if groups
+            else f'<p class="note">{len(experiment.runs)} run(s), newest first.</p>'
+        )
         + _listing(items, "This experiment has no runs the site can read.", "Environments"),
     )
 
@@ -1165,33 +1197,24 @@ def _early_stopping_text(study: tuning.TuningStudy) -> str:
     return "did not fire"
 
 
-def _study_stats(study: tuning.TuningStudy) -> str:
+def _trials_text(study: tuning.TuningStudy) -> str:
     completed = study.n_trials_completed
     budget = study.n_trials_budget
     if completed is not None and budget is not None:
-        trials = f"{completed} of {budget}"
-    elif budget is not None:
-        trials = f"budget {budget}"
-    else:
-        trials = ""
+        return f"{completed} of {budget}"
+    if budget is not None:
+        return f"budget {budget}"
+    return ""
+
+
+def _study_stats(study: tuning.TuningStudy) -> str:
     return _stats(
         [
-            ("Planner", html(study.planner)),
-            ("Environment", html(study.environment)),
-            ("Trials run", html(trials)),
+            # Not repeated here: the planner and environment (the page title),
+            # the best and Pareto trials (marked in the trial table) and the
+            # episodes per trial (the comparison's column heading).
+            ("Trials run", html(_trials_text(study))),
             ("Early stopping", html(_early_stopping_text(study))),
-            (
-                "Best trial",
-                html(f"#{study.best_trial_number}") if study.best_trial_number is not None else "",
-            ),
-            (
-                "Pareto trials",
-                html(len(study.pareto_trial_numbers)) if study.pareto_trial_numbers else "",
-            ),
-            (
-                "Episodes per trial",
-                html(study.episodes_per_trial) if study.episodes_per_trial else "",
-            ),
             ("Tuning time", html(_duration(study.optimization_time_seconds))),
         ]
     )
@@ -1357,8 +1380,8 @@ def _trial_table(study: tuning.TuningStudy) -> str:
     return (
         '<div class="scroll"><table class="metrics trials">'
         f"<thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
-        f'<p class="note">Each objective value is the mean over that trial\'s '
-        f"{html(study.episodes_per_trial or 'own')} episode(s). Pareto trials are not beaten "
+        '<p class="note">Each objective value is the mean over that trial\'s own '
+        "episodes. Pareto trials are not beaten "
         "on every objective by any other trial; the best one is the Pareto trial with the "
         "highest normalized score.</p>"
     )
@@ -1466,10 +1489,11 @@ def _evaluation_section(
     eval_run, eval_env, eval_policy = evaluation
     single = EnvironmentView(name=eval_env.name, policies=[eval_policy])
     return (
-        f'<p class="note">Run <a href="{html(run_url(eval_run))}">{html(eval_run.run_name)}</a> · '
+        f'<p class="note">Raw evaluation run: '
+        f'<a href="{html(run_url(eval_run))}">{html(eval_run.run_name)}</a> · '
         f'<a href="{html(policy_url(eval_run, eval_env.name, eval_policy.name))}">'
-        f"{html(eval_policy.name)} on {html(eval_env.name)}</a>.</p>"
-        + _policy_cards(eval_run, single)
+        f"{html(eval_policy.name)} on {html(eval_env.name)}</a>. Its headline figures are "
+        "in the comparison at the top of the page.</p>"
         + "<h3>Episodes</h3>"
         + _listing(
             _episode_items(eval_run, eval_env, eval_policy),
@@ -1537,15 +1561,16 @@ def tuning_page(
         ["Parameter", "Value"],
         [[html(k), html(v)] for k, v in sorted(run.params.items()) if k not in shown],
     )
+    title = study_label(study)
     crumbs: List[Tuple[str, Optional[str]]] = [
         ("Experiments", "/"),
         (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
     ]
     if parent is not None:
-        crumbs.append((parent.run_name, run_url(parent)))
-    crumbs.append((run.run_name, None))
+        crumbs.append(("Tuning study", run_url(parent)))
+    crumbs.append((title, None))
     study_note = (
-        f' · part of study <a href="{html(run_url(parent))}">{html(parent.run_name)}</a>'
+        f' · part of <a href="{html(run_url(parent))}">tuning study ' f"{html(parent.run_name)}</a>"
         if parent is not None
         else ""
     )
@@ -1556,12 +1581,13 @@ def tuning_page(
         "its parameters alone.</p>"
     )
     return layout(
-        run.run_name,
+        title,
         crumbs,
-        f'<div class="page-head"><h1>{html(run.run_name)} {_chip(run.status)}</h1>'
+        f'<div class="page-head"><h1>{html(title)} {_chip(run.status)}</h1>'
         f"{_layout_toggle()}</div>"
-        f'<p class="note">Hyperparameter tuning of {html(study.planner)} on '
-        f"{html(study.environment)} · started {html(_timestamp(run.start_time))}{study_note}</p>"
+        f'<p class="note">Hyperparameter tuning{html(_class_note(study))} · '
+        f"started {html(_timestamp(run.start_time))} · "
+        f"run <code>{html(run.run_name)}</code>{study_note}</p>"
         + thin
         + _study_stats(study)
         + "<h2>Best trial against the evaluation</h2>"
@@ -1574,6 +1600,144 @@ def tuning_page(
         + _diagnostic_charts(run, study)
         + "<h2>Evaluation</h2>"
         + _evaluation_section(study, evaluation)
+        + f"<details><summary>Run parameters</summary>{params}</details>",
+    )
+
+
+def _class_note(study: tuning.TuningStudy) -> str:
+    """The planner and environment classes, where the title's names do not say them."""
+    notes = []
+    if study.planner and study.planner != study.policy_name:
+        notes.append(f"planner class {study.planner}")
+    if study.environment and study.environment != study.environment_name:
+        notes.append(f"environment class {study.environment}")
+    return (" · " + ", ".join(notes)) if notes else ""
+
+
+def study_label(study: tuning.TuningStudy) -> str:
+    """Name a tuned planner the way a reader would: planner on environment."""
+    planner = study.policy_name or study.planner or "Planner"
+    environment = study.environment_name or study.environment or "an environment"
+    return f"{planner} on {environment}"
+
+
+def group_title(group: tuning.StudyGroup) -> str:
+    """Name a tuning study for its card and its page."""
+    if len(group.configs) == 1:
+        return f"{study_label(group.configs[0].study)} — tuning study"
+    if group.configs:
+        return f"Tuning study of {len(group.configs)} planners"
+    return group.anchor.run_name
+
+
+def _headline(name: str, value: Optional[float]) -> str:
+    return f"{name} {value:.4g}" if value is not None else ""
+
+
+def _config_scores(config: tuning.TunedConfig) -> List[Tuple[str, str]]:
+    """The best trial's and the evaluation's score on the first objective."""
+    study = config.study
+    names = [str(n) for n, _ in study.objectives] or sorted(study.best_trial_scores)
+    if not names:
+        return []
+    name = names[0]
+    best = study.best_trial_scores.get(name, (None, None, None))[0]
+    evaluation = find_evaluation(study, config.evaluation_run)
+    evaluated = ""
+    if evaluation is not None:
+        eval_run, eval_env, eval_policy = evaluation
+        value = eval_run.metrics_for(eval_env.name, eval_policy.name).get(name)
+        if value is not None:
+            evaluated = f"{_headline(name, value)} ({len(eval_policy.episodes)} episodes)"
+    return [("Best trial", html(_headline(name, best))), ("Evaluation", html(evaluated))]
+
+
+def _study_item(group: tuning.StudyGroup) -> ListingItem:
+    """The one card that stands for a whole tuning study."""
+    anchor = group.anchor
+    if len(group.configs) == 1:
+        config = group.configs[0]
+        fields = [
+            ("Trials run", html(_trials_text(config.study))),
+            ("Early stopping", html(_early_stopping_text(config.study))),
+            *_config_scores(config),
+        ]
+        href = run_url(config.run)
+    else:
+        fields = [("Planners tuned", str(len(group.configs)))]
+        href = run_url(anchor)
+    environments = sorted(
+        {c.study.environment_name or c.study.environment for c in group.configs} - {""}
+    )
+    return ListingItem(
+        title=group_title(group),
+        href=href,
+        chip=_chip(anchor.status),
+        fields=fields + [("Started", _timestamp(anchor.start_time))],
+        tags=environments,
+        footnote=anchor.run_id,
+    )
+
+
+def _best_parameters_text(study: tuning.TuningStudy, limit: int = 4) -> str:
+    chosen = [(p.name, p.best) for p in study.parameters if p.best is not None]
+    shown = ", ".join(
+        f"{name}={value:.3g}" if isinstance(value, float) else f"{name}={value}"
+        for name, value in chosen[:limit]
+    )
+    return shown + (f" and {len(chosen) - limit} more" if len(chosen) > limit else "")
+
+
+def study_page(group: tuning.StudyGroup) -> str:
+    """A tuning study: one row per tuned planner, each opening its tuning view.
+
+    Args:
+        group: The study.
+
+    Returns:
+        A complete HTML document.
+    """
+    run = group.anchor
+    title = group_title(group)
+    items = [
+        ListingItem(
+            title=study_label(config.study),
+            href=run_url(config.run),
+            chip=_chip(config.run.status),
+            subtitle=_best_parameters_text(config.study),
+            fields=[
+                ("Trials run", html(_trials_text(config.study))),
+                ("Early stopping", html(_early_stopping_text(config.study))),
+                *_config_scores(config),
+            ],
+        )
+        for config in group.configs
+    ]
+    evaluation = group.evaluation_run
+    params = _table(
+        ["Parameter", "Value"],
+        [[html(k), html(v)] for k, v in sorted(run.params.items())],
+    )
+    return layout(
+        title,
+        [
+            ("Experiments", "/"),
+            (run.experiment_name, _url("experiment", run.store_index, run.experiment_id)),
+            (title, None),
+        ],
+        f'<div class="page-head"><h1>{html(title)} {_chip(run.status)}</h1>'
+        f"{_layout_toggle()}</div>"
+        f'<p class="note">Started {html(_timestamp(run.start_time))} · '
+        f"run <code>{html(run.run_name)}</code>"
+        + (
+            f' · raw evaluation run <a href="{html(run_url(evaluation))}">'
+            f"{html(evaluation.run_name)}</a>"
+            if evaluation is not None
+            else ""
+        )
+        + "</p>"
+        + "<h2>Tuned planners</h2>"
+        + _listing(items, "No planner in this study finished tuning.")
         + f"<details><summary>Run parameters</summary>{params}</details>",
     )
 

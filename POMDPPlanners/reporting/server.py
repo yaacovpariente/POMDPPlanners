@@ -210,6 +210,17 @@ class Router:
             if run.parent_run_id
             else None
         )
+        experiment = self.index.experiment(run.store_index, run.experiment_id)
+        group = next(
+            (
+                g
+                for g in tuning.group_studies(experiment.runs if experiment else [])
+                if g.study_run is not None and g.study_run.run_id == run.run_id
+            ),
+            None,
+        )
+        if group is not None:
+            return pages.study_page(group)
         if tuning.is_tuning_config_run(run):
             study = tuning.load_study(run)
             evaluation_run = (

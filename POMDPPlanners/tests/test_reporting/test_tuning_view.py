@@ -241,19 +241,85 @@ def test_the_tuning_view_shows_the_study_and_its_fresh_evaluation(router: Router
     assert "param_range_depth" not in page
 
 
-def test_a_study_run_lists_its_tuned_planners_and_evaluation(router: Router, study_dir):
-    """The study run is where a reader lands, so it links both kinds of child.
+def test_the_experiment_lists_a_study_once_with_its_key_facts(router: Router, study_dir):
+    """One study is one card, not one card per MLflow run.
+
+    Purpose: Listed per run, a study read as three cards -- the parent, the
+    tuned planner and the evaluation -- two of them saying "Episodes 0".
+
+    Given: An experiment holding one study with one tuned planner.
+    When: The experiment page renders.
+    Then: One entry, titled for the planner and environment, linking straight
+        to the tuning view, carrying the trials run, early stopping, the best
+        trial's and the evaluation's score; no raw run name is a card title,
+        and no "Episodes" field appears.
+    """
+    experiment = router.index.experiments[0]
+    status, _, body = router.resolve(f"/experiment/0/{experiment.experiment_id}")
+    page = body.decode("utf-8")
+    cards = page.split('<div class="cards">', 1)[1].split('<div class="scroll table-view"', 1)[0]
+
+    assert status == 200
+    assert cards.count('<a class="card') == 1
+    assert "PFT_DPW on LightDark — tuning study" in cards
+    assert f'/run/0/{experiment.experiment_id}/{study_dir["config"]}"' in cards
+    assert "3 of 300" in cards and "stopped after 3 trials" in cards
+    assert "average_return 9.5" in cards
+    assert "average_return 6.25 (1 episodes)" in cards
+    assert "environment_policy_comparison" not in cards
+    assert "Episodes" not in page.split("<main", 1)[1]
+    # The table view groups the same way.
+    table = page.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    assert table.count("<tr>") == 1
+
+
+def test_the_index_counts_studies_not_their_runs(router: Router):
+    """The landing page counts the study once."""
+    status, _, body = router.resolve("/")
+    page = body.decode("utf-8")
+
+    assert status == 200
+    assert "Tuning studies" in page and ">1<" in page
+    assert "Other runs" not in page
+
+
+def test_a_study_run_opens_the_study_page(router: Router, study_dir):
+    """The study run's own page lists its tuned planners and links the evaluation.
 
     Given: The study run.
     When: Its page renders.
-    Then: It lists the config run and the evaluation run, each labelled.
+    Then: It lists the tuned planner with a summary of its chosen parameters
+        and both scores, and links the raw evaluation run.
     """
     page = _page(router, study_dir["study"])
 
-    assert "Runs in this study" in page
-    assert "config_1_ContinuousLightDarkPOMDP_PFT_DPW" in page
-    assert "Tuned planner" in page
-    assert "Evaluation of the tuned planners" in page
+    assert "Tuned planners" in page
+    assert "PFT_DPW on LightDark" in page
+    assert "exploration_constant=75, depth=10, rollout=greedy" in page
+    assert f'{study_dir["evaluation"]}"' in page and "raw evaluation run" in page
+
+
+def test_the_tuning_view_states_each_fact_once(router: Router, study_dir):
+    """Facts the view already shows elsewhere are not repeated in the summary.
+
+    Given: The tuning view.
+    When: It renders.
+    Then: No summary stat repeats the best trial, the Pareto count or the
+        episodes per trial, and the evaluation section has no planner card
+        restating the scores the comparison already gives.
+    """
+    page = _page(router, study_dir["config"])
+    stats = page.split('<div class="stats">', 1)[1].split("</div></div>", 1)[0]
+    evaluation = page.split("<h2>Evaluation</h2>", 1)[1]
+
+    assert "Pareto trials" not in stats and "Best trial" not in stats
+    assert "Episodes per trial" not in stats
+    # The title already names the planner and environment.
+    assert "Planner" not in stats and "Environment" not in stats
+    assert "planner class PFT_DPW" not in page
+    assert "environment class ContinuousLightDarkPOMDP" in page
+    assert "Avg. return" not in evaluation
+    assert "<h1>PFT_DPW on LightDark" in page
 
 
 def test_the_evaluation_run_links_back_to_its_study(router: Router, study_dir):
@@ -300,3 +366,54 @@ def test_a_config_run_without_a_summary_still_gets_a_tuning_view(tmp_path: Path)
     assert "1-5" in page and "3.5" in page and "budget 10" in page
     assert "carries no trial records" in page
     assert "No evaluation run is linked" in page
+
+
+def test_a_study_of_several_planners_gets_a_study_page_card(tmp_path: Path):
+    """A study that tuned several planners opens its study page, which lists each.
+
+    Given: A study run with two tuned planners and no evaluation.
+    When: The experiment and study pages render.
+    Then: One card titled for two planners, linking to the study page, which
+        has a row per planner linking to its tuning view.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    import mlflow
+
+    os.environ.setdefault("MLFLOW_ALLOW_FILE_STORE", "true")
+    store = tmp_path / "multi" / "mlruns"
+    store.mkdir(parents=True)
+    mlflow.set_tracking_uri(f"file://{store}")
+    mlflow.set_experiment("multi_study")
+    config_ids = []
+    with mlflow.start_run(
+        run_name="optimize_batch_2_configs", tags={layout.RUN_KIND_TAG: layout.RUN_KIND_STUDY}
+    ) as study_run:
+        for index, planner in enumerate(("POMCP", "PFT_DPW")):
+            with mlflow.start_run(
+                run_name=f"config_{index + 1}_Tiger_{planner}",
+                nested=True,
+                tags={layout.RUN_KIND_TAG: layout.RUN_KIND_CONFIG},
+            ) as config_run:
+                mlflow.log_params({"best_depth": 3, "param_range_depth": "1-5"})
+                mlflow.log_metric("best_trial_average_return", 1.5 + index)
+                summary = dict(
+                    SUMMARY, planner=planner, policy_name=planner, environment_name="Tiger"
+                )
+                tuning_files = tmp_path / f"staging{index}" / "tuning"
+                _write(tuning_files / layout.STUDY_SUMMARY_FILE, summary)
+                mlflow.log_artifact(str(tuning_files / layout.STUDY_SUMMARY_FILE), "tuning")
+                config_ids.append(config_run.info.run_id)
+
+    router = Router(RunIndex([tmp_path]))
+    experiment = router.index.experiments[0]
+    _, _, body = router.resolve(f"/experiment/0/{experiment.experiment_id}")
+    listing = body.decode("utf-8")
+    study_page = _page(router, study_run.info.run_id)
+
+    cards = listing.split('<div class="cards">', 1)[1].split('<div class="scroll table-view"', 1)[0]
+    assert cards.count('<a class="card') == 1
+    assert "Tuning study of 2 planners" in cards
+    assert f'{study_run.info.run_id}"' in cards
+    assert "POMCP on Tiger" in study_page and "PFT_DPW on Tiger" in study_page
+    for config_id in config_ids:
+        assert f'/{config_id}"' in study_page
