@@ -606,7 +606,7 @@
       var field = humanize(el.field.value || "value");
       var kind = el.kind.value;
       el.title.value = field + " per episode on " + DATA.environment;
-      if (kind === "histogram") { el.xLabel.value = field; el.yLabel.value = "Episodes"; }
+      if (kind === "histogram") { el.xLabel.value = field; el.yLabel.value = "Frequency"; }
       else if (kind === "ecdf") { el.xLabel.value = field; el.yLabel.value = "Fraction of episodes at or below"; }
       else { el.xLabel.value = "Planner"; el.yLabel.value = field; }
     }

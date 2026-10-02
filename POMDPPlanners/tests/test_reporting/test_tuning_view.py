@@ -1026,3 +1026,25 @@ def test_the_chart_builder_offers_a_per_episode_mode(tmp_path: Path):
         assert f'<option value="{kind}">' in rocks
     assert 'data-role="bins"' in rocks and 'data-role="layout"' in rocks
     assert "Download raw data (CSV)" in rocks
+
+
+def test_every_builder_defaults_to_the_colour_style(tmp_path: Path):
+    """Each builder on the study page and its standalone pages opens in "Paper, colour"."""
+    router, study_id, configs = _two_by_two_study(tmp_path)
+    experiment = router.index.experiments[0]
+    pages_to_check = [
+        _page(router, study_id),
+        router.resolve(
+            f"/run/0/{experiment.experiment_id}/{configs[('Rocks', 'PFT_DPW')]}/tuning-chart"
+        )[2].decode("utf-8"),
+    ]
+    study_page = pages_to_check[0]
+    builder_url = study_page.split('data-episodes-url="', 1)[1].split('"', 1)[0][
+        : -len("/episodes.json")
+    ]
+    pages_to_check.append(router.resolve(builder_url + "/chart")[2].decode("utf-8"))
+
+    for page in pages_to_check:
+        styles = page.count('data-role="style"')
+        assert styles >= 1
+        assert page.count('<option value="colour" selected>Paper, colour</option>') == styles

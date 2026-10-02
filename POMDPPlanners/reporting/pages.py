@@ -860,7 +860,7 @@ def chart_builder_html(run: RunView, env: EnvironmentView, read_query: bool = Fa
         '<label>Planner axis <input data-role="x" type="text" autocomplete="off"></label>'
         '<label>Style <select data-role="style">'
         '<option value="mono">Paper, mono</option>'
-        '<option value="colour">Paper, colour</option>'
+        '<option value="colour" selected>Paper, colour</option>'
         '<option value="slide">Slide, dark</option>'
         "</select></label>"
         '<label data-mode="aggregate">Orientation <select data-role="orient">'
@@ -2462,7 +2462,7 @@ def tuning_chart_builder_html(
         '<label>Horizontal axis <input data-role="x" type="text" autocomplete="off"></label>'
         '<label>Style <select data-role="style">'
         '<option value="mono">Paper, mono</option>'
-        '<option value="colour">Paper, colour</option>'
+        '<option value="colour" selected>Paper, colour</option>'
         '<option value="slide">Slide, dark</option>'
         "</select></label>"
         '<label class="check" data-for="best-line"><input data-role="best-line" '
