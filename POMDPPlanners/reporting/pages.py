@@ -764,18 +764,10 @@ def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per e
         return — a run of videos alone, for instance.
     """
     series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Episodes")
+    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Frequency")
     if not svg:
         return ""
-    episodes = sum(len(values) for _, values in series)
-    return (
-        f"<h2>{html(heading)}</h2>"
-        f'<figure class="chart-card wide">{svg}</figure>'
-        f'<p class="note">How many of the {episodes} episode(s) ended in each range of '
-        "discounted return. The bins are shared across planners so the bars can be "
-        "compared; the returns are read from the episodes themselves, not from a "
-        "logged average.</p>"
-    )
+    return f"<h2>{html(heading)}</h2>" f'<figure class="chart-card wide">{svg}</figure>'
 
 
 def environment_page(run: RunView, env: EnvironmentView) -> str:
