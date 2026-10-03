@@ -13,7 +13,7 @@ colours, so it follows the viewer's theme without a second palette.
 """
 
 from html import escape
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 # Confidence intervals arrive as three sibling metrics next to the value.
 CI_LOWER_SUFFIX = "_ci_lower"
@@ -182,12 +182,35 @@ def _bin_edges(values: Sequence[float], count: int) -> List[float]:
     return [low + step * i for i in range(count + 1)]
 
 
+#: The most bins a reader may ask for. Past this a histogram of a few hundred
+#: episodes is a comb of single-episode bars, each thinner than a pixel per
+#: planner.
+MAX_BINS = 100
+
+
+def default_bin_count(sample_size: int) -> int:
+    """The bin count a histogram uses when the reader has not picked one.
+
+    Square root of the sample size, which is the usual default, kept between
+    three and twelve so that a handful of episodes still shows shape and a
+    long run does not turn into a comb.
+
+    Args:
+        sample_size: How many values are binned, over every planner.
+
+    Returns:
+        A bin count between 3 and 12.
+    """
+    return min(12, max(3, int(sample_size**0.5 + 0.5)))
+
+
 def histogram_svg(
     series: Sequence[Tuple[str, Sequence[float]]],
     value_label: str = "Discounted return",
     count_label: str = "Episodes",
     width: int = 720,
     height: int = 320,
+    bins: Optional[int] = None,
 ) -> str:
     """Draw each planner's values as a histogram over shared bins.
 
@@ -203,6 +226,9 @@ def histogram_svg(
         count_label: Name of the count, for the vertical axis.
         width: Drawing width in user units.
         height: Drawing height in user units.
+        bins: How many bins, shared by every planner. ``None`` uses
+            :func:`default_bin_count`; any other count is kept between 1 and
+            :data:`MAX_BINS`.
 
     Returns:
         An ``<svg>`` element as a string, or an empty string when no planner
@@ -213,10 +239,7 @@ def histogram_svg(
         return ""
 
     pooled = [value for _, values in rows for value in values]
-    # Square root of the sample size, which is the usual default, kept between
-    # three and twelve so that a handful of episodes still shows shape and a
-    # long run does not turn into a comb.
-    bins = min(12, max(3, int(len(pooled) ** 0.5 + 0.5)))
+    bins = default_bin_count(len(pooled)) if bins is None else min(MAX_BINS, max(1, bins))
     edges = _bin_edges(pooled, bins)
 
     counts: List[List[int]] = []
@@ -272,7 +295,9 @@ def histogram_svg(
 
     # Every bin edge is labelled when there are few, else every other one, so
     # the axis says what range each bar covers rather than only where it sits.
-    stride = 1 if bins <= 6 else 2
+    # Past a dozen bins every other edge still collides, so the stride grows
+    # with the count and the axis keeps about a dozen labels.
+    stride = 1 if bins <= 6 else max(2, -(-bins // 12))
     for index in range(0, bins + 1, stride):
         x = left + bin_w * index
         parts.append(
