@@ -229,9 +229,9 @@ from POMDPPlanners.simulations.simulation_apis.local_simulations_api import Loca
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.utils.belief_factory import create_environment_belief
 
-N_TRIALS = 2            # at most this many Optuna trials per planner
-EPISODES_PER_TRIAL = 2  # episodes that score one trial
-EVAL_EPISODES = 4       # fresh episodes for each tuned planner
+N_TRIALS = 50            # at most this many Optuna trials per planner
+EPISODES_PER_TRIAL = 20  # episodes that score one trial
+EVAL_EPISODES = 30       # fresh episodes for each tuned planner
 NUM_STEPS = 30          # step limit per episode
 
 configs = PlannersHyperparamConfigs(discount_factor=0.95)
@@ -269,12 +269,12 @@ _, stats = api.run_optimize_and_evaluate(
 print(stats[["environment", "policy", "average_return", "task_completion_rate"]])
 ```
 
-These constants are the quick setting we ran: 2 trials of 2 episodes per
-planner and 4 evaluation episodes, which takes about three minutes. Early
-stopping cannot fire that early, so every trial runs. For a real study raise
-them, for example to `N_TRIALS = 300`, `EPISODES_PER_TRIAL = 128` and
-`EVAL_EPISODES = 100`. That allows up to 38,400 tuning episodes per planner and
-takes hours, and early stopping then decides how many trials actually run.
+These constants allow up to 1,000 tuning episodes per planner (50 × 20), then
+30 evaluation episodes for each tuned planner. For a quick try, set them to
+`N_TRIALS = 2`, `EPISODES_PER_TRIAL = 2` and `EVAL_EPISODES = 4`, which takes
+a few minutes. Early stopping waits for `min_trials` before it can end a study,
+so raise `N_TRIALS` above it, for example to 300, when you want early stopping
+to decide how many trials run.
 
 In `pomdp-report serve results`, the `Tuning_RockSample_Push` experiment shows
 the whole study as one card. Its page has a "Compare Tuned planners" block for
