@@ -210,21 +210,27 @@ run matters: the best tuning score is the luckiest of many noisy trials, so it
 overstates how good the chosen parameters are.
 
 The example below tunes POMCPOW and PFT-DPW on two environments, RockSample
-and Push, and compares the tuned planners on each. The search ranges come from
-`PlannersHyperparamConfigs`, each trial is scored on average return and task
-completion rate, and early stopping ends a study once its best trials stop
-improving. Each planner's name carries its environment, because the evaluation
-requires planner names to be unique across environments.
+and Push, and compares the tuned planners on each. Everything the study uses is
+written out so you can edit it in place: the search range of each parameter,
+the planner settings that stay fixed, and the objectives each trial is scored
+on (average return and task completion rate). Early stopping ends a study once
+its best trials stop improving. Each planner's name carries its environment,
+because the evaluation requires planner names to be unique across environments.
 Save it as `tune_planners.py` and run `python tune_planners.py`.
 
 ```python
 from pathlib import Path
 
 from POMDPPlanners.environments import PushPOMDP, RockSamplePOMDP
-from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
-from POMDPPlanners.configs.experiment_configs import AverageReturnParameterToOptimizeMapper
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    EarlyStoppingConfig, HyperParameterRunParams)
+    EarlyStoppingConfig,
+    HyperParameterOptimizationDirection,
+    HyperParameterRunParams,
+    HyperParamPlannerConfig,
+    NumericalHyperParameter,
+)
 from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.utils.belief_factory import create_environment_belief
@@ -232,17 +238,50 @@ from POMDPPlanners.utils.belief_factory import create_environment_belief
 N_TRIALS = 50            # at most this many Optuna trials per planner
 EPISODES_PER_TRIAL = 20  # episodes that score one trial
 EVAL_EPISODES = 30       # fresh episodes for each tuned planner
-NUM_STEPS = 30          # step limit per episode
+NUM_STEPS = 30           # step limit per episode
+DISCOUNT_FACTOR = 0.95
 
-configs = PlannersHyperparamConfigs(discount_factor=0.95)
+# What each trial is scored on, and in which direction.
+OBJECTIVES = [
+    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+    ("task_completion_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+]
+
+
+def search_space(env):
+    """The ranges Optuna searches. Two ints give an int range, two floats a float range."""
+    # The UCB bonus has to be able to outweigh the returns, so its bound scales
+    # with the width of the environment's reward range times the deepest search.
+    max_exploration = (env.reward_range[1] - env.reward_range[0]) * 10
+    return [
+        NumericalHyperParameter(0.0, max_exploration, "exploration_constant"),  # UCB exploration
+        NumericalHyperParameter(2, 10, "depth"),  # search depth
+        NumericalHyperParameter(1, 10, "k_a"),  # action widening coefficient
+        NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # action widening exponent
+        NumericalHyperParameter(1, 10, "k_o"),  # observation widening coefficient
+        NumericalHyperParameter(0.01, 0.5, "alpha_o"),  # observation widening exponent
+    ]
+
+
 studies = []
-for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.95)):
+for env in (
+    RockSamplePOMDP(discount_factor=DISCOUNT_FACTOR),
+    PushPOMDP(discount_factor=DISCOUNT_FACTOR),
+):
     belief = create_environment_belief(env, n_particles=200)
     sampler = DiscreteActionSampler(env.get_actions())
-    for planner in (
-        configs.pomcpow_config(env, sampler, name=f"POMCPOW_{env.name}", time_out_in_seconds=1),
-        configs.pft_dpw_config(env, sampler, name=f"PFT_DPW_{env.name}", time_out_in_seconds=1),
-    ):
+    for policy_cls, name in ((POMCPOW, "POMCPOW"), (PFT_DPW, "PFT_DPW")):
+        planner = HyperParamPlannerConfig(
+            policy_cls=policy_cls,
+            hyper_parameters=search_space(env),
+            constant_parameters={  # settings that stay fixed in every trial
+                "discount_factor": DISCOUNT_FACTOR,
+                "name": f"{name}_{env.name}",
+                "environment": env,
+                "action_sampler": sampler,
+                "time_out_in_seconds": 1,
+            },
+        )
         studies.append(
             HyperParameterRunParams(
                 environment=env,
@@ -251,7 +290,7 @@ for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.9
                 num_episodes=EPISODES_PER_TRIAL,
                 num_steps=NUM_STEPS,
                 n_trials=N_TRIALS,
-                parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
+                parameters_to_optimize=OBJECTIVES,
                 early_stopping=EarlyStoppingConfig(patience=20, min_trials=20),
             )
         )
