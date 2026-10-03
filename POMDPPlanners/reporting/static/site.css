@@ -429,6 +429,23 @@ th { font-weight: 600; color: var(--dim); font-size: 12px; text-transform: upper
 .chart-bar.series-5 { fill: #56B4E9; }
 .chart-card.wide { grid-column: 1 / -1; }
 .chart-card.wide .chart { max-width: 760px; }
+/* A histogram card stacks its bin control over the plot; the control sits at
+   the right, out of the way of the chart's own left-aligned axis label. */
+.chart-card.histogram { flex-direction: column; align-items: stretch; gap: 6px; }
+.histogram-plot { display: flex; justify-content: center; }
+.histogram-bins { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; color: var(--dim); }
+.histogram-bins label { display: flex; align-items: center; gap: 6px; }
+.histogram-bins input {
+  width: 4.5em;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.chart-card.histogram[data-bins-error] .histogram-bins input { border-color: var(--bad); }
 
 .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .gallery figure {

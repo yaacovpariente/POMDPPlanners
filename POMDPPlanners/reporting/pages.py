@@ -752,22 +752,68 @@ def _episode_returns(policy: PolicyView) -> List[float]:
     return returns
 
 
-def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per episode") -> str:
-    """The histogram of episode returns for every planner in one environment.
+#: The returns histogram's axis names, shared by the page and the route that
+#: redraws it, so a redrawn histogram cannot come back labelled differently.
+RETURNS_VALUE_LABEL = "Discounted return"
+RETURNS_COUNT_LABEL = "Frequency"
+
+
+def returns_histogram_svg(policies: Sequence[PolicyView], bins: Optional[int] = None) -> str:
+    """The returns histogram itself, for the page and for a redraw.
 
     Args:
-        env: The environment being shown.
+        policies: The planners to draw, one series each, over shared bins.
+        bins: How many bins; ``None`` for the automatic count.
+
+    Returns:
+        An ``<svg>`` element, or an empty string when no episode has a return.
+    """
+    series = [(policy.name, _episode_returns(policy)) for policy in policies]
+    return charts.histogram_svg(
+        series, value_label=RETURNS_VALUE_LABEL, count_label=RETURNS_COUNT_LABEL, bins=bins
+    )
+
+
+def _returns_chart(
+    run: RunView,
+    env: EnvironmentView,
+    heading: str = "Discounted return per episode",
+) -> str:
+    """The histogram of episode returns for every planner in one environment.
+
+    It carries a bin-count control. Changing it asks the server to redraw the
+    histogram, by the same Python that drew it here, so the page never holds a
+    second copy of the binning and drawing in JavaScript.
+
+    Args:
+        run: The run the planners' episodes belong to.
+        env: The environment being shown, holding the planners to draw.
         heading: Heading to put above the plot.
 
     Returns:
         HTML for the section, or an empty string when no episode recorded a
         return — a run of videos alone, for instance.
     """
-    series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Frequency")
+    svg = returns_histogram_svg(env.policies)
     if not svg:
         return ""
-    return f"<h2>{html(heading)}</h2>" f'<figure class="chart-card wide">{svg}</figure>'
+    sample_size = sum(len(_episode_returns(policy)) for policy in env.policies)
+    automatic = charts.default_bin_count(sample_size)
+    redraw = (
+        f"{_url('histogram', run.store_index, run.experiment_id, run.run_id, 'env', env.name)}"
+        "?" + "&".join(f"planner={quote(policy.name, safe='')}" for policy in env.policies)
+    )
+    return (
+        f"<h2>{html(heading)}</h2>"
+        f'<figure class="chart-card wide histogram" data-histogram="{html(redraw)}" '
+        f'data-histogram-key="{html(env.name + "|" + heading)}" data-auto-bins="{automatic}">'
+        '<div class="histogram-bins"><label>Bins '
+        f'<input type="number" min="1" max="{charts.MAX_BINS}" step="1" value="{automatic}" '
+        'inputmode="numeric" aria-label="Number of bins"></label>'
+        '<button type="button" class="tab" data-bins-auto hidden>Automatic</button></div>'
+        f'<div class="histogram-plot">{svg}</div></figure>'
+        '<script src="/static/histogram-bins.js"></script>'
+    )
 
 
 def environment_page(run: RunView, env: EnvironmentView) -> str:
@@ -795,7 +841,7 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
         f'<a href="{html(chart_url(run, env.name))}">build a chart</a>.</p>'
         + _policy_cards(run, env)
         + _comparison_charts(run, env)
-        + _returns_chart(env)
+        + _returns_chart(run, env)
         + (
             "<details><summary>Plots the run drew</summary>"
             f'<section class="gallery">{env_plots}</section></details>'
@@ -1079,7 +1125,7 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's own recording.</p>"
         + _listing(items, "This planner produced no episode artifacts.", "Recordings")
-        + _returns_chart(EnvironmentView(name=env.name, policies=[policy]))
+        + _returns_chart(run, EnvironmentView(name=env.name, policies=[policy]))
         + (
             "<details><summary>Plots the run drew</summary>"
             f'<section class="gallery">{plots}</section></details>'
@@ -1640,7 +1686,7 @@ def _evaluation_section(
             + _thumbnail_scripts([eval_policy]),
             lazy=len(eval_policy.episodes) > EPISODES_INLINE_LIMIT,
         )
-        + _returns_chart(single, "Discounted return per evaluation episode")
+        + _returns_chart(eval_run, single, "Discounted return per evaluation episode")
     )
 
 
@@ -2174,7 +2220,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         + chart_builder_html(eval_run, shown)
         + "</details>"
         + _comparison_charts(eval_run, shown)
-        + _returns_chart(shown, "Discounted return per evaluation episode")
+        + _returns_chart(eval_run, shown, "Discounted return per evaluation episode")
         + "</section>"
     )
 

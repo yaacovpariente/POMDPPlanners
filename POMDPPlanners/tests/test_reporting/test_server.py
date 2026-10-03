@@ -23,6 +23,7 @@ from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
+from POMDPPlanners.reporting import pages
 from POMDPPlanners.reporting.server import Router, build_server, parse_range
 from POMDPPlanners.reporting.store import RunIndex, find_stores, tracking_uri_for
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
@@ -630,3 +631,74 @@ def test_server_serves_a_video_byte_range(run_dir: Path):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_histogram_bins_default_to_the_automatic_count_and_follow_a_pick():
+    """The returns histogram draws as many shared bins as it is asked for.
+
+    Purpose: The reader picks the bin count; the drawing must use exactly
+    that count, and still fall back to the square-root rule when none is
+    picked, so the page's first draw is unchanged.
+
+    Given: Ten distinct values for one planner and four for another.
+    When: The histogram is drawn with no count, with 10, and with out-of-range
+        counts.
+    Then: No count uses the automatic one; 10 gives one bar per value for the
+        first planner; 0 and 1000 are clamped to 1 and MAX_BINS.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from POMDPPlanners.reporting import charts
+
+    series = [("A", [float(v) for v in range(10)]), ("B", [0.0, 0.0, 9.0, 9.0])]
+
+    assert charts.default_bin_count(14) == 4
+    auto = charts.histogram_svg(series, count_label="Frequency")
+    assert auto == charts.histogram_svg(series, count_label="Frequency", bins=4)
+    assert "Frequency" in auto
+
+    ten = charts.histogram_svg(series, bins=10)
+    assert ten.count('class="chart-bar series-0"') == 10 + 1  # bars + legend swatch
+    assert ten.count('class="chart-bar series-1"') == 2 + 1  # both ends + legend swatch
+
+    one = charts.histogram_svg(series, bins=0)
+    assert one.count('class="chart-bar series-0"') == 1 + 1
+    assert charts.histogram_svg(series, bins=1000) == charts.histogram_svg(
+        series, bins=charts.MAX_BINS
+    )
+
+
+def test_the_returns_histogram_carries_a_bins_control_and_redraws_by_route(router: Router):
+    """Each returns histogram has a bin control whose route redraws it in Python.
+
+    Purpose: A changed bin count must redraw the same chart -- same planners,
+    same labels -- with only the bins changed, and by the same code that drew
+    the page, so there is no second histogram in JavaScript.
+
+    Given: The fixture environment page, whose planner has two returns.
+    When: The page renders, and its redraw URL is fetched with bins=5.
+    Then: The figure names the redraw URL and the automatic count, ships the
+        script, and the route answers with the Python drawing for 5 bins.
+        A planner that is not in the environment, or a bad count, is refused.
+    """
+    _, run = _run(router)
+    base = f"/run/{run.store_index}/{run.experiment_id}/{run.run_id}"
+
+    _, _, page = _get(router, f"{base}/env/{TRACE_ENV}")
+
+    redraw = (
+        f"/histogram/{run.store_index}/{run.experiment_id}/{run.run_id}/env/{TRACE_ENV}"
+        "?planner=PFT_DPW&amp;planner=POMCP"
+    )
+    assert f'data-histogram="{redraw}"' in page
+    assert 'data-auto-bins="3"' in page and 'aria-label="Number of bins"' in page
+    assert "/static/histogram-bins.js" in page
+
+    status, media_type, svg = _get(router, redraw.replace("&amp;", "&") + "&bins=5")
+    assert status == HTTPStatus.OK and media_type.startswith("image/svg+xml")
+    env = run.environment(TRACE_ENV)
+    expected = pages.returns_histogram_svg(env.policies, bins=5)
+    assert svg == expected and "Frequency" in svg
+
+    missing = redraw.replace("&amp;", "&").replace("POMCP", "NOPE") + "&bins=5"
+    assert _get(router, missing)[0] == HTTPStatus.NOT_FOUND
+    assert _get(router, redraw.replace("&amp;", "&") + "&bins=x")[0] == HTTPStatus.BAD_REQUEST

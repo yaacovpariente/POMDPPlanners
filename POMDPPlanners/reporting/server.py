@@ -19,7 +19,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import json
 import os
@@ -80,12 +80,17 @@ class Router:
         Returns:
             ``(status, media_type, body_or_path)``.
         """
-        parts = [unquote(p) for p in urlparse(path).path.strip("/").split("/") if p]
+        parsed = urlparse(path)
+        parts = [unquote(p) for p in parsed.path.strip("/").split("/") if p]
 
         if not parts:
             return self._ok(pages.index_page(self.index.experiments, self.index.roots))
 
         head, rest = parts[0], parts[1:]
+        if head == "histogram":
+            # The only route that reads a query string: which planners to draw
+            # and how many bins, neither of which is a place in the hierarchy.
+            return self._histogram(rest, parse_qs(parsed.query))
         handlers: Dict[str, Callable[[List[str]], Tuple[int, str, Union[bytes, Path]]]] = {
             "static": self._static,
             "experiment": self._experiment,
@@ -249,6 +254,33 @@ class Router:
                 run, study, pages.find_evaluation(study, evaluation_run), parent
             )
         return pages.run_page(run, self.index.children(run), parent)
+
+    def _histogram(
+        self, rest: Sequence[str], query: Dict[str, List[str]]
+    ) -> Tuple[int, str, bytes]:
+        """Redraw a returns histogram with the bin count the reader picked.
+
+        ``/histogram/<store>/<experiment>/<run>/env/<env>?planner=A&planner=B&bins=N``.
+        Every named planner must be in that environment: dropping a missing
+        one would redraw a different chart than the one on the page.
+        """
+        run = self._lookup_run(rest)
+        tail = list(rest[3:])
+        if run is None or len(tail) != 2 or tail[0] != "env":
+            return self._not_found("Malformed histogram URL")
+        env = run.environment(tail[1])
+        if env is None:
+            return self._not_found(f"No environment {tail[1]} in this run")
+        names = query.get("planner", [])
+        policies = [env.policy(name) for name in names]
+        if not names or any(policy is None for policy in policies):
+            return self._not_found(f"Not every planner named is on {env.name}")
+        try:
+            bins = int(query.get("bins", [""])[0])
+        except ValueError:
+            return HTTPStatus.BAD_REQUEST, "text/plain; charset=utf-8", b"bins must be a number"
+        svg = pages.returns_histogram_svg([p for p in policies if p is not None], bins=bins)
+        return HTTPStatus.OK, "image/svg+xml; charset=utf-8", svg.encode("utf-8")
 
     def _artifact(self, rest: Sequence[str]) -> Tuple[int, str, Union[bytes, Path]]:
         run = self._lookup_run(rest)
