@@ -314,9 +314,7 @@ the whole study as one card. Its page has a "Compare Tuned planners" block for
 each environment, listing every evaluation metric with its confidence interval
 and filters for metrics, planners and environments. Each tuned planner opens a
 tuning view with its trials, diagnostic charts and evaluation episodes, and
-both pages can build a figure and download it as SVG, PNG or CSV. These pages
-need the results-site changes from
-[#318](https://github.com/yaacovpariente/POMDPPlanners/pull/318).
+both pages can build a figure and download it as SVG, PNG or CSV.
 
 ## Tutorial Notebooks
 
