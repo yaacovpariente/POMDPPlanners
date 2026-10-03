@@ -240,6 +240,7 @@ EPISODES_PER_TRIAL = 20  # episodes that score one trial
 EVAL_EPISODES = 30       # fresh episodes for each tuned planner
 NUM_STEPS = 30           # step limit per episode
 DISCOUNT_FACTOR = 0.95
+DEPTH = 10               # search depth, fixed rather than tuned
 
 # What each trial is scored on, and in which direction.
 OBJECTIVES = [
@@ -249,13 +250,11 @@ OBJECTIVES = [
 
 
 def search_space(env):
-    """The ranges Optuna searches. Two ints give an int range, two floats a float range."""
     # The UCB bonus has to be able to outweigh the returns, so its bound scales
-    # with the width of the environment's reward range times the deepest search.
-    max_exploration = (env.reward_range[1] - env.reward_range[0]) * 10
+    # with the width of the environment's reward range times the search depth.
+    max_exploration = (env.reward_range[1] - env.reward_range[0]) * DEPTH
     return [
         NumericalHyperParameter(0.0, max_exploration, "exploration_constant"),  # UCB exploration
-        NumericalHyperParameter(2, 10, "depth"),  # search depth
         NumericalHyperParameter(1, 10, "k_a"),  # action widening coefficient
         NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # action widening exponent
         NumericalHyperParameter(1, 10, "k_o"),  # observation widening coefficient
@@ -276,6 +275,7 @@ for env in (
             hyper_parameters=search_space(env),
             constant_parameters={  # settings that stay fixed in every trial
                 "discount_factor": DISCOUNT_FACTOR,
+                "depth": DEPTH,
                 "name": f"{name}_{env.name}",
                 "environment": env,
                 "action_sampler": sampler,
