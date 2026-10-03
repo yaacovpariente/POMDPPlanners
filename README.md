@@ -252,7 +252,7 @@ for env in (RockSamplePOMDP(discount_factor=0.95), PushPOMDP(discount_factor=0.9
                 num_steps=NUM_STEPS,
                 n_trials=N_TRIALS,
                 parameters_to_optimize=AverageReturnParameterToOptimizeMapper().generate(env),
-                early_stopping=EarlyStoppingConfig(patience=100, min_trials=50),
+                early_stopping=EarlyStoppingConfig(patience=20, min_trials=20),
             )
         )
 
@@ -272,9 +272,9 @@ print(stats[["environment", "policy", "average_return", "task_completion_rate"]]
 These constants allow up to 1,000 tuning episodes per planner (50 × 20), then
 30 evaluation episodes for each tuned planner. For a quick try, set them to
 `N_TRIALS = 2`, `EPISODES_PER_TRIAL = 2` and `EVAL_EPISODES = 4`, which takes
-a few minutes. Early stopping waits for `min_trials` before it can end a study,
-so raise `N_TRIALS` above it, for example to 300, when you want early stopping
-to decide how many trials run.
+a few minutes. Early stopping ends a planner's study once 20 trials in a row
+fail to improve its best results, but never before 20 trials have run, so
+`N_TRIALS` is an upper bound.
 
 In `pomdp-report serve results`, the `Tuning_RockSample_Push` experiment shows
 the whole study as one card. Its page has a "Compare Tuned planners" block for
