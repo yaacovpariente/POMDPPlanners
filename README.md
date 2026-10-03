@@ -250,8 +250,6 @@ OBJECTIVES = [
 
 
 def search_space(env):
-    # The UCB bonus has to be able to outweigh the returns, so its bound scales
-    # with the width of the environment's reward range times the search depth.
     max_exploration = (env.reward_range[1] - env.reward_range[0]) * DEPTH
     return [
         NumericalHyperParameter(0.0, max_exploration, "exploration_constant"),  # UCB exploration
