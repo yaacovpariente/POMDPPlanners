@@ -205,8 +205,8 @@ for details.
 ### Parameter tuning
 
 `LocalSimulationsAPI.run_optimize_and_evaluate` tunes each planner with an
-Optuna study, then runs every tuned planner again on fresh episodes. The fresh
-run matters: the best tuning score is the luckiest of many noisy trials, so it
+Optuna study and evaluates the tuned planners over multiple episodes. The
+evaluation matters: the best tuning score is the luckiest of many noisy trials, so it
 overstates how good the chosen parameters are.
 
 The example below tunes POMCPOW and PFT-DPW on two environments, RockSample
