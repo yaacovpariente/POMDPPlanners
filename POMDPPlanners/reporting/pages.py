@@ -1593,10 +1593,6 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
             + grid
             + "</details>"
         )
-    pngs = ", ".join(
-        f'<a href="{html(artifact_url(run, path))}">{html(path.rsplit("/", 1)[-1])}</a>'
-        for path in study.plots
-    )
     return (
         f'<p><a class="tab" href="{html(tuning_chart_url(run))}">Build a chart</a> '
         '<span class="dim">— an editable figure of these diagnostics, as SVG or PNG.</span></p>'
@@ -1604,11 +1600,6 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
         "Pareto trials, red the chosen one. Parameter importances are not drawn: Optuna "
         "computes them from the live study, which the run does not keep.</p>"
         + "".join(blocks)
-        + (
-            f'<p class="note">The optimizer\'s own matplotlib versions are in the run: {pngs}.</p>'
-            if pngs
-            else ""
-        )
         + '<script src="/static/chart-tips.js"></script>'
     )
 

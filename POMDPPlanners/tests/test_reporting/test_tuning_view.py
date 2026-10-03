@@ -222,12 +222,12 @@ def test_the_tuning_view_shows_the_study_and_its_fresh_evaluation(router: Router
     assert "<tr class=best>" in page
     assert ">Best<" in page and ">Pareto<" in page
     assert "4.75" in page and "1.25" in page
-    # The diagnostics are drawn on the page from the records, not shown as
-    # the PNGs; those stay in the run and are only linked.
+    # The diagnostics are drawn on the page from the records; the PNGs stay
+    # in the run and are neither shown nor listed.
     assert 'class="chart tuning-chart"' in page
     assert "/static/chart-tips.js" in page
     assert "<img" not in page.split("Diagnostic charts", 1)[1].split("<h2>Evaluation", 1)[0]
-    assert "tuning/pareto_front.png" in page
+    assert "pareto_front.png" not in page
     assert "Pareto-front quality (early stopping)" in page
     # Tuning score beside the fresh evaluation, each with its interval.
     assert "Best trial (5 episodes)" in page and "Evaluation (1 episodes)" in page
