@@ -232,8 +232,8 @@ def test_the_tuning_view_shows_the_study_and_its_fresh_evaluation(router: Router
     # Tuning score beside the fresh evaluation, each with its interval.
     assert "Best trial (5 episodes)" in page and "Evaluation (1 episodes)" in page
     assert "9.5" in page and "6.25" in page and "5 – 7.5" in page
-    # Its one episode shares its seed with every trial's episode 0, and says so.
-    assert "Evaluation episodes 0–0 use the same seeds" in page
+    # The comparison stands without explanatory notes under it.
+    assert "noisy scores" not in page and "same seeds" not in page
     # The evaluation's episode, with its replay one click away.
     assert f"/env/{ENV}/policy/{POLICY}/episode/0" in page
     assert 'class="thumb thumb-scene"' in page

@@ -1403,40 +1403,6 @@ def _objective_comparison(
             "Interval",
         ],
         rows,
-    ) + (
-        '<p class="note">The best trial was picked as the best of several noisy scores, so '
-        "its own score runs high. The evaluation reruns the chosen parameters in a run of its "
-        "own, with its own episode count, and is the figure to report.</p>"
-        + _seed_overlap_note(study, evaluation)
-    )
-
-
-def _seed_overlap_note(
-    study: tuning.TuningStudy,
-    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
-) -> str:
-    """Warn when evaluation episodes reuse the seeds the tuning episodes ran on.
-
-    Episode seeds come from the environment name, the planner name and the
-    episode index alone. A tuned planner keeps its name into the evaluation,
-    so evaluation episode ``i`` replays the seed of every trial's episode
-    ``i``. For a planner whose decisions do not depend on the clock, those
-    episodes repeat the best trial's own episodes rather than draw new ones.
-    """
-    if evaluation is None or not study.episodes_per_trial:
-        return ""
-    _, _, eval_policy = evaluation
-    if study.policy_name is not None and study.policy_name != eval_policy.name:
-        return ""
-    evaluated = len(eval_policy.episodes)
-    shared = min(study.episodes_per_trial, evaluated) if evaluated else study.episodes_per_trial
-    if shared <= 0:
-        return ""
-    return (
-        f'<p class="note">Evaluation episodes 0–{shared - 1} use the same seeds as each '
-        f"trial's episodes, because both runs name the planner {html(eval_policy.name)}. "
-        "For a planner whose choices do not depend on wall-clock time they repeat the best "
-        "trial's episodes; only the episodes after them are new draws.</p>"
     )
 
 
