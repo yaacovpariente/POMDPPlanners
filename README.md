@@ -316,6 +316,13 @@ and filters for metrics, planners and environments. Each tuned planner opens a
 tuning view with its trials, diagnostic charts and evaluation episodes, and
 both pages can build a figure and download it as SVG, PNG or CSV.
 
+The video below walks through the whole example: copying the code from this
+README, running the full study, and reading the results on PushPOMDP in the
+results site. It shows the planner comparison and its filters, a tuning view
+with its trials and diagnostic charts, and the evaluation episodes played Live.
+
+https://github.com/user-attachments/assets/1d0f551d-d2f1-48f1-83b7-af31c5fd2778
+
 ## Tutorial Notebooks
 
 Self-contained Jupyter notebooks with executable end-to-end examples live in
