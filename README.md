@@ -157,10 +157,17 @@ belief = create_environment_belief(env, n_particles=200)
 
 api = LocalSimulationsAPI()
 _, stats = api.run_multiple_environments_and_policies(
-    environment_run_params=[EnvironmentRunParams(
-        environment=env, belief=belief,
-        policies=[pomcpow, pft_dpw], num_episodes=30, num_steps=30)],
-    alpha=0.1, confidence_interval_level=0.95,
+    environment_run_params=[
+        EnvironmentRunParams(
+            environment=env,
+            belief=belief,
+            policies=[pomcpow, pft_dpw],
+            num_episodes=30,
+            num_steps=30,
+        )
+    ],
+    alpha=0.1,
+    confidence_interval_level=0.95,
     experiment_name="LightDark_Evaluation",
     n_jobs=-1,  # run episodes in parallel, one per CPU core
     cache_dir_path=Path("results"),
@@ -188,16 +195,133 @@ the chart as an image, and playing every episode at once with Live.
 
 https://github.com/user-attachments/assets/3b305863-5180-454d-bb47-0a9dd13d76cf
 
-For hyperparameter search, `LocalSimulationsAPI.run_optimize_and_evaluate(...)`
-accepts `HyperParameterRunParams` with Optuna search ranges and forwards the
-best configuration to evaluation automatically.
-
 Long-running experiments can report progress to Slack and a local progress
 database, including detection of crashed or stalled runs — set
 `SLACK_WEBHOOK_URL` in your environment and notifications are picked up
 automatically. See
 [`NotificationConfig`](POMDPPlanners/simulations/simulations_deployment/run_progress/config.py)
 for details.
+
+### Parameter tuning
+
+`LocalSimulationsAPI.run_optimize_and_evaluate` tunes each planner with an
+Optuna study and evaluates the tuned planners over multiple episodes.
+
+The example below tunes POMCPOW and PFT-DPW on two environments, RockSample
+and Push, and compares the tuned planners on each. Everything the study uses is
+written out so you can edit it in place: the search range of each parameter,
+the planner settings that stay fixed, and the objectives each trial is scored
+on (average return and task completion rate). Early stopping ends a study once
+its best trials stop improving. Each planner's name carries its environment,
+because the evaluation requires planner names to be unique across environments.
+Save it as `tune_planners.py` and run `python tune_planners.py`.
+
+```python
+from pathlib import Path
+
+from POMDPPlanners.environments import PushPOMDP, RockSamplePOMDP
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    EarlyStoppingConfig,
+    HyperParameterOptimizationDirection,
+    HyperParameterRunParams,
+    HyperParamPlannerConfig,
+    NumericalHyperParameter,
+)
+from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+N_TRIALS = 50            # at most this many Optuna trials per planner
+EPISODES_PER_TRIAL = 20  # episodes that score one trial
+EVAL_EPISODES = 30       # fresh episodes for each tuned planner
+NUM_STEPS = 30           # step limit per episode
+DISCOUNT_FACTOR = 0.95
+DEPTH = 10               # search depth, fixed rather than tuned
+
+# What each trial is scored on, and in which direction.
+OBJECTIVES = [
+    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+    ("task_completion_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+]
+
+
+def search_space(env):
+    max_exploration = (env.reward_range[1] - env.reward_range[0]) * DEPTH
+    return [
+        NumericalHyperParameter(0.0, max_exploration, "exploration_constant"),  # UCB exploration
+        NumericalHyperParameter(1, 10, "k_a"),  # action widening coefficient
+        NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # action widening exponent
+        NumericalHyperParameter(1, 10, "k_o"),  # observation widening coefficient
+        NumericalHyperParameter(0.01, 0.5, "alpha_o"),  # observation widening exponent
+    ]
+
+
+studies = []
+for env in (
+    RockSamplePOMDP(discount_factor=DISCOUNT_FACTOR),
+    PushPOMDP(discount_factor=DISCOUNT_FACTOR),
+):
+    belief = create_environment_belief(env, n_particles=200)
+    sampler = DiscreteActionSampler(env.get_actions())
+    for policy_cls, name in ((POMCPOW, "POMCPOW"), (PFT_DPW, "PFT_DPW")):
+        planner = HyperParamPlannerConfig(
+            policy_cls=policy_cls,
+            hyper_parameters=search_space(env),
+            constant_parameters={  # settings that stay fixed in every trial
+                "discount_factor": DISCOUNT_FACTOR,
+                "depth": DEPTH,
+                "name": f"{name}_{env.name}",
+                "environment": env,
+                "action_sampler": sampler,
+                "time_out_in_seconds": 1,
+            },
+        )
+        studies.append(
+            HyperParameterRunParams(
+                environment=env,
+                belief=belief,
+                hyper_param_planner_config=planner,
+                num_episodes=EPISODES_PER_TRIAL,
+                num_steps=NUM_STEPS,
+                n_trials=N_TRIALS,
+                parameters_to_optimize=OBJECTIVES,
+                early_stopping=EarlyStoppingConfig(patience=20, min_trials=20),
+            )
+        )
+
+api = LocalSimulationsAPI()
+_, stats = api.run_optimize_and_evaluate(
+    configs=studies,
+    evaluation_episodes=EVAL_EPISODES,
+    evaluation_steps=NUM_STEPS,
+    optimization_n_jobs=-1,  # use every CPU core
+    evaluation_n_jobs=-1,
+    experiment_name="Tuning_RockSample_Push",
+    cache_dir_path=Path("results"),
+)
+print(stats[["environment", "policy", "average_return", "task_completion_rate"]])
+```
+
+These constants allow up to 1,000 tuning episodes per planner (50 × 20), then
+30 evaluation episodes for each tuned planner. Early stopping ends a planner's study once 20 trials in a row
+fail to improve its best results, but never before 20 trials have run, so
+`N_TRIALS` is an upper bound.
+
+In `pomdp-report serve results`, the `Tuning_RockSample_Push` experiment shows
+the whole study as one card. Its page has a "Compare Tuned planners" block for
+each environment, listing every evaluation metric with its confidence interval
+and filters for metrics, planners and environments. Each tuned planner opens a
+tuning view with its trials, diagnostic charts and evaluation episodes, and
+both pages can build a figure and download it as SVG, PNG or CSV.
+
+The video below walks through the whole example: copying the code from this
+README, running the full study, and reading the results on PushPOMDP in the
+results site. It shows the planner comparison and its filters, a tuning view
+with its trials and diagnostic charts, and the evaluation episodes played Live.
+
+https://github.com/user-attachments/assets/1d0f551d-d2f1-48f1-83b7-af31c5fd2778
 
 ## Tutorial Notebooks
 
