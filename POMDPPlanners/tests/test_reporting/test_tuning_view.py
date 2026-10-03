@@ -437,6 +437,26 @@ def test_trials_and_episodes_are_collapsed_and_closed(router: Router, study_dir)
     assert "data-lazy" not in page
 
 
+def test_the_evaluation_episodes_offer_the_planner_pages_live_switch(router: Router, study_dir):
+    """The tuning view's episode cards can all be played at once, as on a planner page.
+
+    Purpose: The tuning view lists the evaluation's episodes with the same 3D
+    cards as the planner page; the same Live switch must play them, and only
+    them, so it belongs inside the Episodes section.
+
+    Given: The fixture study, whose evaluation episode has a trace.
+    When: The tuning view renders.
+    Then: The Episodes section holds one Live switch, off, before the scene
+        scripts; the page has no other.
+    """
+    page = _page(router, study_dir["config"])
+    episodes = page.split("<summary>Episodes (1)</summary>", 1)[1].split("</details>", 1)[0]
+
+    assert '<div class="episode-tools"><button type="button" class="tab" data-live' in episodes
+    assert episodes.index("data-live") < episodes.index("/static/viewer/scene-cards.js")
+    assert page.count("data-live") == 1
+
+
 def test_all_evaluation_metrics_sit_under_the_comparison(router: Router, study_dir):
     """The full evaluation metrics follow the table whose column they expand.
 
@@ -476,6 +496,9 @@ def test_large_sections_are_built_only_when_opened(router: Router, study_dir, mo
     assert episodes.startswith("<template>")
     assert "/static/viewer/scene-cards.js" in episodes
     assert "/static/lazy-details.js" in page
+    # The Live switch travels with the cards it plays, ahead of the script
+    # that binds it, so it works once the section is built.
+    assert episodes.index('data-live aria-pressed="false"') < episodes.index("scene-cards.js")
 
 
 def test_five_thousand_trials_stay_out_of_the_layout():

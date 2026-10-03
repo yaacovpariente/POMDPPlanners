@@ -1660,6 +1660,7 @@ def _evaluation_section(
         )
     eval_run, eval_env, eval_policy = evaluation
     single = EnvironmentView(name=eval_env.name, policies=[eval_policy])
+    scripts = _thumbnail_scripts([eval_policy])
     return (
         f'<p class="note">Raw evaluation run: '
         f'<a href="{html(run_url(eval_run))}">{html(eval_run.run_name)}</a> · '
@@ -1676,14 +1677,20 @@ def _evaluation_section(
         "Build a chart from this evaluation</a></p>"
         + _collapsible(
             f"Episodes ({len(eval_policy.episodes)})",
-            _listing(
+            # The planner page's Live switch, inside the section rather than
+            # in the page head: it plays these cards and nothing else, and in
+            # a lazy section it must arrive with them, before scene-cards.js
+            # binds every switch on the page. Offered only when a card has a
+            # scene to play.
+            (f'<div class="episode-tools">{_live_toggle()}</div>' if scripts else "")
+            + _listing(
                 _episode_items(eval_run, eval_env, eval_policy),
                 "This evaluation produced no episode artifacts.",
                 "Recordings",
             )
             # The scene scripts go inside the section, so a lazy one loads
             # them only when it opens.
-            + _thumbnail_scripts([eval_policy]),
+            + scripts,
             lazy=len(eval_policy.episodes) > EPISODES_INLINE_LIMIT,
         )
         + _returns_chart(eval_run, single, "Discounted return per evaluation episode")
