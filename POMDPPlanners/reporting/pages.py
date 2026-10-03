@@ -752,29 +752,67 @@ def _episode_returns(policy: PolicyView) -> List[float]:
     return returns
 
 
-def _returns_chart(env: EnvironmentView, heading: str = "Discounted return per episode") -> str:
-    """The histogram of episode returns for every planner in one environment.
+#: The returns histogram's axis names, shared by the page and the route that
+#: redraws it, so a redrawn histogram cannot come back labelled differently.
+RETURNS_VALUE_LABEL = "Discounted return"
+RETURNS_COUNT_LABEL = "Frequency"
+
+
+def returns_histogram_svg(policies: Sequence[PolicyView], bins: Optional[int] = None) -> str:
+    """The returns histogram itself, for the page and for a redraw.
 
     Args:
-        env: The environment being shown.
+        policies: The planners to draw, one series each, over shared bins.
+        bins: How many bins; ``None`` for the automatic count.
+
+    Returns:
+        An ``<svg>`` element, or an empty string when no episode has a return.
+    """
+    series = [(policy.name, _episode_returns(policy)) for policy in policies]
+    return charts.histogram_svg(
+        series, value_label=RETURNS_VALUE_LABEL, count_label=RETURNS_COUNT_LABEL, bins=bins
+    )
+
+
+def _returns_chart(
+    run: RunView,
+    env: EnvironmentView,
+    heading: str = "Discounted return per episode",
+) -> str:
+    """The histogram of episode returns for every planner in one environment.
+
+    It carries a bin-count control. Changing it asks the server to redraw the
+    histogram, by the same Python that drew it here, so the page never holds a
+    second copy of the binning and drawing in JavaScript.
+
+    Args:
+        run: The run the planners' episodes belong to.
+        env: The environment being shown, holding the planners to draw.
         heading: Heading to put above the plot.
 
     Returns:
         HTML for the section, or an empty string when no episode recorded a
         return — a run of videos alone, for instance.
     """
-    series = [(policy.name, _episode_returns(policy)) for policy in env.policies]
-    svg = charts.histogram_svg(series, value_label="Discounted return", count_label="Episodes")
+    svg = returns_histogram_svg(env.policies)
     if not svg:
         return ""
-    episodes = sum(len(values) for _, values in series)
+    sample_size = sum(len(_episode_returns(policy)) for policy in env.policies)
+    automatic = charts.default_bin_count(sample_size)
+    redraw = (
+        f"{_url('histogram', run.store_index, run.experiment_id, run.run_id, 'env', env.name)}"
+        "?" + "&".join(f"planner={quote(policy.name, safe='')}" for policy in env.policies)
+    )
     return (
         f"<h2>{html(heading)}</h2>"
-        f'<figure class="chart-card wide">{svg}</figure>'
-        f'<p class="note">How many of the {episodes} episode(s) ended in each range of '
-        "discounted return. The bins are shared across planners so the bars can be "
-        "compared; the returns are read from the episodes themselves, not from a "
-        "logged average.</p>"
+        f'<figure class="chart-card wide histogram" data-histogram="{html(redraw)}" '
+        f'data-histogram-key="{html(env.name + "|" + heading)}" data-auto-bins="{automatic}">'
+        '<div class="histogram-bins"><label>Bins '
+        f'<input type="number" min="1" max="{charts.MAX_BINS}" step="1" value="{automatic}" '
+        'inputmode="numeric" aria-label="Number of bins"></label>'
+        '<button type="button" class="tab" data-bins-auto hidden>Automatic</button></div>'
+        f'<div class="histogram-plot">{svg}</div></figure>'
+        '<script src="/static/histogram-bins.js"></script>'
     )
 
 
@@ -803,7 +841,7 @@ def environment_page(run: RunView, env: EnvironmentView) -> str:
         f'<a href="{html(chart_url(run, env.name))}">build a chart</a>.</p>'
         + _policy_cards(run, env)
         + _comparison_charts(run, env)
-        + _returns_chart(env)
+        + _returns_chart(run, env)
         + (
             "<details><summary>Plots the run drew</summary>"
             f'<section class="gallery">{env_plots}</section></details>'
@@ -1087,7 +1125,7 @@ def policy_page(run: RunView, env: EnvironmentView, policy: PolicyView) -> str:
         f'<a href="{html(env_url(run, env.name))}">{html(env.name)}</a> · '
         "each card shows that episode's own recording.</p>"
         + _listing(items, "This planner produced no episode artifacts.", "Recordings")
-        + _returns_chart(EnvironmentView(name=env.name, policies=[policy]))
+        + _returns_chart(run, EnvironmentView(name=env.name, policies=[policy]))
         + (
             "<details><summary>Plots the run drew</summary>"
             f'<section class="gallery">{plots}</section></details>'
@@ -1403,40 +1441,6 @@ def _objective_comparison(
             "Interval",
         ],
         rows,
-    ) + (
-        '<p class="note">The best trial was picked as the best of several noisy scores, so '
-        "its own score runs high. The evaluation reruns the chosen parameters in a run of its "
-        "own, with its own episode count, and is the figure to report.</p>"
-        + _seed_overlap_note(study, evaluation)
-    )
-
-
-def _seed_overlap_note(
-    study: tuning.TuningStudy,
-    evaluation: Optional[Tuple[RunView, EnvironmentView, PolicyView]],
-) -> str:
-    """Warn when evaluation episodes reuse the seeds the tuning episodes ran on.
-
-    Episode seeds come from the environment name, the planner name and the
-    episode index alone. A tuned planner keeps its name into the evaluation,
-    so evaluation episode ``i`` replays the seed of every trial's episode
-    ``i``. For a planner whose decisions do not depend on the clock, those
-    episodes repeat the best trial's own episodes rather than draw new ones.
-    """
-    if evaluation is None or not study.episodes_per_trial:
-        return ""
-    _, _, eval_policy = evaluation
-    if study.policy_name is not None and study.policy_name != eval_policy.name:
-        return ""
-    evaluated = len(eval_policy.episodes)
-    shared = min(study.episodes_per_trial, evaluated) if evaluated else study.episodes_per_trial
-    if shared <= 0:
-        return ""
-    return (
-        f'<p class="note">Evaluation episodes 0–{shared - 1} use the same seeds as each '
-        f"trial's episodes, because both runs name the planner {html(eval_policy.name)}. "
-        "For a planner whose choices do not depend on wall-clock time they repeat the best "
-        "trial's episodes; only the episodes after them are new draws.</p>"
     )
 
 
@@ -1627,10 +1631,6 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
             + grid
             + "</details>"
         )
-    pngs = ", ".join(
-        f'<a href="{html(artifact_url(run, path))}">{html(path.rsplit("/", 1)[-1])}</a>'
-        for path in study.plots
-    )
     return (
         f'<p><a class="tab" href="{html(tuning_chart_url(run))}">Build a chart</a> '
         '<span class="dim">— an editable figure of these diagnostics, as SVG or PNG.</span></p>'
@@ -1638,11 +1638,6 @@ def _diagnostic_charts(run: RunView, study: tuning.TuningStudy) -> str:
         "Pareto trials, red the chosen one. Parameter importances are not drawn: Optuna "
         "computes them from the live study, which the run does not keep.</p>"
         + "".join(blocks)
-        + (
-            f'<p class="note">The optimizer\'s own matplotlib versions are in the run: {pngs}.</p>'
-            if pngs
-            else ""
-        )
         + '<script src="/static/chart-tips.js"></script>'
     )
 
@@ -1665,6 +1660,7 @@ def _evaluation_section(
         )
     eval_run, eval_env, eval_policy = evaluation
     single = EnvironmentView(name=eval_env.name, policies=[eval_policy])
+    scripts = _thumbnail_scripts([eval_policy])
     return (
         f'<p class="note">Raw evaluation run: '
         f'<a href="{html(run_url(eval_run))}">{html(eval_run.run_name)}</a> · '
@@ -1681,17 +1677,23 @@ def _evaluation_section(
         "Build a chart from this evaluation</a></p>"
         + _collapsible(
             f"Episodes ({len(eval_policy.episodes)})",
-            _listing(
+            # The planner page's Live switch, inside the section rather than
+            # in the page head: it plays these cards and nothing else, and in
+            # a lazy section it must arrive with them, before scene-cards.js
+            # binds every switch on the page. Offered only when a card has a
+            # scene to play.
+            (f'<div class="episode-tools">{_live_toggle()}</div>' if scripts else "")
+            + _listing(
                 _episode_items(eval_run, eval_env, eval_policy),
                 "This evaluation produced no episode artifacts.",
                 "Recordings",
             )
             # The scene scripts go inside the section, so a lazy one loads
             # them only when it opens.
-            + _thumbnail_scripts([eval_policy]),
+            + scripts,
             lazy=len(eval_policy.episodes) > EPISODES_INLINE_LIMIT,
         )
-        + _returns_chart(single, "Discounted return per evaluation episode")
+        + _returns_chart(eval_run, single, "Discounted return per evaluation episode")
     )
 
 
@@ -2225,7 +2227,7 @@ def _comparison_block(environment: str, rows: Sequence[tuple]) -> str:
         + chart_builder_html(eval_run, shown)
         + "</details>"
         + _comparison_charts(eval_run, shown)
-        + _returns_chart(shown, "Discounted return per evaluation episode")
+        + _returns_chart(eval_run, shown, "Discounted return per evaluation episode")
         + "</section>"
     )
 
