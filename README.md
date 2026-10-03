@@ -305,9 +305,7 @@ print(stats[["environment", "policy", "average_return", "task_completion_rate"]]
 ```
 
 These constants allow up to 1,000 tuning episodes per planner (50 × 20), then
-30 evaluation episodes for each tuned planner. For a quick try, set them to
-`N_TRIALS = 2`, `EPISODES_PER_TRIAL = 2` and `EVAL_EPISODES = 4`, which takes
-a few minutes. Early stopping ends a planner's study once 20 trials in a row
+30 evaluation episodes for each tuned planner. Early stopping ends a planner's study once 20 trials in a row
 fail to improve its best results, but never before 20 trials have run, so
 `N_TRIALS` is an upper bound.
 
