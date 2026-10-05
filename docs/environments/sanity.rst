@@ -21,8 +21,7 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Everything is deterministic, and nothing depends on the current
-state.
+\rangle`.
 
 **State space**
 
@@ -30,11 +29,16 @@ state.
 
    S = \{0, 1\}
 
+The state is the last action taken.
+
 **Action space**
 
 .. math::
 
    A = \{0, 1\}
+
+Action :math:`a` moves the agent to state :math:`a`; action :math:`0` is the
+rewarded one.
 
 **Observation space**
 
@@ -42,7 +46,9 @@ state.
 
    Z = \{0, 1\}
 
-**Transition model**
+The observation is the state itself.
+
+**Transition model.** Deterministic, and independent of the current state:
 
 .. math::
 

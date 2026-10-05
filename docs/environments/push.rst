@@ -36,12 +36,12 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-Write the state as :math:`s = (\mathbf{r}, \mathbf{q}, \mathbf{t})` — robot,
-object and target positions — and let :math:`\mathcal{G} = [0, n{-}1]^2` with
-:math:`n` = ``grid_size``, :math:`\mathcal{O}` the obstacle discs.
 
-**State space.** Six numbers, plus a terminal slot on the continuous variant
-when a hazard-terminal flag is on:
+**State space.** Write the state as :math:`s = (\mathbf{r}, \mathbf{q},
+\mathbf{t})` — robot, object and target positions — and let
+:math:`\mathcal{G} = [0, n{-}1]^2` with :math:`n` = ``grid_size``. Six
+numbers, plus a terminal slot on the continuous variant when a
+hazard-terminal flag is on:
 
 .. math::
 
@@ -63,6 +63,10 @@ moves.
        \lVert \mathbf{d} \rVert \leq \texttt{max\_push}\}
        & \texttt{ContinuousPushPOMDP}
    \end{cases}
+
+A discrete action moves the robot one unit: up :math:`\mathbf{d} = (0, 1)`,
+down :math:`(0, -1)`, right :math:`(1, 0)`, left :math:`(-1, 0)`. A continuous
+action is the displacement :math:`\mathbf{d}` itself.
 
 **Observation space.** The same layout as the state: exact robot and target
 positions and a noisy object position clamped to the grid (plus the terminal
@@ -90,7 +94,8 @@ close enough. With displacement :math:`\mathbf{d}`, friction
    \mathbf{t}' &= \mathbf{t}
 
 where :math:`\mathrm{blk}(\mathbf{y}) = \mathbf{y}` unless :math:`\mathbf{y}`
-lies in an obstacle, in which case the mover stays put, and
+lies in an obstacle (a disc of radius ``obstacle_radius`` around a point of
+``obstacles``), in which case the mover stays put, and
 :math:`\mathrm{clip}_\mathcal{G}` clamps to the grid. The object moves a factor
 :math:`1 - f` of the robot's displacement — friction is a *slip* between
 robot and object, not a drag on the robot.
@@ -108,7 +113,8 @@ fires instead, uniformly:
    \Pr[\text{executed} = a'] = p / 3, \quad a' \neq a
 
 The continuous variant instead perturbs the displacement by
-:math:`\mathcal{N}(0, \Sigma_T)`.
+:math:`\mathcal{N}(0, \Sigma_T)`, :math:`\Sigma_T` =
+``state_transition_cov_matrix``.
 
 **Observation model.** The robot knows where *it* is; only the object is
 hidden:
@@ -146,9 +152,14 @@ with
      \mathbb{1}[\mathbf{r}' \in \text{hazard}] \cdot
      \mathrm{Bern}(\texttt{dangerous\_area\_hit\_probability})
 
-The shaping term is on the **object**, the penalties on the **robot**. Both
-hazard terms follow the same three ``reward_model_type`` variants as
-:doc:`rock_sample`. With either hit probability below one, ``reward`` draws a
+where :math:`\mathcal{O}` is the union of the obstacle discs (radius
+``obstacle_radius`` around each point of ``obstacles``) and *hazard* the
+union of the danger discs (radius ``dangerous_area_radius`` around each point
+of ``dangerous_areas``). The shaping term is on the **object**, the penalties
+on the **robot**. This is the default ``reward_model_type``,
+``CONSTANT_HAZARD_PENALTY``; ``ZERO_MEAN_HAZARD_SHOCK`` and
+``DISTANCE_DECAYED_HAZARD_PENALTY`` change how the two hazard terms are
+drawn. With either hit probability below one, ``reward`` draws a
 Bernoulli per call and is not a deterministic function of its arguments.
 
 **Initial belief.** With ``initial_state`` supplied, :math:`b_0` is a point

@@ -30,13 +30,16 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-Write the state as :math:`s = (x, \dot{x}, q, \dot{q})`.
 
 **State space**
 
 .. math::
 
-   S = \mathbb{R}^4
+   S = \mathbb{R}^4, \qquad s = (x, \dot{x}, q, \dot{q})
+
+with :math:`x` the cart position, :math:`\dot{x}` the cart velocity,
+:math:`q` the pole angle from upright in radians, and :math:`\dot{q}` the
+pole's angular velocity.
 
 **Action space**
 
@@ -49,6 +52,9 @@ Write the state as :math:`s = (x, \dot{x}, q, \dot{q})`.
 .. math::
 
    Z = \mathbb{R}^4
+
+A noisy reading of the four state components :math:`(x, \dot{x}, q,
+\dot{q})`, in that order.
 
 **Transition model.** The Gym CartPole physics, with :math:`m_c = 1.0`,
 :math:`m_p = 0.1`, half-length :math:`\ell = 0.5`, :math:`g = 9.8`,

@@ -50,12 +50,12 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Let :math:`n` = ``grid_size``, :math:`G = \{0..n{-}1\}^2` the
-playable cells, :math:`L` = ``target_length`` and :math:`K` =
-``starvation_limit`` (default :math:`2n^2`).
+\rangle`.
 
-**State space.** A body (head first), a food cell, a starvation counter and a
-status tag:
+**State space.** Let :math:`n` = ``grid_size``, :math:`G = \{0..n{-}1\}^2` the
+playable cells, each written (row, column), :math:`L` = ``target_length`` and
+:math:`K` = ``starvation_limit`` (default :math:`2n^2`). A state is a body
+(head first), a food cell, a starvation counter and a status tag:
 
 .. math::
 
@@ -64,7 +64,10 @@ status tag:
    \times \{0..K\}
 
 with :math:`\mathbf{z} = (z_1, \dots, z_\ell)` the occupied cells,
-:math:`f` the food, :math:`m` steps since food, and
+:math:`f` the food (:math:`\varnothing` if none), :math:`m` steps since food,
+and the status :math:`\textsf{RUNNING}` while alive, or why the episode
+ended — head off the grid, head into the body, target length reached, or
+:math:`K` steps without food:
 
 .. math::
 
@@ -81,8 +84,18 @@ alone determines where the snake can go next.
    A = \{\textsf{turn\_left},\; \textsf{straight},\; \textsf{turn\_right}\}
      = \{0, 1, 2\}
 
-**Observation space.** One terminal sentinel, or a live reading of scent
-quadrant, optional sighting and body:
+:math:`0` turns the heading 90° counter-clockwise, :math:`1` keeps it,
+:math:`2` turns it 90° clockwise; then the head moves one cell along the
+new heading.
+
+**Observation space.** The sentinel :math:`\textsf{TERM}` from a terminal
+state, or a :math:`\textsf{LIVE}` reading with three components:
+
+- a scent quadrant in :math:`\{0,1,2,3\}` — the food's direction from the
+  head: :math:`0` north-east, :math:`1` north-west, :math:`2` south-east,
+  :math:`3` south-west (north is row :math:`-1`, east is column :math:`+1`);
+- the food's cell if it was sighted, :math:`\varnothing` if not;
+- the body, head first.
 
 .. math::
 
@@ -90,7 +103,10 @@ quadrant, optional sighting and body:
    \times (G \cup \{\varnothing\}) \times G^{\leq L}
 
 **Transition model.** Deterministic except for where the food respawns.
-Rotate the heading, step, then resolve:
+The heading is :math:`h = z_1 - z_2`, one of north :math:`(-1, 0)`, east
+:math:`(0, 1)`, south :math:`(1, 0)`, west :math:`(0, -1)`, and
+:math:`\mathcal{R}_a` rotates it as action :math:`a` says. Rotate the heading,
+step, then resolve:
 
 .. math::
 
@@ -105,7 +121,7 @@ Rotate the heading, step, then resolve:
 
 Releasing the tail is what makes the cell it has just left safe to enter. The
 counter resets on a meal, :math:`m' = 0` if eating else :math:`m + 1`, and
-the status is decided in a fixed priority order:
+the status is decided in this order:
 
 .. math::
 
@@ -129,15 +145,16 @@ respawn, uniform over the cells the new body leaves free:
 and only when the step ate and did not win; otherwise :math:`f' = f`.
 
 **Observation model.** A terminal state emits the sentinel
-:math:`\textsf{TERM}`. Otherwise the snake sees its own body exactly and the
-food through two channels:
+:math:`\textsf{TERM}`. Otherwise the snake sees its own body exactly, a
+scent quadrant :math:`q` and a possible sighting :math:`\hat f` of the food:
 
 .. math::
 
    o = \big(\textsf{LIVE},\; q,\; \hat{f},\; \mathbf{z}'\big)
 
 *Sighting.* The food is reported only when it is inside the Chebyshev window
-around the head, and then only with probability :math:`p_{\text{det}}` =
+of radius :math:`r` = ``window_radius`` (default 2) around the head, and then
+only with probability :math:`p_{\text{det}}` =
 ``detection_probability``:
 
 .. math::
@@ -149,8 +166,10 @@ around the head, and then only with probability :math:`p_{\text{det}}` =
 With :math:`p_{\text{det}} < 1` a silent window is not proof the food is
 elsewhere — absence of evidence stays weak evidence rather than a certainty.
 
-*Scent.* A noisy quadrant reading. Let :math:`Q(f' - z'_1) \subseteq
-\{0,1,2,3\}` be the quadrants compatible with the offset — two of them when the
+*Scent.* A noisy quadrant reading, with quadrants :math:`0` north-east,
+:math:`1` north-west, :math:`2` south-east, :math:`3` south-west of the head.
+Let :math:`Q(f' - z'_1) \subseteq \{0,1,2,3\}` be the quadrants compatible
+with the offset — two of them when the
 food shares the head's row or column, one otherwise. With :math:`p_{\text{scent}}` =
 ``scent_accuracy``:
 
@@ -180,8 +199,10 @@ cannot change either:
 so :math:`R \in [-1, 1]`. Note a :math:`\textsf{WIN}` pays nothing beyond the
 meal that caused it.
 
-**Initial belief.** A fixed three-cell snake running west from the grid
-centre, with the food uniform over every cell it leaves free:
+**Initial belief.** A fixed three-cell snake,
+:math:`\mathbf{z}_0 = ((c, c), (c, c-1), (c, c-2))` with :math:`c =
+\lfloor n/2 \rfloor`, heading east, with the food uniform over every cell it
+leaves free:
 
 .. math::
 

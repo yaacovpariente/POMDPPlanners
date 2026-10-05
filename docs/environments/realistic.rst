@@ -59,7 +59,8 @@ route. The along-route speed is
 
    v_\parallel = v_x \cos(\mathrm{yaw} - e_{\mathrm{yaw}}) + v_y \sin(\mathrm{yaw} - e_{\mathrm{yaw}})
 
-and with steering command :math:`u`:
+and, with steering command :math:`u`, desired speed :math:`v_{\text{des}}` =
+``desired_speed`` and lane-offset limit :math:`d_{\max}` = ``out_lane_thresh``:
 
 .. math::
 

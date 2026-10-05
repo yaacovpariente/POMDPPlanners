@@ -34,11 +34,11 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-Let the maze be :math:`M \times N` with wall set :math:`\mathcal{W}`, free
-cells :math:`G`, :math:`P` initial pellet cells :math:`c_1, \dots, c_P`,
-and :math:`g` = ``num_ghosts``.
 
-**State space.**
+**State space.** The maze is :math:`M \times N` cells, a cell written
+(row, column), with wall set :math:`\mathcal{W}` and free cells :math:`G`;
+there are :math:`P` initial pellet cells :math:`c_1, \dots, c_P` and
+:math:`g` = ``num_ghosts`` ghosts.
 
 .. math::
 
@@ -59,6 +59,11 @@ flag. The state space is the package's largest discrete one:
    A = \{\textsf{N}, \textsf{E}, \textsf{S}, \textsf{W}, \textsf{stay}\}
      = \{0,1,2,3,4\}
 
+Action :math:`a` moves PacMan one cell by :math:`\Delta_a` (row change,
+column change): :math:`0` north :math:`(-1, 0)`, :math:`1` east
+:math:`(0, 1)`, :math:`2` south :math:`(1, 0)`, :math:`3` west
+:math:`(0, -1)`, :math:`4` stay :math:`(0, 0)`.
+
 **Observation space.** One cell per ghost; PacMan's own cell is not part of
 it. A terminal state reports :math:`(-1, -1)` for every ghost.
 
@@ -67,8 +72,9 @@ it. A terminal state reports :math:`(-1, -1)` for every ghost.
    Z = \big(\{0..M{-}1\} \times \{0..N{-}1\}\big)^{g}
    \cup \{(-1, -1)^{g}\}
 
-**Transition model.** :math:`\top` is absorbing. Otherwise one step resolves
-in this order.
+**Transition model.** :math:`\mathrm{d}` is the Manhattan distance between
+two cells. :math:`\top` is absorbing. Otherwise one step resolves in this
+order.
 
 *PacMan moves,* deterministically; a move into a wall or off the grid keeps
 the cell:
@@ -110,9 +116,14 @@ cells** — without the swap case a ghost would walk through PacMan:
 *Pellets.* Landing on an active pellet clears it and adds ``pellet_reward``
 to :math:`\text{score}`. If no pellet remains, :math:`\top' = 1`.
 
-*Hazard.* When ``is_dangerous_area_hit_terminal``, a final draw terminates
-the episode if :math:`x'` lies in a hazard zone — taken last, and only when
-the step has not already ended, so the terminal flag stays absorbing.
+*Hazard.* A hazard zone is the set of cells within Euclidean distance
+``dangerous_area_radius`` of a centre in ``dangerous_areas``. When
+``is_dangerous_area_hit_terminal``, entering a zone ends the episode — always
+under the constant penalty model, and with probability
+:math:`e^{-\rho(x')/\lambda}` under the distance-decayed one, where
+:math:`\rho(x')` is the Euclidean distance from :math:`x'` to the nearest
+centre and :math:`\lambda` = ``penalty_decay``. This is taken last, and only
+when the step has not already ended, so the terminal flag stays absorbing.
 
 **Observation model.** PacMan's own cell is known and never reported; the
 observation is one noisy cell per ghost. The noise grows with the distance to the ghost and then saturates:
@@ -150,8 +161,20 @@ against the realised transition:
    &+\; \texttt{win\_reward} \cdot \mathbb{1}[\mathbf{m}' = \mathbf{0}]
    \;-\; D(x')
 
-with the hazard term :math:`D` following the same three
-``reward_model_type`` variants as :doc:`rock_sample`.
+where the hazard term :math:`D` depends on ``reward_model_type``, with
+:math:`p_D` = ``dangerous_area_penalty`` and :math:`\rho(x')` the Euclidean
+distance from :math:`x'` to the nearest hazard centre:
+
+.. math::
+
+   D(x') = \begin{cases}
+     p_D \cdot \mathbb{1}[x' \text{ in a hazard zone}] & \texttt{CONSTANT\_HAZARD\_PENALTY} \\
+     \pm p_D \text{ with probability } \tfrac12 \text{ each, if } x' \text{ in a hazard zone, else } 0 & \texttt{ZERO\_MEAN\_HAZARD\_SHOCK} \\
+     p_D \text{ with probability } e^{-\rho(x')/\lambda}, \text{ else } 0 & \texttt{DISTANCE\_DECAYED\_HAZARD\_PENALTY}
+   \end{cases}
+
+with :math:`\lambda` = ``penalty_decay``. With no ``dangerous_areas``,
+:math:`D = 0`.
 
 .. note::
 
@@ -167,6 +190,10 @@ with the hazard term :math:`D` following the same three
 
    b_0(s) = \mathbb{1}[s = s_0], \qquad
    s_0 = \big(x_0,\, (y_k^0),\, \mathbf{1},\, 0,\, 0\big)
+
+with :math:`x_0` = ``initial_pacman_pos``, :math:`y_k^0` the ghosts' start
+cells (``initial_ghost_positions``), every pellet present, score 0 and not
+terminal.
 
 Uncertainty does not come from the prior here — it accumulates from the
 observation noise as the ghosts move. The initial observation distribution is

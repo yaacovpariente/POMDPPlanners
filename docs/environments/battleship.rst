@@ -28,13 +28,14 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Let :math:`n` be ``board_size``, :math:`C = \{0, \dots, n^2 - 1\}`
+\rangle`.
+
+**State space.** Let :math:`n` be ``board_size``, :math:`C = \{0, \dots, n^2 - 1\}`
 the cells in row-major order, and :math:`\mathcal{L} \subseteq \{0,1\}^{C}` the
 set of legal fleet layouts — the occupancy vectors reachable by placing every
 ship in ``ship_lengths`` straight, within the board, without overlap (and
-without touching when ``allow_adjacent_ships=False``).
-
-**State space.** A layout paired with the set of cells probed so far:
+without touching when ``allow_adjacent_ships=False``). A state is a layout
+paired with the set of cells probed so far:
 
 .. math::
 
@@ -50,11 +51,16 @@ means it has been probed. The vector is stored flat as
 
    A = C, \qquad a = \text{row} \cdot n + \text{column}
 
+Action :math:`a` probes cell :math:`a`; rows and columns start at :math:`0`.
+
 **Observation space**
 
 .. math::
 
    Z = \{\textsf{MISS}, \textsf{HIT}\} = \{0, 1\}
+
+:math:`\textsf{HIT}` means the probed cell holds a ship, :math:`\textsf{MISS}`
+that it does not.
 
 **Transition model.** Deterministic, and it never touches the fleet — probing
 only records that a cell was visited:

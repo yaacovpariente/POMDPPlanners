@@ -34,11 +34,12 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Let the grid have :math:`H` rows and :math:`W` columns,
-:math:`C = HW` cells, and :math:`K` = ``num_beams``.
+\rangle`.
 
-**State space.** The state is *augmented*: it carries the robot's own map
-estimate and the scan drawn this step, alongside the hidden world.
+**State space.** Let the grid have :math:`H` rows and :math:`W` columns,
+:math:`C = HW` cells, and :math:`K` = ``num_beams``. The state is
+*augmented*: it carries the robot's own map estimate and the scan drawn this
+step, alongside the hidden world.
 
 .. math::
 
@@ -54,7 +55,13 @@ estimate and the scan drawn this step, alongside the hidden world.
    \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}\big) \times
    \{0,1\}^{C} \times [-L, L]^{C} \times \mathbb{R}^{K}
 
-of length :math:`4 + 2C + K`, with :math:`L` = ``log_odds_clamp``. The hidden
+of length :math:`4 + 2C + K`, where :math:`t` is the step count;
+:math:`(r, c)` the robot's row and column and :math:`d` its heading,
+:math:`0` north, :math:`1` east, :math:`2` south, :math:`3` west;
+:math:`m_j = 1` if cell :math:`j` is occupied; :math:`g_j` the robot's
+log-odds that cell :math:`j` is occupied, clamped to :math:`[-L, L]` with
+:math:`L` = ``log_odds_clamp``; and :math:`z_k` the range read by beam
+:math:`k`, in cells. The hidden
 part is :math:`m`; the robot's map :math:`g` is a *statistic the agent
 computed*, not a fact about the world, and is carried in the state only so the
 reward can be a function of it.
@@ -66,6 +73,9 @@ reward can be a function of it.
    A = \{\textsf{forward},\; \textsf{turn\_left},\; \textsf{turn\_right}\}
      = \{0, 1, 2\}
 
+:math:`0` moves one cell along the heading; :math:`1` turns 90°
+anticlockwise and :math:`2` turns 90° clockwise, both in place.
+
 **Observation space.** The exact pose and one range per beam:
 
 .. math::
@@ -73,9 +83,13 @@ reward can be a function of it.
    Z = \{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}
    \times \mathbb{R}^{K}
 
-**Transition model.** Three stages.
+**Transition model.** Motion, then scan, then map update.
 
-*Motion.* Turning is deterministic, :math:`d' = (d \mp 1) \bmod 4`.
+*Motion.* Turning is deterministic: :math:`d' = (d - 1) \bmod 4` for
+:math:`\textsf{turn\_left}` and :math:`(d + 1) \bmod 4` for
+:math:`\textsf{turn\_right}`. :math:`\mathrm{fwd}(r, c, d)` is the next cell
+along heading :math:`d`: :math:`(r-1, c)`, :math:`(r, c+1)`, :math:`(r+1, c)`
+or :math:`(r, c-1)` for north, east, south, west.
 A forward move into an occupied or out-of-bounds cell is blocked; an otherwise
 valid move fails with probability :math:`p_f` = ``move_failure_probability``:
 
@@ -86,7 +100,9 @@ valid move fails with probability :math:`p_f` = ``move_failure_probability``:
 
 The true map :math:`m` never changes.
 
-*Scan.* Ray-cast the :math:`K` beams of the fan from the new pose against
+*Scan.* The :math:`K` beams are spread evenly across
+``field_of_view_degrees`` (default 360), centred on the heading, out to
+``max_range_cells``. Ray-cast them from the new pose against
 :math:`m` to get noise-free ranges :math:`\bar{z}_k`, then draw
 
 .. math::
@@ -172,9 +188,11 @@ exactly :math:`1.0` and a wholly unknown grid exactly :math:`C`. Then
    b_0 = \mathbb{1}\big[(t, r, c, d) = (0, r_0, c_0, d_0)\big] \otimes
    \mathrm{Prior}(m) \otimes \mathbb{1}[g = 0] \otimes \mathbb{1}[z = 0]
 
-where :math:`\mathrm{Prior}(m)` places ``num_obstacles`` random rectangles of
+where :math:`(r_0, c_0, d_0)` = (``start_row``, ``start_col``,
+``start_heading``), by default the grid centre facing north, and
+:math:`\mathrm{Prior}(m)` places ``num_obstacles`` random rectangles of
 side at most ``max_obstacle_size``, plus the boundary wall when
-``has_boundary_wall``, keeping the start cell free. :math:`g = 0` is the
+``has_boundary_wall``, keeping the start cell and its four neighbours free. :math:`g = 0` is the
 uninformative prior :math:`p = \tfrac{1}{2}` everywhere, so
 :math:`\mathcal{H}(g_0) = C`. The opening observation is the start pose
 with zero ranges, a sentinel never passed to the map update.

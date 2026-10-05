@@ -28,10 +28,11 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Write :math:`\ell` for ``tiger_left`` and :math:`r` for
-``tiger_right``.
+\rangle`.
 
-**State space**
+**State space.** Two doors, with the tiger behind one: :math:`\ell` =
+``tiger_left`` (behind the left door), :math:`r` = ``tiger_right`` (behind
+the right door).
 
 .. math::
 
@@ -43,12 +44,18 @@ The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 
    A = \{\textsf{listen},\; \textsf{open\_left},\; \textsf{open\_right}\}
 
+:math:`\textsf{listen}` hears which side the tiger is on, with noise;
+:math:`\textsf{open\_left}` and :math:`\textsf{open\_right}` open that door.
+
 **Observation space**
 
 .. math::
 
    Z = \{\textsf{hear\_left},\; \textsf{hear\_right},\;
    \textsf{hear\_nothing}\}
+
+:math:`\textsf{hear\_left}` and :math:`\textsf{hear\_right}` say which side
+the tiger was heard on; :math:`\textsf{hear\_nothing}` follows opening a door.
 
 **Transition model.** Listening leaves the tiger where it is; opening either
 door places it behind the left or right door with probability 1/2 each,

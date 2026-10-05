@@ -36,15 +36,15 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
-:math:`\mathbf{p}, \mathbf{v} \in \mathbb{R}^2`, and let
-:math:`\lVert \mathbf{v} \rVert` be the speed.
 
 **State space**
 
 .. math::
 
-   S = \mathbb{R}^4
+   S = \mathbb{R}^4, \qquad s = (\mathbf{p}, \mathbf{v})
+
+with :math:`\mathbf{p} \in \mathbb{R}^2` the agent's position and
+:math:`\mathbf{v} \in \mathbb{R}^2` its velocity.
 
 **Action space.** Four force magnitudes:
 
@@ -52,11 +52,17 @@ Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
 
    A = \{0, 1, 2, 3\}
 
+Action :math:`a` pushes with :math:`0\%`, :math:`33\%`, :math:`67\%` or
+:math:`100\%` of ``max_force``, for :math:`a = 0, 1, 2, 3`. The action sets
+only the strength; the environment draws the direction.
+
 **Observation space**
 
 .. math::
 
    Z = \mathbb{R}^4
+
+A noisy reading of :math:`(\mathbf{p}, \mathbf{v})`, in that order.
 
 **Transition model.** The agent chooses a force *magnitude*; the **direction
 is drawn by the environment**:
@@ -112,7 +118,8 @@ read off the state the action is taken **from**:
    + \texttt{safety\_violation\_penalty} \cdot
    \mathbb{1}\big[\lVert \mathbf{v} \rVert > v_{\text{safe}}\big]
 
-with :math:`v_{\text{safe}}` = ``safe_velocity_threshold``. This is the whole tension:
+with :math:`\lVert \mathbf{v} \rVert` the speed and :math:`v_{\text{safe}}` =
+``safe_velocity_threshold``. This is the whole tension:
 :math:`R` grows linearly in speed right up to :math:`v_{\text{safe}}`, then drops by
 :math:`100` (the default penalty) just above it. Because the agent only ever sees
 :math:`\lVert \mathbf{v} \rVert` through noise of width :math:`\sigma_v`, it

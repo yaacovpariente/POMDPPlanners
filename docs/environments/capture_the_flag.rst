@@ -42,12 +42,19 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Write :math:`G` for the free cells (in bounds, not a tree), :math:`\text{Blue}` for
-the blue players and :math:`\text{Red}` for red, with :math:`|\text{Blue}| = n_{\text{blue}}` and
-:math:`|\text{Red}| = n_{\text{red}}`. Let :math:`F = (f_1, \dots, f_K)` be the red flag
-candidates and :math:`\mathrm{d}` the Manhattan distance.
+\rangle`.
 
-**State space.** One vector holding both teams and all the bookkeeping:
+**State space.** The field is a grid of :math:`W \times H` cells
+(``grid_size``); a cell is written :math:`(x, y)` with :math:`x \in
+\{0..W-1\}` the column and :math:`y \in \{0..H-1\}` the row. Some cells hold
+trees (``trees``), which no player can enter; :math:`G` is the set of cells
+inside the field and not a tree. The red flag's home is one of :math:`K`
+candidate cells :math:`F = (f_1, \dots, f_K)` (``red_flag_candidates``).
+There are :math:`n_{\text{blue}}` blue
+players, numbered :math:`1..n_{\text{blue}}`, and :math:`n_{\text{red}}` red
+players, numbered :math:`1..n_{\text{red}}`.
+
+A state is one vector:
 
 .. math::
 
@@ -65,25 +72,69 @@ candidates and :math:`\mathrm{d}` the Manhattan distance.
    \{0..n_{\text{blue}}\} \times \{0..n_{\text{red}}\} \times
    \mathbb{Z}_{\geq 0}^{2(n_{\text{blue}} + n_{\text{red}})} \times \mathbb{Z}_{\geq 0}^2
 
-Here :math:`k` indexes which candidate holds the red flag, :math:`c^{\text{red}}` is
-the blue player carrying the red flag (:math:`0` = nobody) and :math:`c^{\text{blue}}` the
-red player carrying the blue flag, :math:`\text{freeze}` are respawn-freeze counters,
-:math:`\text{cool}` tagger cooldowns, and :math:`\text{score}` the scores. A flag is either
-home or on a carrier's back — a dropped flag returns home at once — so one
-index replaces a second position.
+with these components:
 
-**Action space.** Six per player, issued as one joint action:
+- :math:`x^{\text{blue}}_i \in G` — the cell of blue player :math:`i`;
+  :math:`x^{\text{red}}_j \in G` — the cell of red player :math:`j`.
+- :math:`k \in \{1..K\}` — which candidate :math:`f_k` is the red flag's
+  home.
+- :math:`c^{\text{red}} \in \{0..n_{\text{blue}}\}` — the blue player
+  carrying the red flag, :math:`0` if the red flag is home;
+  :math:`c^{\text{blue}} \in \{0..n_{\text{red}}\}` — the red player carrying
+  the blue flag, :math:`0` if the blue flag is home.
+- :math:`\text{freeze}^{\text{blue}}_i, \text{freeze}^{\text{red}}_j` — steps
+  left before a tagged player may act again.
+- :math:`\text{cool}^{\text{blue}}_i, \text{cool}^{\text{red}}_j` — steps left
+  before a player who tagged someone may tag again.
+- :math:`\text{score}^{\text{blue}}, \text{score}^{\text{red}}` — the number
+  of flags each team has captured.
+
+:math:`s` is the state an action is taken from and :math:`s'` the state after
+the step; a prime marks a component of :math:`s'`, as in
+:math:`x^{\text{blue}\prime}_i`.
+
+**Action space.** One action per blue player, issued together as one joint
+action:
 
 .. math::
 
    A = \{0, \dots, 5\}^{n_{\text{blue}}}, \qquad |A| = 6^{n_{\text{blue}}}
 
-encoded as a base-6 integer :math:`a = \sum_i a_i 6^i`. Per player:
-:math:`0..3` move, :math:`4` hold, :math:`5` scan. Only blue is controlled;
-red is part of :math:`T`.
+The joint action is the base-6 integer
+:math:`a = \sum_{i=1}^{n_{\text{blue}}} a_i 6^{i-1}`, where :math:`a_i` is
+blue player :math:`i`'s action:
 
-**Observation space.** Blue's own cells exactly, the two noisy channels, and
-the exactly observed bookkeeping, plus a terminal sentinel:
+- :math:`0` — move north, :math:`y + 1`;
+- :math:`1` — move east, :math:`x + 1`;
+- :math:`2` — move south, :math:`y - 1`;
+- :math:`3` — move west, :math:`x - 1`;
+- :math:`4` — hold: stay in place;
+- :math:`5` — scan: stay in place, and read the flag detector at longer
+  range this step.
+
+Only blue is controlled; the red players move as part of :math:`T`.
+
+**Observation space.** Each observation is one vector with these
+components, in order:
+
+- :math:`x^{\text{blue}}_{1:n_{\text{blue}}} \in G^{n_{\text{blue}}}` —
+  every blue player's cell, exact.
+- :math:`\hat d_{ij} \in \{0..d_{\max}\}` for every blue player :math:`i`
+  and red player :math:`j`, ordered by :math:`i` then :math:`j` — a noisy
+  reading of the Manhattan distance from :math:`i` to :math:`j`, where
+  :math:`d_{\max} = W + H - 2` is the largest distance on the field.
+- :math:`z_i \in \{0, 1\}` for every blue player :math:`i` — a noisy
+  flag-detector bit; :math:`z_i = 1` is more likely the closer player
+  :math:`i` is to the red flag.
+- :math:`c^{\text{red}} \in \{0..n_{\text{blue}}\}` — the blue player
+  carrying the red flag, :math:`0` if none, exact.
+- :math:`\mathbb{1}[c^{\text{blue}} \neq 0] \in \{0, 1\}` — :math:`1` if a
+  red player is carrying the blue flag, exact; *which* red player is not
+  observed.
+- :math:`\text{freeze}^{\text{blue}}_{1:n_{\text{blue}}}` — every blue
+  player's freeze counter, exact.
+- :math:`\text{score}^{\text{blue}}, \text{score}^{\text{red}}` — both
+  scores, exact.
 
 .. math::
 
@@ -91,88 +142,163 @@ the exactly observed bookkeeping, plus a terminal sentinel:
    \times \{0..n_{\text{blue}}\} \times \{0,1\} \times \mathbb{Z}_{\geq 0}^{n_{\text{blue}}}
    \times \mathbb{Z}_{\geq 0}^2 \;\cup\; \{(-1, \dots, -1)\}
 
-with :math:`d_{\max} = W + H - 2` for a :math:`W \times H` field, the
-largest Manhattan distance on it.
+The red players' cells, :math:`k`, and the red counters are not observed. A
+terminal state emits the all :math:`-1` vector.
 
-**Transition model.** :math:`T` is the composition of four stages, in this
-order. Let :math:`p_s` = ``slip_probability``, :math:`p_r` =
-``red_pursuit_probability``.
+**Transition model.** With :math:`p_s` = ``slip_probability``,
+:math:`p_r` = ``red_pursuit_probability``, :math:`r` = ``red_alert_radius``,
+:math:`n_d` = ``n_red_defenders``, :math:`F_{\max}` = ``freeze_steps``,
+:math:`C_{\max}` = ``tagger_cooldown_steps``, :math:`m` = ``midline``,
+:math:`b^{\text{blue}}, b^{\text{red}}` = ``blue_base``, ``red_base``,
+:math:`h^{\text{blue}}` = ``blue_flag_cell``, :math:`h^{\text{red}} = f_k`,
+and :math:`\mathrm{d}` the Manhattan distance:
 
-*Stage 1 — blue moves.* A frozen player (:math:`\text{freeze}^{\text{blue}}_i > 0`) cannot move. A
-move goes where intended with probability :math:`1 - p_s` and deflects to
-either perpendicular direction with probability :math:`p_s / 2` each; a move
-into a tree or off the field leaves the player in place:
-
-.. math::
-
-   \Pr[x^{\text{blue}\prime}_i = y] = \sum_{a'} w(a') \,
-   \mathbb{1}\big[y = \mathrm{block}(x^{\text{blue}}_i + \Delta_{a'})\big], \quad
-   w(a_i) = 1 - p_s,\; w(a_i^\perp) = \tfrac{p_s}{2}
-
-where :math:`\mathrm{block}(y) = y` if :math:`y \in G`, else the current cell.
-Two different slips can be blocked into the same cell, so the outcomes are
-accumulated.
-
-*Stage 2 — red moves.* Each red player picks a target :math:`q_j`
-deterministically from its role: a carrier runs for its base; an attacker for
-the blue flag cell; a defender guards the cell beside the red flag, switching
-to the nearest blue intruder in the red half once that intruder is within
-``red_alert_radius``. Let :math:`N_j` be the free 4-neighbours of
-:math:`x^{\text{red}}_j` together with :math:`x^{\text{red}}_j` itself, and
-:math:`N_j^\star \subseteq N_j` those minimizing :math:`\mathrm{d}(\cdot,
-q_j)`. Then
+The blue half is left of the midline, the red half right of it:
 
 .. math::
 
-   \Pr[x^{\text{red}\prime}_j = y] = \frac{1 - p_r}{|N_j|}\mathbb{1}[y \in N_j]
-   + \frac{p_r}{|N_j^\star|}\mathbb{1}[y \in N_j^\star]
+   H^{\text{blue}} = \{(x, y) \in G : x < m\}, \qquad
+   H^{\text{red}} = \{(x, y) \in G : x > m\}
 
-so red closes on its target with probability :math:`p_r` and otherwise wanders
-uniformly. A frozen red player stays put.
-
-*Stages 3–6 — deterministic resolution.* Given both teams' realised cells:
-
-1. **Pick-up.** An unfrozen blue player on the red flag cell takes the flag if
-   :math:`c^{\text{red}} = 0`; symmetrically for red. Lowest index wins a tie.
-2. **Tagging.** Blue player :math:`i` is tagged when it shares a cell with an
-   unfrozen, off-cooldown red player **in the red half**: it teleports to the
-   blue base, drops any flag, and gets :math:`\text{freeze}^{\text{blue}}_i \leftarrow`
-   ``freeze_steps``, while the tagger gets :math:`\text{cool}^{\text{red}}_j \leftarrow`
-   ``tagger_cooldown_steps``. Symmetric for red in the blue half.
-3. **Scoring.** Both conditions are judged against the *same*, pre-scoring
-   carrier indices:
-
-   .. math::
-
-      \text{blue scores} &\iff c^{\text{red}} \neq 0 \;\wedge\;
-        x^{\text{blue}\prime}_{c^{\text{red}}} = \text{blue base} \;\wedge\; c^{\text{blue}} = 0 \\
-      \text{red scores} &\iff c^{\text{blue}} \neq 0 \;\wedge\;
-        x^{\text{red}\prime}_{c^{\text{blue}}} = \text{red base} \;\wedge\; c^{\text{red}} = 0
-
-   which makes them mutually exclusive: each side needs the other's flag home.
-4. **Counters.** :math:`\text{freeze}, \text{cool}` decrement toward zero, against the values
-   carried in from :math:`s`, so a freeze set this step lasts its full length.
-
-Pick-up strictly precedes tagging, so a player tagged on the flag cell has
-already taken the flag and therefore drops it. The support is the product of
-the per-player move outcomes — at most three per blue player, five per red —
-so :math:`T` is enumerated exactly rather than sampled from.
-
-**Observation model.** Blue sees its own team exactly and the red team only
-through two noisy channels. The observation is the concatenation
+:math:`\Delta_a` is the one-cell move of action :math:`a`, and
+:math:`\mathrm{side}(a)` is the set of the two moves at right angles to it — a
+north or south move slips east or west, an east or west move slips north or
+south:
 
 .. math::
 
-   o = \big(x^{\text{blue}}_{1:n_{\text{blue}}},\; \underbrace{\hat{d}_{ij}}_{n_{\text{blue}} \times n_{\text{red}}},\;
+   \Delta_0 = (0, 1),\; \Delta_1 = (1, 0),\; \Delta_2 = (0, -1),\; \Delta_3 = (-1, 0),
+   \qquad \mathrm{side}(0) = \mathrm{side}(2) = \{1, 3\},\;
+   \mathrm{side}(1) = \mathrm{side}(3) = \{0, 2\}
+
+:math:`\mathrm{blk}_x(y)` keeps a player at :math:`x` when the target
+:math:`y` is a tree or off the field; :math:`N(x)` is :math:`x` and its free
+neighbours:
+
+.. math::
+
+   \mathrm{blk}_x(y) = \begin{cases} y & y \in G \\ x & y \notin G \end{cases},
+   \qquad N(x) = \{x\} \cup \{x + \Delta_a \in G : a \in \{0..3\}\}
+
+:math:`\delta_x` is the distribution that puts probability 1 on cell
+:math:`x`, and :math:`\mathcal{U}(N)` is the uniform distribution over a set
+of cells :math:`N`. A step applies, in order:
+
+*Blue moves.* A frozen, holding or scanning player stays. Otherwise it
+moves as chosen, or slips to a right angle with probability :math:`p_s`.
+With :math:`x = x^{\text{blue}}_i`:
+
+.. math::
+
+   x^{\text{blue}\prime}_i \sim \begin{cases}
+     \delta_x & \text{freeze}^{\text{blue}}_i > 0 \;\lor\; a_i \in \{4, 5\} \\
+     (1 - p_s)\,\delta_{\mathrm{blk}_x(x + \Delta_{a_i})}
+       + \sum_{a' \in \mathrm{side}(a_i)} \tfrac{p_s}{2}\,\delta_{\mathrm{blk}_x(x + \Delta_{a'})}
+       & \text{otherwise}
+   \end{cases}
+
+*Red moves.* Each red player first picks a target :math:`q_j`: the red
+base if it carries the blue flag; the blue flag if it is an attacker
+(:math:`j > n_d`); otherwise, as a defender, the nearest blue player in the
+red half :math:`\iota_j` if one is within :math:`r`, else the free cell beside
+the red flag nearest the red base. With :math:`x = x^{\text{red}}_j`:
+
+.. math::
+
+   q_j = \begin{cases}
+     b^{\text{red}} & c^{\text{blue}} = j \\
+     h^{\text{blue}} & j > n_d \\
+     \iota_j & j \le n_d,\; \mathrm{d}(x, \iota_j) \le r \\
+     \operatorname{arg\,min}_{y \in N(h^{\text{red}}) \setminus \{h^{\text{red}}\}} \mathrm{d}(y, b^{\text{red}}) & \text{otherwise}
+   \end{cases},
+   \qquad \iota_j = \operatorname{arg\,min}_{x^{\text{blue}\prime}_i \in H^{\text{red}}} \mathrm{d}(x, x^{\text{blue}\prime}_i)
+
+It then steps toward :math:`q_j` with probability :math:`p_r` and to a random
+neighbour otherwise; a frozen red player stays:
+
+.. math::
+
+   x^{\text{red}\prime}_j \sim \begin{cases}
+     \delta_x & \text{freeze}^{\text{red}}_j > 0 \\
+     (1 - p_r)\,\mathcal{U}\big(N(x)\big) + p_r\,\mathcal{U}\big(N^\star_j\big) & \text{otherwise}
+   \end{cases},
+   \qquad N^\star_j = \operatorname{arg\,min}_{y \in N(x)} \mathrm{d}(y, q_j)
+
+*Pick-up.* An unfrozen player on the other team's flag takes it if no one
+carries it; the lowest index wins a tie:
+
+.. math::
+
+   c^{\text{red}} \leftarrow \min\{i : x^{\text{blue}\prime}_i = h^{\text{red}},\; \text{freeze}^{\text{blue}}_i = 0\}
+   \quad \text{if } c^{\text{red}} = 0, \\
+   c^{\text{blue}} \leftarrow \min\{j : x^{\text{red}\prime}_j = h^{\text{blue}},\; \text{freeze}^{\text{red}}_j = 0\}
+   \quad \text{if } c^{\text{blue}} = 0
+
+(unchanged when the set is empty).
+
+*Tagging.* A player caught on an opponent's cell in the opponent's half is
+sent home, frozen, and drops the flag; the tagger cools down. Red tags
+first: for :math:`j = 1..n_{\text{red}}`, red player :math:`j` tags the lowest
+:math:`i` with
+
+.. math::
+
+   x^{\text{blue}\prime}_i = x^{\text{red}\prime}_j \in H^{\text{red}},\quad
+   \text{freeze}^{\text{blue}}_i = \text{freeze}^{\text{red}}_j = \text{cool}^{\text{red}}_j = 0
+
+.. math::
+
+   \Rightarrow\; x^{\text{blue}\prime}_i \leftarrow b^{\text{blue}},\;
+   \text{freeze}^{\text{blue}\prime}_i \leftarrow F_{\max},\;
+   \text{cool}^{\text{red}\prime}_j \leftarrow C_{\max},\;
+   c^{\text{red}} \leftarrow 0 \text{ if } c^{\text{red}} = i
+
+Then the same with colours swapped (:math:`H^{\text{blue}}`,
+:math:`b^{\text{red}}`, :math:`c^{\text{blue}}`), skipping blue players
+tagged this step.
+
+*Scoring.* A team scores when its carrier stands on its own base while its
+own flag is home; the captured flag goes back home:
+
+.. math::
+
+   \sigma^{\text{blue}} = \mathbb{1}\big[c^{\text{red}} \ne 0 \wedge x^{\text{blue}\prime}_{c^{\text{red}}} = b^{\text{blue}} \wedge c^{\text{blue}} = 0\big],
+   \qquad
+   \sigma^{\text{red}} = \mathbb{1}\big[c^{\text{blue}} \ne 0 \wedge x^{\text{red}\prime}_{c^{\text{blue}}} = b^{\text{red}} \wedge c^{\text{red}} = 0\big]
+
+.. math::
+
+   \text{score}^{\text{blue}\prime} = \text{score}^{\text{blue}} + \sigma^{\text{blue}},\;
+   \text{score}^{\text{red}\prime} = \text{score}^{\text{red}} + \sigma^{\text{red}}, \\
+   c^{\text{red}\prime} = (1 - \sigma^{\text{blue}})\,c^{\text{red}},\;
+   c^{\text{blue}\prime} = (1 - \sigma^{\text{red}})\,c^{\text{blue}}
+
+*Counters.* Every freeze and cooldown not just set by a tag counts down by
+one:
+
+.. math::
+
+   \text{freeze}' = \max(\text{freeze} - 1, 0), \qquad \text{cool}' = \max(\text{cool} - 1, 0)
+
+**Observation model.** The observation is drawn from the successor state
+:math:`s'` and the joint action :math:`a`:
+
+.. math::
+
+   o = \big(x^{\text{blue}\prime}_{1:n_{\text{blue}}},\; \underbrace{\hat{d}_{ij}}_{n_{\text{blue}} \times n_{\text{red}}},\;
    \underbrace{z_{1:n_{\text{blue}}}}_{\text{flag detector}},\;
-   c^{\text{red}},\; \mathbb{1}[c^{\text{blue}} \neq 0],\; \text{freeze}^{\text{blue}}_{1:n_{\text{blue}}},\; \text{score}^{\text{blue}}, \text{score}^{\text{red}}\big)
+   c^{\text{red}\prime},\; \mathbb{1}[c^{\text{blue}\prime} \neq 0],\; \text{freeze}^{\text{blue}\prime}_{1:n_{\text{blue}}},\; \text{score}^{\text{blue}\prime}, \text{score}^{\text{red}\prime}\big)
 
-The exact components act as an indicator factor — an observation disagreeing with
-them has likelihood zero, not merely a small one. The two noisy channels:
+Blue's cells, the red-flag carrier, whether the blue flag is taken, blue's
+freeze counters and the scores are copied exactly from :math:`s'`: an
+observation that disagrees with them has likelihood zero, not merely a small
+one. The range readings :math:`\hat d_{ij}` and the flag-detector bits
+:math:`z_i` are noisy, and drawn independently:
 
-*Range badges.* Player :math:`i` reads the Manhattan distance to red player
-:math:`j`, correct with probability :math:`1 - p_e` where :math:`p_e` =
-``range_error_probability``, and off by one otherwise:
+*Range readings.* Blue player :math:`i` reads the Manhattan distance
+:math:`\mathrm{d}` to red player :math:`j`, correct with probability :math:`1 - p_e` where :math:`p_e` =
+``range_error_probability`` (default :math:`0.2`), and off by one
+otherwise:
 
 .. math::
 
@@ -181,25 +307,31 @@ them has likelihood zero, not merely a small one. The two noisy channels:
      p_e / 2 & v = d_{ij} \pm 1
    \end{cases}, \qquad d_{ij} = \mathrm{d}(x^{\text{blue}\prime}_i, x^{\text{red}\prime}_j)
 
-clipped to :math:`[0, d_{\max}]` with the out-of-range mass folded back onto
-the endpoint, so it sums to one at the field's extremes too.
+clipped to :math:`[0, d_{\max}]`, :math:`d_{\max} = W + H - 2`, with the
+out-of-range mass folded back onto the endpoint, so it sums to one at the
+field's extremes too.
 
-*Flag detector.* A binary reading per player whose accuracy decays with
-distance to the red flag cell:
+*Flag detector.* Blue player :math:`i` reads one bit :math:`z_i`, a noisy
+signal that the red flag is near: :math:`z_i = 1` is likelier the nearer
+player :math:`i` is to the red flag's cell :math:`f_k`:
 
 .. math::
 
    \Pr[z_i = 1] = \tfrac{1}{2}\big(1 + 2^{-d^f_i / d_0(a_i)}\big),
    \qquad d^f_i = \mathrm{d}(x^{\text{blue}\prime}_i, f_k)
 
-with :math:`d_0(a_i) =` ``detector_half_distance_scan`` when :math:`a_i = 5`
-and ``detector_half_distance_move`` otherwise — the same
+where :math:`a_i` is player :math:`i`'s action and :math:`d_0(a_i)` is the
+distance at which the reading is right with probability :math:`0.75`:
+``detector_half_distance_scan`` (default :math:`4.0`) when :math:`a_i = 5`
+(scan) and ``detector_half_distance_move`` (default :math:`1.5`) otherwise —
+the same
 :math:`\tfrac{1}{2}(1 + 2^{-d/d_0})` law RockSample uses, so it never drops
 below :math:`\tfrac{1}{2}`.
 
 A terminal state emits the sentinel :math:`o = (-1, \dots, -1)`.
 
-The asymmetry between the two channels is the planning problem. The
+The asymmetry between the range readings and the flag-detector bits is the
+planning problem. The
 :math:`n_{\text{blue}} n_{\text{red}}` range readings **multiply**: at the default two-a-side, moving
 one red player a single cell changes two of the four readings and costs a
 factor of :math:`((1-p_e)/(p_e/2))^2 = 64` in likelihood. One flag scan barely
@@ -219,30 +351,44 @@ needs :math:`s'` (``reward_requires_next_state`` is ``True``):
      \mathbb{1}[c^{\text{red}} = 0 \wedge c^{\text{red}\prime} \neq 0]
    \;-\; \sum_{i=1}^{n_{\text{blue}}} \mathrm{cost}(a_i)
 
-with :math:`\mathrm{cost}(a_i) =` ``scan_cost`` for a scan and ``move_cost``
-otherwise, and :math:`R(s, a, s') = 0` for terminal :math:`s`. A tag is read
-off the counters: a player that was free and is now frozen for the full
-``freeze_steps`` was tagged this step. None of these terms exclude each other,
+where :math:`\Delta\text{score}` is a team's score in :math:`s'` minus its
+score in :math:`s`; :math:`n_{\text{suffered}}` and :math:`n_{\text{inflicted}}`
+are the numbers of blue and red players tagged this step;
+:math:`a_i` is blue player :math:`i`'s action, and every blue player pays
+for its action, frozen or not:
+
+.. math::
+
+   \mathrm{cost}(a_i) = \begin{cases}
+     \texttt{move\_cost} \;(\text{default } 1) & a_i \in \{0, 1, 2, 3, 4\} \text{ (a move or hold)} \\
+     \texttt{scan\_cost} \;(\text{default } 2) & a_i = 5 \text{ (scan)}
+   \end{cases}
+
+:math:`R(s, a, s') = 0` for terminal :math:`s`.
+A tag is read off the freeze counters: a player that was not frozen in
+:math:`s` and has freeze ``freeze_steps`` in :math:`s'` was tagged this step. None of these terms exclude each other,
 so the declared ``reward_range`` is the joint worst case, not the largest
 single term.
 
-**Initial belief.** Everything known but the flag:
+**Initial belief.** Everything is known except which candidate :math:`k`
+holds the red flag:
 
 .. math::
 
    b_0\big(s(k)\big) = \tfrac{1}{K}, \qquad k \in \{1, \dots, K\}
 
 where :math:`s(k)` spawns every blue player on the blue base, every red
-player on the red base, all counters and scores at zero. The opening
-observation is a draw from :math:`O` — the mixture over candidates of
-the noise each implies — so a filter that weights it stays uniform over the
-candidates instead of favouring the nearer ones. When that support has more
-than 8192 observations, the environment returns the single most likely one
-instead of enumerating it.
+player on the red base, no flag carried, and every freeze counter,
+cooldown and score at zero. The opening observation is drawn from the
+observation model averaged over the :math:`K` candidates, so a filter that
+weights it stays uniform over the candidates instead of favouring the nearer
+ones. When there are more than 8192 possible opening observations, the
+environment returns the single most likely one instead of listing them all.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.98`.
 
-**Terminal set.** Either side reaching the target score:
+**Terminal set.** The states where either team has captured
+``score_to_win`` flags:
 
 .. math::
 

@@ -29,13 +29,16 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Write the state as :math:`s = (p, v)`.
+\rangle`.
 
 **State space**
 
 .. math::
 
-   S = [-1.2,\, 0.6] \times [-0.07,\, 0.07]
+   S = [-1.2,\, 0.6] \times [-0.07,\, 0.07], \qquad s = (p, v)
+
+with :math:`p` the car's position along the valley and :math:`v` its
+velocity.
 
 **Action space**
 
@@ -43,11 +46,15 @@ The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 
    A = \{-1, 0, 1\}
 
+:math:`-1` pushes left, :math:`0` does not push, :math:`1` pushes right.
+
 **Observation space**
 
 .. math::
 
    Z = \mathbb{R}^2
+
+A noisy reading of :math:`(p, v)`, in that order.
 
 **Transition model.** The deterministic part is the Mountain Car
 map, with power :math:`k = 0.001` and gravity :math:`g = 0.0025`:

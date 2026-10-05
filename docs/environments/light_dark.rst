@@ -73,12 +73,12 @@ default):
 
    S = \mathbb{R}^2 \times \{0, 1\}, \qquad s = (\mathbf{p}, \top)
 
-Note :math:`S` is *not* restricted to the grid. Leaving it is penalized but
-not terminal, and the sampler deliberately does not clip — clipping the
-sampler while the observation density stayed unclipped would break importance
-weights near the edges.
+with :math:`\mathbf{p} = (x, y)` the agent's position and :math:`\top = 1`
+once an obstacle hit has ended the episode. :math:`S` is *not* restricted to
+the grid.
 
-**Action space.** An unbounded displacement:
+**Action space.** An unbounded displacement :math:`\mathbf{a} = (\mathrm{d}x,
+\mathrm{d}y)` added to the position:
 
 .. math::
 
@@ -101,10 +101,10 @@ the mean:
    \mathcal{N}\big(\mathbf{p}';\; \mathbf{p} + \mathbf{a},\; \Sigma_T\big),
    \qquad \Sigma_T = \texttt{state\_transition\_cov\_matrix}
 
-A terminal state is absorbing and draws nothing. When the hazard flag is on,
-the transition also draws :math:`\top'` from the obstacle hit probability at
-:math:`\mathbf{p}'`, which is what makes the hazard penalty deterministic
-given :math:`s'`.
+A terminal state is absorbing and draws nothing. When
+``is_obstacle_hit_terminal`` is on, the transition also sets :math:`\top' = 1`
+with probability ``obstacle_hit_probability`` when :math:`\mathbf{p}'` lies
+within ``obstacle_radius`` of an obstacle in :math:`\mathcal{O}`.
 
 **Observation model.** This is the environment's whole point. Let
 
@@ -113,8 +113,8 @@ given :math:`s'`.
    d(\mathbf{p}) = \min_{\mathbf{q} \in \mathcal{Q}}
    \lVert \mathbf{p} - \mathbf{q} \rVert_2
 
-be the distance to the nearest beacon and :math:`r_\mathcal{Q}` =
-``beacon_radius``. Under ``NORMAL_NOISE`` (the default) the agent always sees
+be the distance to the nearest beacon, :math:`r_\mathcal{Q}` =
+``beacon_radius`` and :math:`\Sigma_O` = ``observation_cov_matrix``. Under ``NORMAL_NOISE`` (the default) the agent always sees
 its position, but the covariance is **halved** inside a beacon:
 
 .. math::
@@ -170,8 +170,11 @@ one exclusive bonus or penalty on top:
      0 & \text{otherwise}
    \end{cases}
 
-(``obstacle_reward`` is negative by default, so both middle branches are
-penalties.) The shaping term is what a planner using a point estimate
+where :math:`r_{\mathbf{g}}` = ``goal_state_radius`` and *the hazard fires*
+when :math:`\mathbf{p}'` is within ``obstacle_radius`` of an obstacle in
+:math:`\mathcal{O}` and a draw with probability ``obstacle_hit_probability``
+succeeds (``obstacle_reward`` is negative by default, so both middle branches
+are penalties). The shaping term is what a planner using a point estimate
 follows straight into the dark.
 
 .. note::
@@ -198,25 +201,30 @@ default.
    S_T = \{s : \lVert \mathbf{p} - \mathbf{g} \rVert_2 \leq r_{\mathbf{g}}\}
    \;\cup\; \{s : \top = 1\}
 
+with :math:`r_{\mathbf{g}}` = ``goal_state_radius``.
+
 Discrete variant
 ~~~~~~~~~~~~~~~~
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
-**State space.** The integer grid, with the optional terminal slot when
-``is_obstacle_hit_terminal=True``:
+**State space.** The agent's cell :math:`\mathbf{p} \in \mathbb{Z}^2`, plus
+a terminal slot :math:`\top` (:math:`1` once an obstacle hit has ended the
+episode) when ``is_obstacle_hit_terminal=True``:
 
 .. math::
 
-   S = \mathbb{Z}^2
+   S = \mathbb{Z}^2 \quad \text{or} \quad S = \mathbb{Z}^2 \times \{0, 1\}
 
 **Action space.**
 
 .. math::
 
-   A = \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\},
-   \qquad \Delta = \{(0,1), (0,-1), (1,0), (-1,0)\}
+   A = \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\}
+
+each a one-cell move: up :math:`y + 1`, down :math:`y - 1`, right
+:math:`x + 1`, left :math:`x - 1`.
 
 **Observation space.** A grid cell, plus the null symbol under
 ``NO_OBS_IN_DARK`` and ``DISTANCE_BASED``:
@@ -236,7 +244,10 @@ The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
      e_T / 3 & \mathbf{p}' = \mathbf{p} + \Delta_{a'},\; a' \neq a
    \end{cases}
 
-with :math:`e_T` = ``transition_error_prob``. There are no walls: the
+with :math:`e_T` = ``transition_error_prob`` and :math:`\Delta_a` the offset
+of move :math:`a`: :math:`\Delta_{\textsf{up}} = (0, 1)`,
+:math:`\Delta_{\textsf{down}} = (0, -1)`, :math:`\Delta_{\textsf{right}} =
+(1, 0)`, :math:`\Delta_{\textsf{left}} = (-1, 0)`. There are no walls: the
 agent can step outside the grid, and pays for it through the reward.
 
 **Observation model.** Five outcomes — the true cell, or one of the four
@@ -246,7 +257,8 @@ neighbours:
 
    O(\mathbf{o} \mid \mathbf{p}', \cdot) = \begin{cases}
      1 - e(\mathbf{p}') & \mathbf{o} = \mathbf{p}' \\
-     e(\mathbf{p}') / 4 & \mathbf{o} = \mathbf{p}' + \Delta_{a'}
+     e(\mathbf{p}') / 4 & \mathbf{o} = \mathbf{p}' \pm (1, 0) \text{ or }
+       \mathbf{p}' \pm (0, 1)
    \end{cases}
 
 The beacon effect is a **five-fold** reduction in the error rate rather than
@@ -259,7 +271,9 @@ the continuous variant's halved covariance:
      e_O & \text{otherwise}
    \end{cases}
 
-with :math:`e_O` = ``observation_error_prob``.
+with :math:`e_O` = ``observation_error_prob``, :math:`d(\mathbf{p}')` the
+Euclidean distance from :math:`\mathbf{p}'` to the nearest beacon in
+:math:`\mathcal{Q}`, and :math:`r_\mathcal{Q}` = ``beacon_radius``.
 
 **Reward function.** The same shape, with the goal and obstacle tests by
 exact cell equality rather than by radius, and the obstacle penalty gated by

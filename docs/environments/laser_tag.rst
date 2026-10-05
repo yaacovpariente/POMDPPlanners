@@ -48,17 +48,19 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-It is written for the grid variant. Let :math:`G` be the free cells of an
-:math:`M \times N` grid with wall set :math:`\mathcal{W}`.
+It is written for the grid variant.
 
-**State space.** Both positions and an absorbing flag:
+**State space.** Let :math:`G` be the free cells of an :math:`M \times N` grid
+with wall set :math:`\mathcal{W}`; a cell is written (row, column). Both
+positions and an absorbing flag:
 
 .. math::
 
    s = (\mathbf{u},\; \mathbf{v},\; \top), \qquad
    S = G \times G \times \{0, 1\}
 
-with :math:`\mathbf{u}` the robot and :math:`\mathbf{v}` the opponent.
+with :math:`\mathbf{u}` the robot's cell, :math:`\mathbf{v}` the opponent's
+cell, and :math:`\top = 1` once the episode has ended.
 
 **Action space.**
 
@@ -66,6 +68,11 @@ with :math:`\mathbf{u}` the robot and :math:`\mathbf{v}` the opponent.
 
    A = \{0,1,2,3,4\} = \{\textsf{N}, \textsf{S}, \textsf{E}, \textsf{W},
    \textsf{tag}\}
+
+:math:`0` moves one row up (row :math:`-1`), :math:`1` one row down (row
+:math:`+1`), :math:`2` one column right (column :math:`+1`), :math:`3` one
+column left (column :math:`-1`); :math:`4` (tag) stays and tries to tag the
+opponent on the robot's cell.
 
 The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
 \in \mathbb{R}^3` instead.
@@ -77,12 +84,17 @@ The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
 
    Z = \mathbb{R}_{\geq 0}^{8} \cup \{(-1, \dots, -1)\}
 
-The continuous variant returns the same eight ranges as a length-8 array,
-in a different beam order (see above).
+Component :math:`k` is the range along heading N, NE, E, SE, S, SW, W, NW
+for :math:`k = 0..7`. The continuous variant returns the same eight ranges as
+a length-8 array starting at E: its beam :math:`i` is grid beam
+:math:`(i + 2) \bmod 8`.
 
 **Transition model.** The robot's move first. With :math:`p` =
 ``transition_error_prob``, a movement action executes as commanded with
-probability :math:`1 - p` and as one of the other three otherwise:
+probability :math:`1 - p` and as one of the other three otherwise, chosen
+uniformly. With :math:`a'` the executed move and :math:`\Delta_0 = (-1, 0)`,
+:math:`\Delta_1 = (1, 0)`, :math:`\Delta_2 = (0, 1)`, :math:`\Delta_3 = (0, -1)`
+its (row, column) offset:
 
 .. math::
 
@@ -174,6 +186,8 @@ for each:
    H(\mathbf{u}') = -\texttt{dangerous\_area\_penalty} \cdot
    \mathbb{1}\big[\mathbf{u}' \in \mathcal{W} \ \text{ or }\
    \exists c:\ \lVert \mathbf{u}' - c \rVert_2 \leq \texttt{dangerous\_area\_radius} \big]
+
+where :math:`c` ranges over the danger-zone centres ``dangerous_areas``.
 
 A mistimed tag costs ``tag_penalty`` rather than merely a step, which is what
 makes guessing expensive and the belief worth maintaining.

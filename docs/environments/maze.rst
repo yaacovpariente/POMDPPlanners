@@ -46,10 +46,10 @@ Formal definition
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. All three variants share one model and differ only in :math:`A` and
-how a move is resolved. Let :math:`G` be the walkable cells, :math:`c \in G`
-the cue cell, and :math:`g_L, g_R \in G` the two goal cells.
+how a move is resolved.
 
-**State space.** Position, the hidden goal side, and the cue's delivery phase:
+**State space.** Let :math:`G` be the walkable cells. Position, the hidden
+goal side, and the cue's delivery phase:
 
 .. math::
 
@@ -60,12 +60,13 @@ the cue cell, and :math:`g_L, g_R \in G` the two goal cells.
    S = \mathcal{P} \times \{\textsf{L}, \textsf{R}\} \times
    \{\textsf{UNSEEN}, \textsf{EMITTING}, \textsf{CONSUMED}\}
 
-with :math:`\mathcal{P} = G` for the discrete variants and
-:math:`\mathcal{P} \subseteq \mathbb{R}^2` the walkable region for the
-continuous one. Carrying :math:`\mathrm{phase}` *in the state* rather than as a flag
-on the environment object is what keeps the problem Markov: a planner
-resamples transitions from arbitrary states out of order, and an episode flag
-living on ``self`` would be written by the search as well as by the world.
+with :math:`(x, y)` the agent's position, :math:`\mathcal{P} = G` for the
+discrete variants and :math:`\mathcal{P} \subseteq \mathbb{R}^2` the walkable
+region for the continuous one (a point belongs to the cell it rounds to);
+:math:`\mathrm{side}` the goal that pays, left (:math:`\textsf{L}`) or right
+(:math:`\textsf{R}`); and :math:`\mathrm{phase}` whether the cue is not yet
+seen (:math:`\textsf{UNSEEN}`), being read this step
+(:math:`\textsf{EMITTING}`), or used up (:math:`\textsf{CONSUMED}`).
 
 **Action space.**
 
@@ -78,7 +79,10 @@ living on ``self`` would be written by the search as well as by the world.
        & \texttt{ContinuousMazePOMDP}
    \end{cases}
 
-A longer displacement is rescaled to the cap rather than rejected.
+A discrete action moves one cell: up :math:`y + 1`, down :math:`y - 1`,
+left :math:`x - 1`, right :math:`x + 1`. A continuous action is the
+displacement :math:`d` itself; a longer one is rescaled to the cap rather
+than rejected.
 
 **Observation space**
 
@@ -93,7 +97,11 @@ A longer displacement is rescaled to the cap rather than rejected.
    T(s' \mid s, a) = \mathbb{1}[s' = f(s, a)], \qquad
    f(s, a) = s \ \text{ for } s \in S_T
 
-The position update refuses illegal moves without moving the agent:
+The position update refuses illegal moves without moving the agent, with
+:math:`\Delta_{\textsf{up}} = (0, 1)`, :math:`\Delta_{\textsf{down}} = (0, -1)`,
+:math:`\Delta_{\textsf{left}} = (-1, 0)`, :math:`\Delta_{\textsf{right}} =
+(1, 0)` for the discrete variants and :math:`\Delta_d = d` for the continuous
+one:
 
 .. math::
 
@@ -104,8 +112,7 @@ The position update refuses illegal moves without moving the agent:
 
 A discrete step is legal when the target cell is walkable. A continuous step
 is legal only when the **whole swept segment** stays inside the walkable
-region — checking only the endpoint would let a step jump a wall. The goal
-side never changes. The cue phase advances on every action, including one a
+region. The goal side never changes. With :math:`c \in G` the cue cell: The cue phase advances on every action, including one a
 wall refused:
 
 .. math::
@@ -117,9 +124,7 @@ wall refused:
      \mathrm{phase} & \text{otherwise}
    \end{cases}
 
-That middle branch is what makes the cue **single-use**: it is consumed by
-whatever action follows it, so standing still on the cue cell cannot re-read
-it and a revisit never yields a second reading.
+So the cue is read once: it is consumed by whatever action follows it.
 
 **Observation model**
 
@@ -133,19 +138,11 @@ it and a revisit never yields a second reading.
    O(\textsf{empty} \mid s', \cdot) &= \mathbb{1}[\mathrm{phase}' \neq \textsf{EMITTING}]
 
 with :math:`p_{\text{cue}}` = ``cue_accuracy`` :math:`\in [0.5, 1]`, and
-:math:`\textsf{right\_cue}` mirrored. The action does not enter. There is
-deliberately **no** wall observation: three of the four actions bump into a
-wall almost everywhere on a corridor, so such a reading would leak position
-information the task is not about.
-
-Under the uniform prior, one :math:`\textsf{left\_cue}` at
-:math:`p_{\text{cue}} = 0.9` moves the belief to :math:`0.9 / 0.1`, and every
-subsequent :math:`\textsf{empty}` leaves it exactly there. That flat stretch
-is the whole task: a planner that does not track a belief has nothing left to
-turn on when it reaches the junction.
+:math:`\textsf{right\_cue}` mirrored. The action does not enter.
 
 **Reward function.** The terminal payout **replaces** the step cost rather
-than stacking with it, so no two terms ever add:
+than stacking with it. :math:`g_L, g_R \in G` are the left and right goal
+cells:
 
 .. math::
 
@@ -156,9 +153,6 @@ than stacking with it, so no two terms ever add:
      -\texttt{step\_penalty} & \text{otherwise, wall collisions included}
    \end{cases}
 
-The best achievable return is therefore exactly the goal reward discounted by
-the number of steps taken to reach it.
-
 **Initial belief.** Position and cue phase known, goal side a coin flip:
 
 .. math::
@@ -166,9 +160,8 @@ the number of steps taken to reach it.
    b_0\big((x_0, y_0, \textsf{L}, \textsf{UNSEEN})\big) =
    b_0\big((x_0, y_0, \textsf{R}, \textsf{UNSEEN})\big) = \tfrac{1}{2}
 
-The opening observation is fixed at :math:`\textsf{empty}`. The cue is emitted
-by *crossing* the cue cell and the runner only observes after an action, so a
-reading here would hand the agent the answer before it had moved.
+where :math:`(x_0, y_0)` is the fixed start cell. The opening observation is
+fixed at :math:`\textsf{empty}`.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
 
@@ -176,10 +169,9 @@ reading here would hand the agent the answer before it had moved.
 
 .. math::
 
-   S_T = \{s : (x, y) \in g_L \cup g_R\}
+   S_T = \{s : (x, y) \in \{g_L, g_R\}\}
 
-Both are reported, separately: a planner that guesses wrong at the junction
-and one that never reaches it fail for opposite reasons.
+with :math:`g_L, g_R` the left and right goal cells.
 
 Rewards
 -------

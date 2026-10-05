@@ -33,11 +33,13 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Let :math:`W` = ``num_columns``, :math:`H` = ``num_rows`` and :math:`N` =
-``num_chickens``.
+\rangle`.
 
-**State space.** The ship's block, then one fixed slot per chicken — dead
-slots are carried for the whole episode, so the vector length never changes:
+**State space.** The field has :math:`W` = ``num_columns`` columns and
+:math:`H` = ``num_rows`` rows; row :math:`0` is the ship's row and rows count
+upward. There are :math:`N` = ``num_chickens`` chickens. The state is the
+ship's block, then one fixed slot per chicken — dead slots are carried for
+the whole episode, so the vector length never changes:
 
 .. math::
 
@@ -51,9 +53,12 @@ slots are carried for the whole episode, so the vector length never changes:
    \big(\{0..W{-}1\} \times \{0..H{-}1\} \times \{-1, +1\}
    \times \{\textsf{patrol}, \textsf{dive}\} \times \{0,1\}\big)^{N}
 
-with :math:`x` the ship column, :math:`\text{cool}` the fire cooldown, :math:`u_i,
-v_i` a chicken's column and row, :math:`d_i` its patrol direction,
-:math:`\text{mode}_i` its hidden mode and :math:`\text{alive}_i` whether it is alive.
+with :math:`t` the step count, :math:`x` the ship column, :math:`\text{cool}`
+the steps left before the gun can fire again, :math:`\mathrm{hit} = 1` once
+the ship is destroyed, :math:`u_i, v_i` chicken :math:`i`'s column and row,
+:math:`d_i` its patrol direction (:math:`-1` toward lower columns,
+:math:`+1` toward higher), :math:`\text{mode}_i` whether it patrols or
+dives, and :math:`\text{alive}_i = 1` while it is alive.
 
 **Action space**
 
@@ -62,8 +67,39 @@ v_i` a chicken's column and row, :math:`d_i` its patrol direction,
    A = \{\textsf{stay},\; \textsf{left},\; \textsf{right},\; \textsf{fire}\}
      = \{0, 1, 2, 3\}
 
-**Transition model.** One step resolves in this fixed order; the paragraph
-after the list says why.
+- :math:`0` stay — the ship holds its column;
+- :math:`1` left — the ship moves one column down, :math:`x - 1`, clamped at
+  the wall;
+- :math:`2` right — the ship moves one column up, :math:`x + 1`, clamped at
+  the wall;
+- :math:`3` fire — the ship shoots straight up its column if the gun is
+  ready; otherwise it does what stay does.
+
+**Observation space.** In ``ObservationMode.FULL`` the observation is the
+state, :math:`Z = S`, and the problem is an MDP. In the default
+``ObservationMode.PARTIAL`` every reading is an integer, and a masked field
+reads :math:`0`:
+
+.. math::
+
+   Z = \mathbb{Z} \times \big(\{0,1\} \times \mathbb{Z} \times \{0,1\}
+   \times \mathbb{Z} \times \{-1, 0\}\big)^{N}
+
+with these components, in order:
+
+- :math:`\hat x` — a noisy reading of the ship's column;
+- per chicken :math:`i`:
+
+  - :math:`c_i \in \{0,1\}` — :math:`1` if the camera reported it;
+  - :math:`\hat e_i` — a noisy reading of its column minus the ship's column;
+  - :math:`r_i \in \{0,1\}` — :math:`1` if the radar reported it;
+  - :math:`\hat n_i` — a noisy reading of its row;
+  - :math:`\hat f_i \in \{-1, 0\}` — :math:`-1` if the radar reports it
+    diving, :math:`0` otherwise.
+
+A field whose sensor did not report reads :math:`0`.
+
+**Transition model.** One step resolves in this order:
 
 1. **Ship moves.** :math:`x' = \mathrm{clip}(x + \Delta_a,\, 0,\, W{-}1)`,
    with :math:`\Delta = -1, +1` for left, right and :math:`0` otherwise.
@@ -104,22 +140,7 @@ after the list says why.
    column destroys it (:math:`\mathrm{hit}' = 1`); anywhere else it pulls up
    to :math:`v'_i = H - 1` and returns to :math:`\textsf{patrol}`.
 
-Finally :math:`t' = t + 1`. Resolving the shot **before** the flock moves is
-what lets the ship hit what it aimed at: the other order would let a chicken
-dodge by stepping sideways without deciding to, and aiming would collapse into
-waiting. Dives are decided after the shot, so a chicken shot this step never
-gets to dive — so a shot also removes a chicken that could have dived at the
-ship next.
-
-**Observation space.** In ``ObservationMode.FULL`` the observation is the
-state, :math:`Z = S`, and the problem is an MDP. In the default
-``ObservationMode.PARTIAL`` every reading is an integer, and a masked field
-reads :math:`0`:
-
-.. math::
-
-   Z = \mathbb{Z} \times \big(\{0,1\} \times \mathbb{Z} \times \{0,1\}
-   \times \mathbb{Z} \times \{-1, 0\}\big)^{N}
+Finally :math:`t' = t + 1`.
 
 **Observation model.** In the default ``ObservationMode.PARTIAL``:
 
@@ -139,7 +160,8 @@ distance. Every numeric channel is a **rounded** Gaussian,
 
 with :math:`F_{\mathcal{N}}` the standard normal CDF, so the readings are
 integers, not reals. The ship reads its own column as
-:math:`\hat{x} \sim G_{\sigma_x}(\cdot\,; x')` — redundant evidence, since the
+:math:`\hat{x} \sim G_{\sigma_x}(\cdot\,; x')`, :math:`\sigma_x` =
+``ship_column_noise_std`` — redundant evidence, since the
 ship's column is decided by its own actions, present so the observation
 reports the ship as well as the chickens.
 
@@ -154,7 +176,11 @@ silence has likelihood 1 rather than a sensor's miss chance:
    \text{radar reach}_i &\iff \text{alive}_i = 1 \;\wedge\;
      e_i^2 + n_i^2 \leq \texttt{radar\_radius}^2
 
-Inside reach, each sensor fires independently with its detection probability:
+Inside reach, each sensor fires independently with its detection probability,
+:math:`p_{\text{cam}}` = ``camera_detection_probability`` or
+:math:`p_{\text{rad}}` = ``radar_detection_probability``, and its reading
+has noise :math:`\sigma_e` = ``camera_offset_noise_std`` or
+:math:`\sigma_n` = ``radar_range_noise_std``:
 
 .. math::
 
@@ -193,7 +219,9 @@ the probability of *not* being reported — so silence is evidence too.
    &+\; \texttt{clear\_reward} \cdot
      \mathbb{1}[n_{\text{live}}(s') = 0 \wedge n_{\text{live}}(s) > 0]
 
-A ``FIRE`` the cooldown blocks costs nothing — the gun never discharged. A
+where :math:`n_{\text{live}}(s) = \sum_i \text{alive}_i` is the number of live
+chickens and the gun discharges when :math:`a = \textsf{fire}` and
+:math:`\text{cool} = 0`. A ``FIRE`` the cooldown blocks costs nothing — the gun never discharged. A
 shot into an empty column does discharge, misses, and is charged. The ship-hit
 penalty is billed on the step the ship is lost, not on every step after it:
 the flag stays set, and a driver that kept stepping a terminal state would
@@ -226,7 +254,9 @@ has run, and the belief never weights particles with it.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
 
-**Terminal set.** Three ways to end:
+**Terminal set.** The ship is hit, every chicken is dead
+(:math:`n_{\text{live}}(s) = \sum_i \text{alive}_i = 0`), or the step count
+reaches ``max_steps``:
 
 .. math::
 

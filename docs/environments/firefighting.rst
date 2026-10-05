@@ -37,20 +37,19 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
-\rangle`. Let the grid have :math:`H \times W` cells with obstacle set :math:`\mathcal{O}`,
-and let :math:`M` = ``num_robots``. Cell categories are
+\rangle`.
+
+**State space.** The grid has :math:`H \times W` cells, indexed :math:`k` or
+:math:`(y, z)` = (row, column), with obstacle cells :math:`\mathcal{O}`
+(``obstacle_cells``); there are :math:`M` = ``num_robots`` robots. Each cell
+holds one category
 
 .. math::
 
    \mathcal{C} = \{\textsf{UNBURNT}, \textsf{SMOLDERING}, \textsf{BURNING},
    \textsf{BURNT}, \textsf{WET}\} = \{0,1,2,3,4\}
 
-with :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}` the
-alight categories. :math:`\textsf{BURNT}` and :math:`\textsf{WET}` are
-absorbing — no rule maps either back — so once no cell is alight, no later
-step can relight one.
-
-**State space**
+— fuel left, alight weakly, alight strongly, fuel consumed, soaked. A state is
 
 .. math::
 
@@ -64,15 +63,17 @@ step can relight one.
    \times \{0..\texttt{max\_health}\}\big)^{M}
    \times \mathcal{W} \times \mathcal{C}^{HW}
 
-where :math:`(y_j, z_j)` is robot :math:`j`'s cell, :math:`\text{tank}_j` its tank,
-:math:`\text{hp}_j` its health, :math:`\mathbf{f}` the fire map, and
+where :math:`t` is the step count, :math:`(y_j, z_j)` is robot :math:`j`'s
+cell, :math:`\text{tank}_j` the sprays left in its tank, :math:`\text{hp}_j`
+its health, :math:`\mathbf{f} = (f_k)_k` the category of every cell, and
 
 .. math::
 
    \mathcal{W} = \{\textsf{N},\textsf{E},\textsf{S},\textsf{W}\}
    \times \{\textsf{LOW}, \textsf{HIGH}\}, \qquad |\mathcal{W}| = 8
 
-is the **hidden wind**, which is never observed and never changes.
+is the **hidden wind**: :math:`w_{\text{dir}}` is the direction it blows
+toward and :math:`w_{\text{str}}` its strength.
 
 **Action space.** Five per robot, issued jointly:
 
@@ -81,16 +82,38 @@ is the **hidden wind**, which is never observed and never changes.
    A = \{\textsf{N}, \textsf{E}, \textsf{S}, \textsf{W},
    \textsf{SUPPRESS}\}^{M}, \qquad |A| = 5^{M}
 
-encoded base-5. At the default :math:`M = 2` that is 25; at three robots 125,
-so a tree search expands 125 action children per belief node.
+encoded as :math:`a = \sum_{j=1}^{M} a_j 5^{j-1}`, where robot :math:`j`'s
+action :math:`a_j` is
 
-**Transition model.** Six stages, in this order. Changing the order changes
-the outcome.
+- :math:`0` N — move one row up, :math:`y - 1`;
+- :math:`1` E — move one column right, :math:`z + 1`;
+- :math:`2` S — move one row down, :math:`y + 1`;
+- :math:`3` W — move one column left, :math:`z - 1`;
+- :math:`4` SUPPRESS — stay, and spray the robot's own cell and its four
+  neighbours.
+
+**Observation space.** For every robot :math:`j` its cell
+:math:`(y_j, z_j)`, tank and health, exact; then for every cell a reported
+category, or :math:`\textsf{UNKNOWN} = -1` for a cell no live robot
+(:math:`\text{hp}_j > 0`) senses:
+
+.. math::
+
+   Z = \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
+   \times \{0..\texttt{max\_health}\}\big)^{M}
+   \times \big(\mathcal{C} \cup \{\textsf{UNKNOWN}\}\big)^{HW}
+
+**Transition model.** A robot is *live* while :math:`\text{hp}_j > 0`; a cell
+is *alight* if its category is in :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING},
+\textsf{BURNING}\}`; :math:`\Delta_d` is the one-cell offset of direction
+:math:`d` (N :math:`(-1, 0)`, E :math:`(0, 1)`, S :math:`(1, 0)`, W
+:math:`(0, -1)`); the depot is ``depot_cell``. One step resolves in this
+order:
 
 1. **Motion.** A move is admissible if the target is on the grid, not an
    obstacle, and not :math:`\textsf{BURNT}`, judged against the *pre-step*
    fire map. An admissible move slips with probability :math:`p_s` =
-   ``slip_probability``:
+   ``slip_probability`` (default 0.05):
 
    .. math::
 
@@ -108,10 +131,13 @@ the outcome.
 
    .. math::
 
-      \Pr[\text{cell soaked}] = 1 - (1 - q_{\mathbf{f}})^{k}
+      \Pr[\text{cell soaked}] = 1 - (1 - q_{f})^{k}
 
-   where :math:`q_c` is ``suppression_probability_*`` for category :math:`c`
-   (and :math:`0` for the absorbing ones). A soaked cell becomes
+   where :math:`f` is the cell's category and :math:`q_f` is
+   ``suppression_probability_unburnt`` (default 1.0),
+   ``suppression_probability_smoldering`` (0.9) or
+   ``suppression_probability_burning`` (0.6), and :math:`0` for
+   :math:`\textsf{BURNT}` and :math:`\textsf{WET}`. A soaked cell becomes
    :math:`\textsf{WET}`. Each sprayer then loses one tank unit; a robot
    standing on the depot refills to ``max_tank``, which overrides the cost.
 
@@ -134,11 +160,11 @@ the outcome.
       \end{cases}
 
    with :math:`p_0` = ``spread_probability`` and :math:`g` the gain,
-   ``wind_gain_low`` or ``wind_gain_high``. An ignited cell becomes
+   ``wind_gain_low`` (default 2.0) or ``wind_gain_high`` (default 3.5). An ignited cell becomes
    :math:`\textsf{SMOLDERING}`. Only unburnt, non-obstacle cells can catch.
 
-4. **Growth and burnout,** applied to cells alight *before* the spread stage,
-   which is what stops a cell igniting and growing to burning in one step:
+4. **Growth and burnout,** applied to cells alight *before* the spread, so a
+   cell cannot ignite and grow to burning in one step:
 
    .. math::
 
@@ -148,26 +174,12 @@ the outcome.
         \texttt{burnout\_probability}
 
 5. **Heat damage,** read off the final map at each robot's final cell:
-   :math:`\text{hp}'_j = \max(0, \text{hp}_j - \mathrm{dmg}(\mathbf{f}'_{k_j}))`, with
-   :math:`\mathrm{dmg} = (0, 1, 2, 0, 0)` over :math:`\mathcal{C}`. At the
-   default ``max_health`` of 3 a robot survives one burning step and is
-   disabled by the second — which is what makes fighting from an *adjacent*
-   cell the intended play.
+   :math:`\text{hp}'_j = \max(0, \text{hp}_j - \mathrm{dmg}(f'_{k_j}))`, with
+   :math:`k_j` robot :math:`j`'s cell and :math:`\mathrm{dmg} = (0, 1, 2, 0, 0)`
+   over :math:`\mathcal{C}`.
 
-6. **Bookkeeping.** :math:`t' = t + 1`, and the wind is copied unchanged.
-
-Suppression resolving before spread is what lets a robot stop a front by
-soaking the cell ahead of it in the same step. The wind never changing is what
-makes it identifiable from the spread pattern across an episode.
-
-**Observation space.** Exact robot fields, then one reported category per
-cell, with :math:`\textsf{UNKNOWN} = -1` for a cell no live robot senses:
-
-.. math::
-
-   Z = \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
-   \times \{0..\texttt{max\_health}\}\big)^{M}
-   \times \big(\mathcal{C} \cup \{\textsf{UNKNOWN}\}\big)^{HW}
+6. **Step count and wind.** :math:`t' = t + 1`, and the wind is copied
+   unchanged.
 
 **Observation model.** Robot fields are reported exactly; the fire map is seen
 only inside the union of the live robots' Chebyshev footprints:
@@ -194,12 +206,6 @@ with :math:`p_{\text{err}}` = ``observation_error_probability``: a symmetric
 confusion matrix spreading its error mass evenly over the four wrong
 categories. The observation depends on :math:`s'` alone, not on the action.
 
-Note what is **never** observed: the wind. It has to be inferred from how the
-fire spreads, and because only :math:`w_{\text{str}}` sets the downwind gain, a
-strong wind of unknown direction is a different inference problem from a weak
-one — the belief over the eight wind values need not collapse to a point for a
-planner to act well.
-
 **Reward function.** Every term reads the realised successor:
 
 .. math::
@@ -214,7 +220,9 @@ planner to act well.
    &+\; \texttt{success\_reward} \cdot
      \mathbb{1}\big[\{k : f'_k \in \mathcal{A}\ell\} = \emptyset\big]
 
-The success bonus is paid on the transition *into* a fire-free state, and the
+where :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}` and
+the sprayers are the live robots that chose :math:`\textsf{SUPPRESS}` with a
+non-empty tank. The success bonus is paid on the transition *into* a fire-free state, and the
 step cost is charged on that transition too — which is why the largest
 reachable reward is :math:`\texttt{success\_reward} - \texttt{step\_cost}`.
 
@@ -228,6 +236,10 @@ without replacement from the non-obstacle cells and set to
    b_0 = \mathbb{1}\big[\text{robots} = \text{robots}_0\big] \otimes
    \mathrm{Unif}(\mathcal{W}) \otimes
    \mathrm{Unif}\big(\text{$n_0$-subsets of } \overline{\mathcal{O}}\big)
+
+with :math:`\text{robots}_0` the start cells (``robot_start_cells``) at full
+tank and health, :math:`n_0` = ``num_initial_fires`` and
+:math:`\overline{\mathcal{O}}` the non-obstacle cells.
 
 The opening observation is a sentinel — known robot fields, every cell
 :math:`\textsf{UNKNOWN}` — not a scan; the first sensor reading arrives with the
@@ -243,7 +255,9 @@ first transition.
    \;\cup\; \{s : \forall j,\, \text{hp}_j = 0\}
    \;\cup\; \{s : t \geq \texttt{max\_steps}\}
 
-the middle set only when ``is_all_robots_disabled_terminal``.
+with :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}`: every
+fire out, every robot disabled (only when ``is_all_robots_disabled_terminal``),
+or the step limit reached.
 
 World and state
 ~~~~~~~~~~~~~~~
@@ -265,55 +279,6 @@ The state is one ``float64`` vector of length ``3 + 4N + R*C``::
 A robot's tank holds ``max_tank`` sprays (6 by default) and its health starts at
 ``max_health`` (3 by default). At zero health a robot is disabled: its digit of
 the joint action is ignored and it sees nothing for the rest of the episode.
-
-Actions
-~~~~~~~
-
-Each robot has five actions -- ``NORTH``, ``EAST``, ``SOUTH``, ``WEST`` and
-``SUPPRESS``. The environment receives one centralized joint action: a single
-integer whose base-5 digits are the per-robot actions, least significant digit
-first. Two robots give 25 joint actions, three give 125.
-
-A move is refused by the grid edge, by an obstacle and by a ``BURNT`` cell, and
-an otherwise admissible move fails with ``slip_probability`` (0.05 by default).
-``SUPPRESS`` costs one tank unit and covers the robot's own cell *and its four
-neighbours* -- so a planner can fight from an adjacent cell and take no
-damage instead of standing in the fire. An
-``UNBURNT`` target becomes ``WET``, which is how a firebreak is built ahead of
-the front. A robot with an empty tank does nothing and pays nothing. Entering
-the depot refills the tank, with no separate action, so ``|A|`` stays at
-``5 ** N``; a robot that sprays and steps into the depot on the same step ends
-the step full.
-
-Transition
-~~~~~~~~~~
-
-Six stages resolve in a fixed order, and changing the order changes the
-outcome.
-
-1. **Motion.** Admissible moves succeed with ``1 - slip_probability``.
-2. **Suppression.** A cell covered by ``m`` sprays becomes ``WET`` with
-   ``1 - (1 - q)^m``, where ``q`` depends on the cell's category: 1.0 unburnt,
-   0.9 smoldering, 0.6 burning, 0 for burnt and wet. Burning resists one hose,
-   which is why two robots on one cell are worth more than two robots dividing
-   the work -- this is the only place in the model where two robots' actions
-   combine on one cell. Resolving suppression *before* spread is what lets a robot stop a
-   front by soaking the cell ahead of it in the same step.
-3. **Spread.** An unburnt cell catches unless every alight four-neighbour fails
-   to ignite it. The one neighbour sitting directly upwind ignites it at
-   ``min(1, spread_probability * gain)``; the other three at
-   ``spread_probability * (1 - crosswind_attenuation)``. The gain is
-   ``wind_gain_low`` (2.0) or ``wind_gain_high`` (3.5). That asymmetry is the
-   whole reason the wind is identifiable: with no asymmetry the hidden wind
-   would be unobservable noise rather than something to infer.
-4. **Growth and burnout**, applied only to cells already alight *before* the
-   spread stage, so a cell cannot ignite and reach full intensity in one step.
-   Smoldering grows to burning with ``growth_probability``; burning burns out to
-   ``BURNT`` with ``burnout_probability``.
-5. **Heat damage.** A robot loses 1 health on a smoldering cell and 2 on a
-   burning one. With the default health of 3 it survives one burning step and is
-   disabled by the second.
-6. **Bookkeeping.** The step counter advances and the wind is copied unchanged.
 
 Observation
 ~~~~~~~~~~~
@@ -430,7 +395,7 @@ unsupported and the environment is deliberately absent from the vectorized
 config contract. ``PFT_DPW`` takes the scalar API directly.
 
 The belief is ``FirefightingVectorizedBelief``, which
-``create_environment_belief`` returns. It runs every stage of the transition
+``create_environment_belief`` returns. It runs every part of the transition
 over the particle axis and the grid at once, and it does two things a
 bootstrap filter does not, both because a bootstrap filter over whole 100-cell
 maps is degenerate here. The poses, tanks and healths come back from the sensor

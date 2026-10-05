@@ -33,12 +33,13 @@ Formal definition
 -----------------
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
-Fix a grid of :math:`M \times N` cells and rock positions :math:`y_1, \dots,
-y_R`. Write a state as :math:`s = (x, c)` with position :math:`x \in
-\mathbb{Z}^2` and rock qualities :math:`c \in \{0, 1\}^R` (:math:`1` good).
 
-**State space.** The grid, the rock flags, and one absorbing exit state
-:math:`\top` stored as the sentinel position :math:`(-1, -1)`:
+**State space.** Fix a grid of :math:`M \times N` cells and rock positions
+:math:`y_1, \dots, y_R`. A state is :math:`s = (x, c)` with the robot's
+position :math:`x = (r, k)`, row :math:`r` and column :math:`k`, and rock
+qualities :math:`c \in \{0, 1\}^R` (:math:`c_i = 1`: rock :math:`i` is good).
+One more absorbing exit state :math:`\top` is stored as the sentinel position
+:math:`(-1, -1)`:
 
 .. math::
 
@@ -48,7 +49,7 @@ y_R`. Write a state as :math:`s = (x, c)` with position :math:`x \in
 so :math:`|S| = MN2^R + 1`. With ``is_dangerous_area_hit_terminal=True`` a
 further binary slot :math:`h` is appended and :math:`S_T` grows accordingly.
 
-**Action space.** Five moves plus one check per rock:
+**Action space.** A sample, four moves, and one check per rock:
 
 .. math::
 
@@ -56,11 +57,18 @@ further binary slot :math:`h` is appended and :math:`S_T` grows accordingly.
    \underbrace{\{1,2,3,4\}}_{\textsf{N,E,S,W}} \cup
    \underbrace{\{5, \dots, 4+R\}}_{\textsf{check rock } i}
 
+Action :math:`0` samples the rock under the robot. Actions :math:`1, 2, 3, 4`
+move one cell north, east, south or west. Action :math:`4 + i` reads the
+noisy sensor on rock :math:`i` without moving.
+
 **Observation space**
 
 .. math::
 
    Z = \{\textsf{none},\; \textsf{good},\; \textsf{bad}\}
+
+:math:`\textsf{good}` and :math:`\textsf{bad}` are the sensor's noisy verdict
+on a checked rock; :math:`\textsf{none}` follows every other action.
 
 **Transition model.** Deterministic. Moves clamp at the north, south and west
 walls; moving east off the last column exits:
@@ -70,7 +78,7 @@ walls; moving east off the last column exits:
    T(s' \mid s, a) = \mathbb{1}[s' = f(s, a)]
 
 with :math:`f(\top, a) = \top` and, for :math:`s = (x, c)` where
-:math:`x = (r, k)`,
+:math:`x = (r, k)` (north is :math:`r - 1`),
 
 .. math::
 
@@ -89,7 +97,7 @@ Sampling a rock consumes it: a good rock becomes bad, so sampling twice pays
 the penalty the second time. Check actions never move the robot.
 
 **Observation model.** Only a check returns information. For
-:math:`a = 5 + i`, let :math:`d = \lVert x' - y_i \rVert_2` be the Euclidean
+:math:`a = 4 + i`, let :math:`d = \lVert x' - y_i \rVert_2` be the Euclidean
 distance from the robot to rock :math:`i` and let :math:`w` be
 ``sensor_efficiency``. The accuracy is the law of Smith & Simmons,
 "Heuristic Search Value Iteration for POMDPs" (2004), in code
@@ -105,14 +113,14 @@ rather than misleading. Then
 
 .. math::
 
-   O(\textsf{good} \mid s', 5+i) &= \begin{cases}
+   O(\textsf{good} \mid s', 4+i) &= \begin{cases}
      \mathrm{acc}(d) & c'_i = 1 \\ 1 - \mathrm{acc}(d) & c'_i = 0 \end{cases} \\
-   O(\textsf{bad} \mid s', 5+i) &= 1 - O(\textsf{good} \mid s', 5+i) \\
+   O(\textsf{bad} \mid s', 4+i) &= 1 - O(\textsf{good} \mid s', 4+i) \\
    O(\textsf{none} \mid s', a) &= 1 \qquad a < 5
 
 **Reward function.** Terms are **added**, evaluated on the pre-transition
-state :math:`s = (x, c)` except the hazard term, which uses the realised
-:math:`x'`. Write :math:`t` for ``step_penalty``, :math:`g` for
+state :math:`s = (x, c)`, :math:`x = (r, k)`, except the hazard term, which
+uses the realised :math:`x'`. Write :math:`t` for ``step_penalty``, :math:`g` for
 ``good_rock_reward``, :math:`\ell` for ``bad_rock_penalty``, :math:`u`
 for ``sensor_use_penalty`` and :math:`e` for ``exit_reward``:
 
