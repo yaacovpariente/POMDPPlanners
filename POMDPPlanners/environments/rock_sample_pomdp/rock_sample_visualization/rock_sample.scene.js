@@ -45,9 +45,10 @@
   // needs it too, to come out the same grey as in every other scene.
   var EXPOSURE = 0.105;
 
-  // The rover moves for this fraction of a step and rests for the remainder.
-  // The rest is where a check or a drill happens.
-  var MOVE_FRACTION = 0.55;
+  // How far before and after a cell centre, in cells, the rover starts and
+  // finishes a 90-degree turn. It drives an arc through the corner instead of
+  // stopping on the centre and pivoting.
+  var CORNER_RADIUS = 0.35;
 
   /* ------------------------------------------------------------- materials */
 
@@ -1142,24 +1143,60 @@
       running.push(total);
     }
 
-    /* The rover moves between cells during the first part of a step and rests
-       for the remainder, which is what makes a discrete grid episode read as
-       motion rather than teleporting. Non-move steps keep it parked, and that
-       pause is where the check and the drill happen. */
+    /* The step's move as a unit grid vector; zero for a step that stays put.
+       The last state has no step after it, so it does not move either. */
+    function moveDir(i) {
+      if (i < 0 || i >= path.length - 1) return { r: 0, c: 0 };
+      return { r: path[i + 1].row - path[i].row, c: path[i + 1].col - path[i].col };
+    }
+    function isMove(d) { return d.r !== 0 || d.c !== 0; }
+
+    /* Whether the rover drives straight on from step i into step i + 1
+       without stopping: both steps move and the second does not reverse the
+       first. A reversal has to stop, or the rover would jump to full speed
+       backwards. */
+    function flows(i) {
+      var a = moveDir(i), b = moveDir(i + 1);
+      return isMove(a) && isMove(b) && a.r * b.r + a.c * b.c >= 0;
+    }
+
+    // Progress along a step that starts stopped and ends at full speed, and
+    // the mirror of it. Both have unit speed at the moving end, so they join a
+    // cruising step (progress = f) without a kink in the speed.
+    function easeIn(f) { return f * f * (2 - f); }
+    function easeOut(f) { var u = 1 - f; return 1 - u * u * (2 - u); }
+
+    /* A move step takes the whole step. Consecutive moves join at cruising
+       speed, so a run of moves reads as one drive; the rover only speeds up
+       from a stop and slows into one. A 90-degree turn is driven as an arc
+       through the corner. Non-move steps keep it parked, and that pause is
+       where the check and the drill happen.
+
+       The arc means the rover passes a turning cell about CORNER_RADIUS / 3 off
+       of its centre. Every step it ends straight on, or stopped, it ends on
+       the cell the trace says. */
     function samplePose(t) {
       var i0 = Math.floor(clamp(t, 0, path.length - 1));
       var f = clamp(t - i0, 0, 1);
       var here = path[i0];
       var next = path[Math.min(i0 + 1, path.length - 1)];
-      var base = smooth(clamp(f / MOVE_FRACTION, 0, 1));
+      var dir = moveDir(i0);
+      var moves = isMove(dir);
+      var inFlow = moves && flows(i0 - 1), outFlow = moves && flows(i0);
+
+      var base;
+      if (inFlow && outFlow) base = f;
+      else if (inFlow) base = easeOut(f);
+      else if (outFlow) base = easeIn(f);
+      else base = smooth(f);
 
       /* Lurching across broken ground: the rover catches and slips instead of
          gliding. The environment does not slow it down — the penalty is reward,
          and the step still takes one step — so this may not move a step
          boundary. The envelope sin(pi * base) is exactly zero at both ends, so
-         every step still starts and ends on the cell the trace says, at the
-         moment the trace says. It is a function of the step index only, never
-         of wall-clock time, so scrubbing is repeatable.
+         every step still starts and ends where it would without the lurch, at
+         the moment the trace says. It is a function of the step index only,
+         never of wall-clock time, so scrubbing is repeatable.
 
          Roughness is read at the step's own midpoint rather than at the moving
          position, so the lurch cannot feed back into where the rover is. */
@@ -1169,10 +1206,36 @@
         var env = Math.sin(base * Math.PI);
         e = clamp(base + rough * 0.15 * env * Math.sin(base * Math.PI * 3.0 + i0 * 2.39), 0, 1);
       }
+
       var row = lerp(here.row, next.row, e), col = lerp(here.col, next.col, e);
+      var tr = dir.r, tc = dir.c;
+
+      // Round the corner at the end of this step, or the one it started on.
+      var corner = null;
+      if (outFlow && e > 1 - CORNER_RADIUS) {
+        corner = { v: next, din: dir, dout: moveDir(i0 + 1), s: e - 1 };
+      } else if (inFlow && e < CORNER_RADIUS) {
+        corner = { v: here, din: moveDir(i0 - 1), dout: dir, s: e };
+      }
+      if (corner && corner.din.r * corner.dout.r + corner.din.c * corner.dout.c === 0) {
+        // Quadratic Bezier from R before the corner to R after it, with the
+        // cell centre as its control point. Its tangent at both ends is the
+        // straight-line direction, so the arc joins the straights smoothly.
+        var R = CORNER_RADIUS, u = (corner.s + R) / (2 * R);
+        var p0r = corner.v.row - R * corner.din.r, p0c = corner.v.col - R * corner.din.c;
+        var p2r = corner.v.row + R * corner.dout.r, p2c = corner.v.col + R * corner.dout.c;
+        var w0 = (1 - u) * (1 - u), w1 = 2 * u * (1 - u), w2 = u * u;
+        row = w0 * p0r + w1 * corner.v.row + w2 * p2r;
+        col = w0 * p0c + w1 * corner.v.col + w2 * p2c;
+        tr = (1 - u) * corner.din.r + u * corner.dout.r;
+        tc = (1 - u) * corner.din.c + u * corner.dout.c;
+      }
+
       return {
         index: i0, f: f, row: row, col: col, x: sx(col), z: sz(row),
-        moving: (here.row !== next.row || here.col !== next.col) && f < MOVE_FRACTION,
+        moving: moves,
+        // Direction of travel in scene space: col is x and row is z.
+        heading: moves ? Math.atan2(tr, tc) : null,
         rough: zoneDepth(row, col)
       };
     }
@@ -1393,18 +1456,13 @@
         var step = trace.steps[pose.index] || {};
         var check = payload.checks[pose.index] || null;
 
-        // Heading follows the direction of travel, so the body turns into the
-        // corner rather than snapping between the four step directions, and a
-        // step that does not move keeps the last heading rather than spinning.
-        var next = path[Math.min(pose.index + 1, path.length - 1)];
-        var here = path[pose.index];
-        var dRow = next.row - here.row, dCol = next.col - here.col;
-        if (dRow !== 0 || dCol !== 0) {
-          // dRow is the scene z step and dCol the scene x step, so this is
-          // atan2(dz, dx) in scene space despite the grid names.
-          var target = Math.atan2(dRow, dCol);
-          var diff = ((target - heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
-          heading += diff * clamp(dt * 8, 0, 1);
+        // Heading follows the path's own tangent, so the body turns with the
+        // arc through a corner. A step that does not move keeps the last
+        // heading. A big jump — a reversal, or a turn after a stop — happens
+        // while the rover is stopped, so it swings round rather than flipping.
+        if (pose.heading !== null) {
+          var diff = ((pose.heading - heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          heading += Math.abs(diff) < 0.3 ? diff : diff * clamp(dt * 8, 0, 1);
         }
         rover.position.set(px, 0, pz);
         rover.rotation.y = -heading;
