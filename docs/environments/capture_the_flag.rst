@@ -3,7 +3,7 @@ Capture the Flag
 
 .. episode-viewer:: traces/capture_the_flag.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``CaptureTheFlagPOMDP`` puts two teams on a grid field split by a midline.
@@ -41,7 +41,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Write :math:`G` for the free cells (in bounds, not a tree), :math:`\text{Blue}` for
 the blue players and :math:`\text{Red}` for red, with :math:`|\text{Blue}| = n_{\text{blue}}` and
 :math:`|\text{Red}| = n_{\text{red}}`. Let :math:`F = (f_1, \dots, f_K)` be the red flag
@@ -87,7 +87,7 @@ the exactly observed bookkeeping, plus a terminal sentinel:
 
 .. math::
 
-   \Omega = G^{n_{\text{blue}}} \times \{0..d_{\max}\}^{n_{\text{blue}} n_{\text{red}}} \times \{0,1\}^{n_{\text{blue}}}
+   Z = G^{n_{\text{blue}}} \times \{0..d_{\max}\}^{n_{\text{blue}} n_{\text{red}}} \times \{0,1\}^{n_{\text{blue}}}
    \times \{0..n_{\text{blue}}\} \times \{0,1\} \times \mathbb{Z}_{\geq 0}^{n_{\text{blue}}}
    \times \mathbb{Z}_{\geq 0}^2 \;\cup\; \{(-1, \dots, -1)\}
 
@@ -206,7 +206,7 @@ factor of :math:`((1-p_e)/(p_e/2))^2 = 64` in likelihood. One flag scan barely
 separates the candidates. Strong evidence about where the enemy is, weak
 evidence about where the flag is.
 
-**Reward function.** Additive over the realised transition, so it genuinely
+**Reward function.** Additive over the realised transition, so it
 needs :math:`s'` (``reward_requires_next_state`` is ``True``):
 
 .. math::
@@ -234,7 +234,7 @@ single term.
 
 where :math:`s(k)` spawns every blue player on the blue base, every red
 player on the red base, all counters and scores at zero. The opening
-observation is a genuine draw from :math:`O` — the mixture over candidates of
+observation is a draw from :math:`O` — the mixture over candidates of
 the noise each implies — so a filter that weights it stays uniform over the
 candidates instead of favouring the nearer ones. When that support has more
 than 8192 observations, the environment returns the single most likely one
@@ -250,6 +250,27 @@ instead of enumerating it.
    \ \text{or}\ \text{score}^{\text{red}} \geq \texttt{score\_to\_win}\}
 
 with ``score_to_win`` = 1 by default.
+
+Step order
+~~~~~~~~~~
+
+One step resolves in a fixed order: blue moves, red moves, flags are picked
+up, tags are resolved, scores are awarded, counters tick. Changing the order
+changes the outcome. Pick-up runs before tagging, so a player tagged
+while standing on the flag cell has already taken the flag and therefore drops
+it. Both scoring conditions are judged against the same carrier indices, which
+keeps blue scoring and red scoring mutually exclusive -- each needs the other
+side's flag to be home.
+
+Tagging and respawn
+~~~~~~~~~~~~~~~~~~~
+
+A player is tagged when an opponent shares its cell **in the enemy half**, and
+only by a tagger that is neither frozen nor on cooldown. Being tagged does
+not end the episode: the player returns to its own base, drops any flag it
+carried, and is frozen for ``freeze_steps``. The tagger is put on cooldown for
+``tagger_cooldown_steps``, which is what stops a defender camping the flag and
+tagging repeatedly.
 
 Rewards
 -------
@@ -274,29 +295,20 @@ Move or hold (``move_cost``)              -1.0 per player
 Scan (``scan_cost``)                      -2.0 per player
 ========================================  ============================
 
-Step order
-----------
+Key settings
+------------
 
-One step resolves in a fixed order: blue moves, red moves, flags are picked
-up, tags are resolved, scores are awarded, counters tick. The order is
-semantics rather than style. Pick-up runs before tagging, so a player tagged
-while standing on the flag cell has already taken the flag and therefore drops
-it. Both scoring conditions are judged against the same carrier indices, which
-keeps blue scoring and red scoring mutually exclusive -- each needs the other
-side's flag to be home.
-
-Tagging and respawn
--------------------
-
-A player is tagged when an opponent shares its cell **in the enemy half**, and
-only by a tagger that is neither frozen nor on cooldown. Being tagged is a
-setback, not a failure: the player returns to its own base, drops any flag it
-carried, and is frozen for ``freeze_steps``. The tagger is put on cooldown for
-``tagger_cooldown_steps``, which is what stops a defender camping the flag and
-tagging repeatedly.
+The defaults are a 9 by 7 field (``grid_size=(9, 7)``) split at column
+``midline=4``, with two players per team (``n_blue=2``, ``n_red=2``), one of
+them a red defender (``n_red_defenders=1``). Blue moves slip sideways with
+probability ``slip_probability=0.1``, and a range badge reads off by one with
+probability ``range_error_probability=0.2``. A red player steps toward its
+target with probability ``red_pursuit_probability=0.7``. ``score_to_win=1``
+capture ends the episode, and ``discount_factor`` defaults to ``0.98``. The
+reward arguments are listed under Rewards above.
 
 Belief
-------
+~~~~~~
 
 ``create_environment_belief`` returns ``CaptureTheFlagVectorizedBelief``, a
 particle filter whose transition and likelihood both run over the whole
@@ -306,18 +318,20 @@ Two parts of a reading need different treatment. Blue's own positions, the
 carrier ids, its freezes and both scores come back without noise, so the
 posterior puts all its mass on them; the belief writes them onto every particle
 rather than weighting by them, because weighting floors every particle whose
-blue player slipped differently from the real one -- most of them, most steps.
+blue player slipped differently from the true state's -- most of them, most
+steps.
 And the flag candidate is static: nothing in the transition moves a particle
 from one candidate to another, so resampling across candidates deletes
 hypotheses permanently. Resampling therefore happens inside a candidate.
 
-What remains is a genuine filter with a sharp likelihood, so it converges on
-the true candidate in most episodes and over-commits to a wrong one in a few:
+What remains is weighting by the range badges and flag detectors. A one-cell
+change in a red position moves the range likelihood by a factor of 64, so the
+filter converges on the true candidate in most episodes and over-commits to a wrong one in a few:
 over twelve 15-step episodes on the default field it held a mean weight near
 0.7 on the truth at 200 particles and near 0.8 at 400.
 
 Metrics
--------
+~~~~~~~
 
 The completion metric is ``task_completion_rate``. Episodes are also split by
 why they ended -- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
@@ -328,19 +342,41 @@ spent holding the enemy flag, and exposure in the enemy half as both a count
 and a per-episode maximum.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
 Limits
-------
+~~~~~~
 
 The environment has no torch vectorized model, so it cannot be run under VOPP.
 ``PFT_DPW`` runs on the scalar ``Environment`` API.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``CaptureTheFlagPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Continuous
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -348,8 +384,15 @@ Minimal example
 
    env = CaptureTheFlagPOMDP(grid_size=(9, 7), midline=4, n_blue=2, n_red=2)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.capture_the_flag_pomdp.CaptureTheFlagPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.capture_the_flag_pomdp.CaptureTheFlagPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

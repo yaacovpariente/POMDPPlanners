@@ -7,11 +7,13 @@ every depth — and searches only the tree those scenarios induce. A node is the
 subset of scenarios that reach it, and it carries a lower and an upper bound on
 its value rather than an average of sampled returns.
 
-The search runs in trials. Each trial walks down the branch with the highest
-upper bound and the largest remaining gap, expands the leaf it reaches, and
-backs the bounds up the path. A branch is abandoned when its interval can no
-longer matter — branch and bound, not exploration bonuses. The search ends when
-the root's excess uncertainty falls to noise or the budget runs out.
+The search runs in trials. Each trial takes the action with the highest upper
+bound, then the observation branch whose gap between bounds most exceeds the
+gap the root needs at that depth, expands the leaf it reaches, and backs the
+bounds up the path. A trial stops at a branch whose gap is already within that
+target — branch and bound, not exploration bonuses. The search ends when the
+root's excess uncertainty ``(1 - eta)(u - l)`` falls to ``1e-6`` or below, or
+the budget runs out.
 
 Notes
 -----
@@ -22,7 +24,7 @@ Notes
 - There is no exploration constant and no visit-count selection here. The knobs
   that matter are ``n_scenarios``, ``depth`` and the bounds.
 - ``eta`` sets the target on the root gap; ``pruning_constant`` (``lambda``) is
-  charged once, over the finished tree, purely to pick the final action. For
+  charged once, over the finished tree, only to pick the final action. For
   regularization inside the search, use :doc:`ardespot`.
 
 Can I use?
@@ -66,7 +68,7 @@ Example
        depth=5,
        name="ExampleDESPOT",
        n_scenarios=8,
-       n_simulations=20,
+       time_out_in_seconds=2.0,
    )
 
    belief = get_initial_belief(tiger, n_particles=20)
@@ -78,4 +80,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.scenario_tree_planners.despot.DESPOT
    :members:
    :show-inheritance:
-   :no-index:

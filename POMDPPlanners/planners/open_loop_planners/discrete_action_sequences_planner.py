@@ -20,6 +20,7 @@ class DiscreteActionSequencesPlanner(Policy):
     problems with small action spaces and short planning horizons.
 
     The algorithm works by:
+
     1. Generating all possible action sequences of the specified depth
     2. For each sequence, estimating the expected return through Monte Carlo sampling
     3. Selecting the sequence with the maximum expected return
@@ -34,6 +35,7 @@ class DiscreteActionSequencesPlanner(Policy):
     algorithm on this planner's plan.
 
     **Open-Loop vs Closed-Loop Planning:**
+
     - **Open-loop**: Plans a complete action sequence without considering future observations
     - **Closed-loop**: Re-plans at each step based on new observations (like MCTS algorithms)
 

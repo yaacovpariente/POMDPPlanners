@@ -1,7 +1,7 @@
 Basic Usage Examples
 ====================
 
-This page provides simple, working examples to get you started with POMDPPlanners quickly.
+This page shows how to plan one action, run an episode, and compare planners.
 
 Your First POMDP Solution
 -------------------------
@@ -106,7 +106,7 @@ Run multiple episodes and compute statistics:
 Working with Different Environments
 -----------------------------------
 
-**Continuous Control (CartPole)**
+**Continuous State, Discrete Actions (CartPole)**
 
 .. code-block:: python
 
@@ -269,19 +269,22 @@ Visualization Example
    plt.tight_layout()
    plt.show()
 
-Quick Configuration Tips
-------------------------
+Configuration Tips
+------------------
 
 **Performance Tuning**
-   - Start with ``num_simulations=100`` for quick testing
-   - Increase to ``1000-2000`` for better performance
+   - Start with ``num_simulations=100`` while testing; planning time grows
+     with the number of simulations
+   - Increase to ``1000-2000`` so each action's value is estimated from more
+     simulations
    - Use ``exploration_constant=50.0`` for Tiger POMDP
    - Adjust ``depth`` based on problem horizon
 
 **Common Issues**
    - Low rewards? Increase ``num_simulations``
    - Slow planning? Decrease ``depth`` or ``num_simulations``
-   - Poor exploration? Adjust ``exploration_constant``
+   - Search visits only one root action? Increase ``exploration_constant``,
+     which scales the UCB exploration bonus
 
 **Memory Usage**
    - Use fewer particles (``n_particles=500``) for large state spaces
@@ -290,7 +293,8 @@ Quick Configuration Tips
 Next Steps
 ----------
 
-- Try :doc:`../environments/index` for the environment catalog
-- See :doc:`../planners/index` for advanced planner usage
-- Check :doc:`../core/simulations` for large-scale experiment setup
-- Explore the :doc:`../api/POMDPPlanners.core` for detailed API reference
+- Try :doc:`../environments/base` for the environment catalog
+- See :doc:`../planners/base` for what each planner supports
+- Check :doc:`../core/simulations` for running batches of episodes
+- Explore :doc:`../common/beliefs` and :doc:`../common/simulation_api` for the
+  API reference

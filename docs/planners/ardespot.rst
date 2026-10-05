@@ -3,9 +3,9 @@ AR-DESPOT
 
 Anytime Regularized DESPOT. It searches the same determinized scenario tree as
 :doc:`despot`, but carries the regularization inside the tree instead of
-applying it once at the end, and it is anytime: the tree holds a complete, legal
-answer after every trial, so stopping early still returns an action and a longer
-budget returns a better one.
+applying it once at the end, and it is anytime: the final action is read off
+the root's lower bounds, which exist after every trial, so stopping after any
+trial still returns an action.
 
 Each belief node keeps three numbers rather than two — the lower bound ``l``,
 the upper bound ``U``, and a regularized value ``mu``. Descent, the stopping
@@ -67,7 +67,7 @@ Example
        name="ExampleARDESPOT",
        n_scenarios=8,
        pruning_constant=0.01,
-       n_simulations=20,
+       time_out_in_seconds=2.0,
    )
 
    belief = get_initial_belief(tiger, n_particles=20)
@@ -79,4 +79,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.scenario_tree_planners.ardespot.ARDESPOT
    :members:
    :show-inheritance:
-   :no-index:

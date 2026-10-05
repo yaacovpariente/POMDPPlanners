@@ -59,7 +59,7 @@ Example
        c_ucb=1.0,
        beta_ucb=2.0,
        belief_child_num=3,
-       n_simulations=10,
+       time_out_in_seconds=2.0,
        name="ExamplePlanner",
    )
 
@@ -72,4 +72,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.sparse_pft.SparsePFT
    :members:
    :show-inheritance:
-   :no-index:

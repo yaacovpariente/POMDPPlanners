@@ -99,6 +99,10 @@ suppress_warnings = [
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
+# ``_static/videos`` holds the walkthrough videos the quickstart embeds. They
+# are served from the docs because GitHub's README attachment links do not
+# play outside github.com.
+html_static_path = ["_static"]
 
 # Ensure consistent navigation across all pages
 html_use_smartypants = True

@@ -3,7 +3,7 @@ PacMan
 
 .. episode-viewer:: traces/pacman.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 Clear every pellet in a walled maze while ghosts hunt you. PacMan's own position
@@ -33,7 +33,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 Let the maze be :math:`M \times N` with wall set :math:`\mathcal{W}`, free
 cells :math:`G`, :math:`P` initial pellet cells :math:`c_1, \dots, c_P`,
 and :math:`g` = ``num_ghosts``.
@@ -64,7 +64,7 @@ it. A terminal state reports :math:`(-1, -1)` for every ghost.
 
 .. math::
 
-   \Omega = \big(\{0..M{-}1\} \times \{0..N{-}1\}\big)^{g}
+   Z = \big(\{0..M{-}1\} \times \{0..N{-}1\}\big)^{g}
    \cup \{(-1, -1)^{g}\}
 
 **Transition model.** :math:`\top` is absorbing. Otherwise one step resolves
@@ -100,8 +100,7 @@ PacMan by :math:`+10`, so it loiters at intercept range instead of closing.
 ``ghost_coordination`` selects whether ghosts also condition on each other.
 
 *Collision.* The episode ends if PacMan and any ghost share a cell **or swap
-cells** — both arcs of the standard rule, since without the swap arc a ghost
-would walk through PacMan:
+cells** — without the swap case a ghost would walk through PacMan:
 
 .. math::
 
@@ -134,8 +133,9 @@ Each coordinate is drawn, rounded and clamped to the grid independently:
 
 so the likelihood of a reading is the Gaussian mass of its rounding bin, with
 the two end bins absorbing the tails. A terminal state reports
-:math:`(-1, -1)` for every ghost. A nearby ghost is seen almost exactly; a
-distant one is a blur — which is what makes a point estimate of ghost
+:math:`(-1, -1)` for every ghost. At the defaults an adjacent ghost has
+:math:`\sigma_k = 0.3` cells and a ghost five or more cells away has
+:math:`\sigma_k = 1.5` — which is what makes a point estimate of ghost
 positions a losing policy.
 
 **Reward function.** Terminal states pay :math:`0`. Otherwise, evaluated
@@ -170,8 +170,8 @@ with the hazard term :math:`D` following the same three
 
 Uncertainty does not come from the prior here — it accumulates from the
 observation noise as the ghosts move. The initial observation distribution is
-a live draw from :math:`O` at :math:`s_0`, not a point mass, so the opening
-belief already carries the sensor's blur.
+:math:`O` at :math:`s_0`, not a point mass, so the first reading is already
+noisy.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
 
@@ -236,8 +236,30 @@ builds a randomized maze if you want variation across episodes.
 An episode ends on a ghost collision, on clearing the last pellet, or on a
 hazard hit when ``is_dangerous_area_hit_terminal=True``.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``PacManPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``PacManVectorizedModel`` (some configurations; others raise NotImplementedError)
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -250,10 +272,17 @@ Minimal example
    observation = env.sample_observation(state, east)
    print(env.get_pacman_pos(state), "believes ghosts near", observation)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.pacman_pomdp.PacManPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.pacman_pomdp.PacManPOMDP`
 - Batched torch model:
   ``POMDPPlanners.environments.pacman_pomdp.pacman_vectorized_model.PacManVectorizedModel``
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

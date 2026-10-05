@@ -3,15 +3,15 @@ Battleship
 
 .. episode-viewer:: traces/battleship.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``BattleshipPOMDP`` searches for a hidden, fixed fleet on a square board.
 Probe one cell at a time and hit every occupied cell to finish.
 
 The sensor is exact and the fleet never moves, so all the uncertainty is in
-the initial layout. The agent is doing pure hypothesis elimination: every
-probe is a hard constraint that cuts the set of possible fleets down.
+the initial layout. Every probe removes the fleet layouts that disagree with
+its reading, and nothing ever adds one back.
 
 What the agent sees and does
 ----------------------------
@@ -27,7 +27,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Let :math:`n` be ``board_size``, :math:`C = \{0, \dots, n^2 - 1\}`
 the cells in row-major order, and :math:`\mathcal{L} \subseteq \{0,1\}^{C}` the
 set of legal fleet layouts — the occupancy vectors reachable by placing every
@@ -54,7 +54,7 @@ means it has been probed. The vector is stored flat as
 
 .. math::
 
-   \Omega = \{\textsf{MISS}, \textsf{HIT}\} = \{0, 1\}
+   Z = \{\textsf{MISS}, \textsf{HIT}\} = \{0, 1\}
 
 **Transition model.** Deterministic, and it never touches the fleet — probing
 only records that a cell was visited:
@@ -65,8 +65,8 @@ only records that a cell was visited:
    \mathbb{1}[u' = u] \cdot \mathbb{1}[m' = m + e_a]
 
 where :math:`e_a` sets bit :math:`a`. Because :math:`u` is constant along a
-trajectory, all uncertainty is in the initial draw; the agent is doing pure
-hypothesis elimination, never tracking a moving target.
+trajectory, all uncertainty is in the initial draw; the agent only rules out layouts and
+never tracks a moving target.
 
 **Observation model.** Noiseless:
 
@@ -126,26 +126,48 @@ The default board is 5 by 5, with straight ships of lengths 3, 2 and 2. Ships
 may touch, including diagonally, unless ``allow_adjacent_ships=False``.
 
 Belief
-------
+~~~~~~
 
 ``BattleshipBelief`` tracks legal fleet layouts consistent with observed hits
 and misses; its occupancy probabilities describe uncertainty about each cell.
 These probabilities are not extra sensor readings.
 
-``BattleshipVectorizedWeightedParticleBelief`` is the batched twin, and it is
+``BattleshipVectorizedWeightedParticleBelief`` is the batched version, and it is
 what ``create_environment_belief`` returns. It carries the same posterior --
 its particles are redrawn from the consistent layouts on every probe, so the
 two agree cell for cell -- through the vectorized updater interface, which is
 what a vectorized planner needs to hold a belief at all.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``BattleshipPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ❌
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -153,8 +175,15 @@ Minimal example
 
    env = BattleshipPOMDP(board_size=5, ship_lengths=(3, 2, 2))
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.battleship_pomdp.BattleshipPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

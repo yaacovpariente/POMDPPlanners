@@ -5,21 +5,21 @@ Maze
 
 .. episode-viewer:: traces/discrete_maze.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 **ContinuousMazePOMDP** — the same maze, with bounded displacements.
 
 .. episode-viewer:: traces/continuous_maze.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 **TMazePOMDP** — a T-shaped corridor.
 
 .. episode-viewer:: traces/t_maze.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 These three environments test memory of a noisy, single-use cue. The map is
@@ -44,7 +44,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. All three variants share one model and differ only in :math:`A` and
 how a move is resolved. Let :math:`G` be the walkable cells, :math:`c \in G`
 the cue cell, and :math:`g_L, g_R \in G` the two goal cells.
@@ -84,7 +84,7 @@ A longer displacement is rescaled to the cap rather than rejected.
 
 .. math::
 
-   \Omega = \{\textsf{left\_cue},\; \textsf{right\_cue},\; \textsf{empty}\}
+   Z = \{\textsf{left\_cue},\; \textsf{right\_cue},\; \textsf{empty}\}
 
 **Transition model.** Deterministic, and a goal is absorbing:
 
@@ -196,8 +196,23 @@ These are the defaults of ``step_penalty``, ``goal_reward`` and
 ``wrong_goal_penalty``, the same in all three variants. ``reward_range`` is
 built from them, ``(-10.0, 10.0)`` by default.
 
+Key settings
+------------
+
+All three classes take ``discount_factor`` (default ``0.95``), ``cue_accuracy``
+(default ``0.9``), ``goal_reward`` (default ``10.0``), ``wrong_goal_penalty``
+(default ``10.0``) and ``step_penalty`` (default ``1.0``). Every argument has a
+default, so each class builds with no arguments. The two penalties are passed
+as positive numbers and subtracted.
+
+The layout arguments differ by class. ``DiscreteMazePOMDP`` and
+``ContinuousMazePOMDP`` take ``maze_width`` (``7``), ``maze_height`` (``9``),
+``maze_seed`` (``0``) and ``loop_fraction`` (``0.15``).
+``ContinuousMazePOMDP`` also takes ``max_step_size`` (``1.0``). ``TMazePOMDP``
+takes ``stem_length`` (``4``) and ``arm_length`` (``1``).
+
 DiscreteMazePOMDP
------------------
+~~~~~~~~~~~~~~~~~
 
 ``DiscreteMazePOMDP`` uses integer cell positions in a generated maze. The
 four actions, ``up``, ``down``, ``left`` and ``right``, move one cell; a wall
@@ -205,7 +220,7 @@ blocks the move. ``maze_width``, ``maze_height``, ``maze_seed`` and
 ``loop_fraction`` control the layout.
 
 ContinuousMazePOMDP
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 ``ContinuousMazePOMDP`` uses real-valued positions and displacement actions
 ``[dx, dy]``, capped in length by ``max_step_size``. Collision checks cover
@@ -213,7 +228,7 @@ the whole movement path. With the same layout settings as DiscreteMazePOMDP,
 it uses the same maze geometry.
 
 TMazePOMDP
-----------
+~~~~~~~~~~
 
 ``TMazePOMDP`` uses a T-shaped corridor and the same four one-cell actions as
 the discrete maze. ``stem_length`` sets the distance to the junction and
@@ -221,7 +236,7 @@ the discrete maze. ``stem_length`` sets the distance to the junction and
 agent must remember the cue while walking up the stem, then choose an arm.
 
 Belief
-------
+~~~~~~
 
 ``create_environment_belief`` returns a
 ``MazeVectorizedWeightedParticleBelief`` for either maze. The hidden state is
@@ -237,10 +252,83 @@ positions agree with the environment's to within its cell tolerance rather than
 bit for bit, because it stops a step at the tolerance-widened cell boundary the
 same code uses to decide membership.
 
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 24 24 24
+
+   * - Capability
+     - ``DiscreteMazePOMDP``
+     - ``ContinuousMazePOMDP``
+     - ``TMazePOMDP``
+   * - Action space
+     - Discrete
+     - Continuous
+     - Discrete
+   * - Observation space
+     - Discrete
+     - Discrete
+     - Discrete
+   * - Native C++ backend
+     - ❌
+     - ❌
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+     - ❌
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Optional dependencies
+     - None
+     - None
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   import numpy as np
+
+   from POMDPPlanners.environments.maze_pomdp import ContinuousMazePOMDP, DiscreteMazePOMDP
+
+   env = DiscreteMazePOMDP(discount_factor=0.95, maze_seed=0)
+
+   state = env.initial_state_dist().sample(1)[0]
+   # With n_samples=1 these return the value itself, not a list of one.
+   next_state = env.sample_next_state(state, "up")
+   observation = env.sample_observation(next_state, "up")
+   print(state, "->", next_state, observation, env.reward(state, "up"))
+
+   # The continuous maze takes a displacement [dx, dy] instead.
+   continuous_env = ContinuousMazePOMDP(discount_factor=0.95, max_step_size=1.0)
+   state = continuous_env.initial_state_dist().sample(1)[0]
+   print(continuous_env.sample_next_state(state, np.array([0.0, 0.5])))
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.maze_pomdp.DiscreteMazePOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.maze_pomdp.ContinuousMazePOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.maze_pomdp.TMazePOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.maze_pomdp.DiscreteMazePOMDP`
 - :class:`POMDPPlanners.environments.maze_pomdp.ContinuousMazePOMDP`
 - :class:`POMDPPlanners.environments.maze_pomdp.TMazePOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

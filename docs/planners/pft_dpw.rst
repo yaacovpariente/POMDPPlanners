@@ -5,8 +5,9 @@ Particle Filter Tree with double progressive widening. PFT-DPW searches the
 *belief MDP*: a node is a particle belief, and stepping an action runs a full
 particle filter update to produce the child belief, which is then treated as a
 single state of the belief MDP. Because a node is a belief rather than a
-history, the value estimate at a node reflects the whole belief rather than one
-sampled state, at the cost of one filter update per simulation step.
+history, the reward at a node is the weighted mean over all its particles
+rather than the reward of one sampled state, at the cost of one filter update
+per simulation step.
 
 Notes
 -----
@@ -16,8 +17,9 @@ Notes
   ICAPS 28(1), 259-263. https://ojs.aaai.org/index.php/ICAPS/article/view/13882
 - The per-simulation cost is higher than :doc:`pomcp`; the number of particles
   per belief node multiplies it. :doc:`sparse_pft` is the cheaper variant.
-- This is the planner the constrained and risk-sensitive variants in
-  :doc:`constrained_and_cvar` are built on.
+- ``CPFT_DPW``, the cost-constrained variant in :doc:`constrained_and_cvar`,
+  subclasses this planner. ``ICVaR_PFT_DPW`` on the same page is a separate
+  class.
 
 Can I use?
 ----------
@@ -64,7 +66,7 @@ Example
        action_sampler=action_sampler,
        k_a=2.0,
        alpha_a=0.5,
-       n_simulations=10,
+       time_out_in_seconds=2.0,
    )
 
    belief = get_initial_belief(tiger, n_particles=10)
@@ -76,4 +78,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW
    :members:
    :show-inheritance:
-   :no-index:

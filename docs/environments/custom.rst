@@ -27,11 +27,11 @@ that need to be fast.
    * - ``sample_next_state(state, action, n_samples=1)``
      - ``n_samples`` draws from :math:`T(\cdot \mid s, a)`.
    * - ``sample_observation(next_state, action, n_samples=1)``
-     - ``n_samples`` draws from :math:`Z(\cdot \mid s', a)`.
+     - ``n_samples`` draws from :math:`O(\cdot \mid s', a)`.
    * - ``transition_log_probability(state, action, next_states)``
      - Array of shape ``(N,)`` — log :math:`T(s'_i \mid s, a)`.
    * - ``observation_log_probability(next_state, action, observations)``
-     - Array of shape ``(N,)`` — log :math:`Z(o_i \mid s', a)`. This is what
+     - Array of shape ``(N,)`` — log :math:`O(o_i \mid s', a)`. This is what
        weights the particles in a belief update.
    * - ``reward(state, action, next_state=None)``
      - Scalar reward.
@@ -49,13 +49,13 @@ Traps worth knowing before you start
 ------------------------------------
 
 - **``reward_range`` is only structurally validated.** The constructor checks
-  the tuple's shape, not that your rewards actually fall inside it. The rollout
+  the tuple's shape, not that your rewards fall inside it. The rollout
   check that catches a wrong range is a conformance test, and it runs only over
   the environments listed in ``ENV_BUILDERS`` in
   ``tests/test_environments/test_env_api_conformance.py`` — so you have to add
   yours there to get it. Until then, leave ``reward_range`` ``None`` rather
   than guessing.
-- **``config_id`` must be stable.** It is derived from the attributes the
+- **``config_id`` must not change between runs.** It is derived from the attributes the
   instance stores, not from the constructor signature, and it is the cache key
   for simulation results. A constructor argument you never assign to ``self``
   has no effect on it; an attribute you set after construction does. Anything
@@ -196,6 +196,6 @@ declared state-space type — a state is whatever the environment stores.
 See also
 --------
 
-- :doc:`index` — the environments that already exist.
+- :doc:`base` — the environments that already exist.
 - :doc:`../core/beliefs` — the belief representations that consume
   ``observation_log_probability``.

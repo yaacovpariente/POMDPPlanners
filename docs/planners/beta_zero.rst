@@ -10,7 +10,9 @@ same weights serve every belief the search reaches.
 Offline policy iteration — play episodes with the current network, train on the
 search's visit counts and returns, repeat — is orchestrated by
 :class:`~POMDPPlanners.training.PolicyTrainer`. An untrained planner still runs:
-the network is created automatically and the priors start uninformative.
+with no ``network`` argument the constructor builds a default network with
+random initial weights, so its priors and values carry no information until
+training.
 
 Notes
 -----
@@ -21,7 +23,13 @@ Notes
 - Needs PyTorch. ``state_dim`` must match the environment's state vector, and
   the action sampler is a
   :class:`BetaZeroActionSampler <POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero_action_sampler.BetaZeroActionSampler>`
-  wrapping an ordinary sampler as fallback.
+  wrapping another ``ActionSampler`` that it falls back to when no network is
+  set.
+- With no ``belief_representation``, the network reads the particles' mean and
+  standard deviation. That needs numeric states. For states it cannot turn
+  into numbers, such as Tiger's ``"tiger_left"`` strings, it feeds the network
+  all zeros, so the network learns nothing about the belief. Pass your own
+  ``belief_representation`` for such an environment.
 - The safety-constrained extension is :doc:`constrained_zero`.
 
 Can I use?
@@ -72,8 +80,8 @@ Example
        depth=10,
        name="BetaZero_Example",
        action_sampler=action_sampler,
-       n_simulations=50,
-       state_dim=1,          # Tiger's state is one number
+       time_out_in_seconds=2.0,
+       state_dim=1,          # one state variable; see the note on states above
        k_a=1.0,
        alpha_a=0.5,
        k_o=1.0,
@@ -90,4 +98,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero.BetaZero
    :members:
    :show-inheritance:
-   :no-index:

@@ -1,235 +1,86 @@
-Installation Guide
-==================
+Installation
+============
 
-This guide covers different ways to install POMDPPlanners and its dependencies.
+POMDPPlanners needs Python 3.10 or newer and a C++17 compiler. The compiler is
+needed because several environments have C++ parts that are built when the
+package is installed, from PyPI as well as from a clone.
 
-Requirements
-------------
-
-**System Requirements**
-
-- Python 3.8 or higher
-- Operating System: Linux, macOS, or Windows
-- Minimum 4GB RAM recommended
-- 1GB free disk space
-
-**Python Dependencies**
-
-Core dependencies are automatically installed with the package:
-
-- NumPy >= 1.19.0
-- SciPy >= 1.5.0
-- Matplotlib >= 3.3.0
-- PyYAML >= 5.4.0
-- Gymnasium >= 0.26.0 (for Gym environments)
-
-Installation Methods
---------------------
-
-Development Installation (Recommended)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-For development or if you want the latest features:
-
-.. code-block:: bash
-
-   # Clone the repository
-   git clone https://github.com/yaacovpariente/POMDPPlanners.git
-   cd POMDPPlanners
-
-   # Create virtual environment
-   python -m venv .venv
-
-   # Activate virtual environment
-   source .venv/bin/activate          # Linux/macOS
-   # .venv\Scripts\activate           # Windows
-
-   # Install dependencies
-   pip install -r requirements.txt
-
-   # Install in development mode
-   pip install -e .
-
-PyPI Installation
-~~~~~~~~~~~~~~~~~
-
-Install the latest release from PyPI:
+From PyPI
+---------
 
 .. code-block:: bash
 
    pip install POMDPPlanners
 
-The release is a source distribution, so pip compiles the package's C++ modules
-and needs a C++ compiler.
+The release on PyPI is a source distribution, so pip compiles the C++ modules
+during the install. Install a compiler first: ``xcode-select --install`` on
+macOS, ``g++`` (for example ``sudo apt-get install g++``) on Debian or Ubuntu.
 
-Virtual Environment Setup
--------------------------
-
-**Why Use Virtual Environments?**
-
-Virtual environments isolate your project dependencies and prevent conflicts with other Python projects.
-
-**Creating a Virtual Environment**
-
-.. code-block:: bash
-
-   # Create virtual environment
-   python -m venv .venv
-
-   # Activate on Linux/macOS
-   source .venv/bin/activate
-
-   # Activate on Windows
-   .venv\Scripts\activate
-
-   # Verify activation (should show virtual environment path)
-   which python
-
-**Deactivating Virtual Environment**
-
-.. code-block:: bash
-
-   deactivate
-
-Development Dependencies
-------------------------
-
-For contributors and developers, install additional development tools:
-
-.. code-block:: bash
-
-   # Install development dependencies
-   pip install -r requirements-dev.txt
-
-   # Install pre-commit hooks
-   pre-commit install
-
-Development dependencies include:
-
-- **Testing**: pytest, pytest-cov
-- **Code Quality**: black, pylint, flake8
-- **Documentation**: sphinx, sphinx-rtd-theme
-- **Pre-commit**: pre-commit hooks for code formatting
-
-Optional Dependencies
----------------------
-
-**Distributed Computing**
-
-For running experiments on clusters:
-
-.. code-block:: bash
-
-   pip install ray[default]  # For Ray distributed computing
-   pip install dask[complete]  # For Dask distributed computing
-
-**Advanced Visualization**
-
-For enhanced plotting capabilities:
-
-.. code-block:: bash
-
-   pip install seaborn  # Statistical plotting
-   pip install plotly   # Interactive plots
-
-**Deep Learning**
-
-For neural network-based components:
-
-.. code-block:: bash
-
-   pip install torch torchvision  # PyTorch
-   # or
-   pip install tensorflow         # TensorFlow
-
-Verification
+From a clone
 ------------
 
-Verify your installation by running the test suite:
+Install from a clone to get the latest code on ``develop`` or to change the
+package:
 
 .. code-block:: bash
 
-   # Ensure virtual environment is activated
-   source .venv/bin/activate
+   git clone https://github.com/yaacovpariente/POMDPPlanners.git
+   cd POMDPPlanners
+   python -m venv .venv && source .venv/bin/activate
+   pip install -e .
 
-   # Run tests
-   pytest
+``-e`` makes the install editable: changes to the Python files take effect
+without reinstalling. Changes to the C++ files do not. After editing one,
+rebuild the extensions in place:
 
-   # Run a quick example
-   python -c "
-   from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-   env = TigerPOMDP()
-   print('Installation successful!')
-   print(f'Tiger POMDP has {len(env.get_states())} states')
-   "
+.. code-block:: bash
 
-Troubleshooting
+   python setup.py build_ext --inplace
+
+Optional extras
 ---------------
 
-**Common Issues**
+The package defines two extras:
 
-*Import Errors*
+``dev``
+   The test, lint and type-check tools: pytest, black, pylint, pyright and
+   pre-commit. It also installs ``highway-env``, the simulator behind the
+   Racetrack environment.
 
-.. code-block:: bash
-
-   # Ensure virtual environment is activated
-   source .venv/bin/activate
-
-   # Reinstall in development mode
-   pip install -e .
-
-*Missing Dependencies*
+``docs``
+   Sphinx and its plugins, to build this documentation.
 
 .. code-block:: bash
 
-   # Update pip
-   pip install --upgrade pip
+   pip install -e ".[dev,docs]"
 
-   # Reinstall requirements
-   pip install -r requirements.txt --force-reinstall
+PyTorch is not an extra. It is a core dependency, used by the learned and
+vectorized planners, so a plain install already pulls it in.
 
-*Virtual Environment Issues*
+The simulators behind the realistic environments (CARLA, Isaac Lab, nuPlan)
+are not installed by any extra. Each needs its own install, described in
+:doc:`environments/realistic`.
 
-.. code-block:: bash
+Check the install
+-----------------
 
-   # Remove and recreate virtual environment
-   rm -rf .venv
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   pip install -e .
+.. code-block:: python
 
-**Platform-Specific Notes**
+   from POMDPPlanners.core.belief import get_initial_belief
+   from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+   from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
-*Windows*
+   env = TigerPOMDP(discount_factor=0.95)
+   planner = POMCP(
+       environment=env,
+       discount_factor=0.95,
+       depth=5,
+       exploration_constant=50.0,
+       name="check",
+       time_out_in_seconds=2.0,
+   )
+   actions, _ = planner.action(get_initial_belief(env, n_particles=100))
+   print(actions)
 
-- Use ``python`` instead of ``python3``
-- Use ``pip`` instead of ``pip3``
-- Use backslashes (``\``) in paths or forward slashes with raw strings
-
-*macOS*
-
-- You may need to install Xcode command line tools: ``xcode-select --install``
-- Consider using Homebrew for Python installation
-
-*Linux*
-
-- Install Python development headers: ``sudo apt-get install python3-dev`` (Ubuntu/Debian)
-- For CentOS/RHEL: ``sudo yum install python3-devel``
-
-Getting Help
-------------
-
-If you encounter installation issues:
-
-1. Check the `GitHub Issues <https://github.com/yaacovpariente/POMDPPlanners/issues>`_
-2. Create a new issue with:
-   - Your operating system and Python version
-   - Complete error message
-   - Steps you've tried
-3. Join the `Discussions <https://github.com/yaacovpariente/POMDPPlanners/discussions>`_
-
-Next Steps
-----------
-
-Once installed, proceed to the :doc:`quickstart` guide to begin using POMDPPlanners!
+If this prints a list with one Tiger action, the package and its dependencies
+are working. :doc:`quickstart` goes on from here.

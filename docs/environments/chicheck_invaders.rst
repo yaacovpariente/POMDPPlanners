@@ -3,7 +3,7 @@ Chicheck Invaders
 
 .. episode-viewer:: traces/chicheck_invaders.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``ChicheckInvadersPOMDP`` is an arcade shooter written as a POMDP. A ship on row 0
@@ -32,7 +32,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Let :math:`W` = ``num_columns``, :math:`H` = ``num_rows`` and :math:`N` =
 ``num_chickens``.
 
@@ -62,8 +62,8 @@ v_i` a chicken's column and row, :math:`d_i` its patrol direction,
    A = \{\textsf{stay},\; \textsf{left},\; \textsf{right},\; \textsf{fire}\}
      = \{0, 1, 2, 3\}
 
-**Transition model.** One step resolves in a fixed order, and the order *is*
-the design.
+**Transition model.** One step resolves in this fixed order; the paragraph
+after the list says why.
 
 1. **Ship moves.** :math:`x' = \mathrm{clip}(x + \Delta_a,\, 0,\, W{-}1)`,
    with :math:`\Delta = -1, +1` for left, right and :math:`0` otherwise.
@@ -108,16 +108,17 @@ Finally :math:`t' = t + 1`. Resolving the shot **before** the flock moves is
 what lets the ship hit what it aimed at: the other order would let a chicken
 dodge by stepping sideways without deciding to, and aiming would collapse into
 waiting. Dives are decided after the shot, so a chicken shot this step never
-gets to dive — which makes shooting a live defence, not only an attack.
+gets to dive — so a shot also removes a chicken that could have dived at the
+ship next.
 
 **Observation space.** In ``ObservationMode.FULL`` the observation is the
-state, :math:`\Omega = S`, and the problem is an MDP. In the default
+state, :math:`Z = S`, and the problem is an MDP. In the default
 ``ObservationMode.PARTIAL`` every reading is an integer, and a masked field
 reads :math:`0`:
 
 .. math::
 
-   \Omega = \mathbb{Z} \times \big(\{0,1\} \times \mathbb{Z} \times \{0,1\}
+   Z = \mathbb{Z} \times \big(\{0,1\} \times \mathbb{Z} \times \{0,1\}
    \times \mathbb{Z} \times \{-1, 0\}\big)^{N}
 
 **Observation model.** In the default ``ObservationMode.PARTIAL``:
@@ -139,12 +140,12 @@ distance. Every numeric channel is a **rounded** Gaussian,
 with :math:`F_{\mathcal{N}}` the standard normal CDF, so the readings are
 integers, not reals. The ship reads its own column as
 :math:`\hat{x} \sim G_{\sigma_x}(\cdot\,; x')` — redundant evidence, since the
-ship's column is decided by its own actions, present so the reading is a
-complete picture rather than a chicken report with a hole in it.
+ship's column is decided by its own actions, present so the observation
+reports the ship as well as the chickens.
 
 Each chicken is reported through two sensors with disjoint geometry. Dead
-chickens are inside neither reach, which makes a cleared slot silent rather
-than merely unlucky:
+chickens are inside neither reach, so a cleared slot is never reported and its
+silence has likelihood 1 rather than a sensor's miss chance:
 
 .. math::
 
@@ -203,9 +204,9 @@ otherwise charge it repeatedly.
    Called without :math:`s'`, every term except the ship-hit penalty is still
    **exact**, because a hitscan shot resolves before the dive coins are
    flipped. The missing term is deliberately not replaced by its expectation:
-   a planner comparing actions at a belief node then sees the true value of a
+   a planner comparing actions at a belief node then sees the exact value of a
    shot that connects, and the risk it took is charged on the step the flock
-   actually gets through.
+   gets through.
 
 **Initial belief.** The ship starts centred with an empty cooldown; the flock
 is drawn uniformly without replacement from the cells above row 0, with
@@ -233,7 +234,7 @@ has run, and the belief never weights particles with it.
    \cup \{s : t \geq \texttt{max\_steps}\}
 
 Dynamics
---------
+~~~~~~~~
 
 Actions are stay, left, right and fire, in that index order. A move is clamped
 at the walls. ``FIRE`` discharges only when the cooldown has expired; otherwise
@@ -246,16 +247,15 @@ unlimited range. A shot into a column with no live chicken misses and is charged
 the shot cost alone. ``fire_cooldown`` is the only rate limiter.
 
 The shot is resolved **before** the dive coins are flipped and before the flock
-moves, and that ordering is the design rather than an implementation detail. The
-ship picks its action from an observation of where the chickens are *now*, so it
+moves, for this reason. The ship picks its action from an observation of where the chickens are *now*, so it
 has to be able to hit what it aimed at. An earlier version fired a bolt that
 climbed one row per step; against chickens stepping sideways every step it was
 dodged by accident rather than by any decision the flock made, so aiming
 collapsed into waiting and most shots missed for reasons the ship could not have
 reasoned about.
 
-One consequence worth naming: a chicken shot this step never gets to dive, so
-firing is a live defence as well as an attack.
+One consequence: a chicken shot this step never gets to dive, so
+firing also removes a chicken that could have dived at the ship.
 
 A chicken is either patrolling or diving, and which it is stays hidden. A
 patrolling chicken steps one column along its direction and reverses at a wall;
@@ -273,7 +273,7 @@ itself and making the completion bonus free -- or park it on row 0, below the
 rows the gun covers, which is unwinnable.
 
 State and observation contract
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The state is ``[step, ship column, cooldown, ship hit, (column, row, direction,
 mode, alive) per chicken]``, so its length is ``4 + 5 * num_chickens``. A dead
@@ -285,7 +285,7 @@ An observation is ``[own-column reading, (camera reported, camera offset, radar
 reported, radar rows, radar drop) per chicken]``, of length
 ``1 + 5 * num_chickens``. Every masked field is written as ``0.0``, so two
 readings that report the same things compare equal and hash alike; the two
-``reported`` flags are what separate a masked zero from a genuine reading of
+``reported`` flags are what separate a masked zero from a sensor reading of
 zero.
 
 The two sensors each give half an answer:
@@ -318,7 +318,7 @@ reported ones:
 
 .. math::
 
-   Z(o \mid s') = G_{\sigma_c}(\hat c; c')
+   O(o \mid s') = G_{\sigma_c}(\hat c; c')
                   \prod_{i=1}^{N} q_i^{\text{cam}} \, q_i^{\text{rad}},
 
 where a chicken in reach and reported contributes its detection probability
@@ -330,10 +330,11 @@ particle a factor of ``0.1 * 0.1``. Everything is computed in log space, with an
 impossible reading floored rather than set to negative infinity, because
 ``0 * -inf`` becomes a NaN inside weight normalisation.
 
-Reward and termination
-----------------------
+Rewards
+-------
 
-+10 per chicken killed, -1 per shot actually fired, -0.1 every step, -50 when a
++10 per chicken killed, -1 per shot fired (a ``FIRE`` the cooldown blocks is
+free), -0.1 every step, -50 when a
 chicken reaches the ship, +50 when the last chicken dies. A shot that connects
 therefore pays ``-0.1 - 1 + 10`` on the step it was fired.
 
@@ -346,8 +347,8 @@ The declared minimum stacks the step cost, the shot cost and the ship-hit
 penalty, and that sum is deliberately **not reachable**. The gun kills the
 lowest chicken in the ship's column, and a chicken can only reach the ship by
 diving down that same column, so any step that could be overrun gave the shot a
-target and the kill reward comes back; firing into a genuinely empty column
-cannot be overrun at all. The worst a run can actually score is being overrun
+target and the kill reward comes back; firing into an empty column
+cannot be overrun at all. The worst a run can score is being overrun
 without firing, exactly one shot cost above the bound. The wider bound is kept
 because it costs nothing and survives a change to the gun's reach, where a tight
 one derived from that argument would not.
@@ -357,8 +358,8 @@ Under hitscan the kill and the completion bonus are functions of
 ``(state, action)`` alone -- the shot resolves before anything random happens --
 so a call without a successor returns everything except the ``-50``. That
 missing term is deliberately not replaced by its expectation: a planner
-comparing actions at a belief node sees the real value of a shot that connects,
-and the risk it took is charged on the step the flock actually gets through.
+comparing actions at a belief node sees the exact value of a shot that connects,
+and the risk it took is charged on the step the flock gets through.
 
 An episode ends when the flock is cleared, when a chicken reaches the ship, or
 at ``max_steps``.
@@ -387,19 +388,8 @@ certainty is the reading.
    deterministic_sensors = ChicheckInvadersPOMDP(**noiseless_preset())
    fully_observable = ChicheckInvadersPOMDP(observation_mode="full")
 
-Minimal example
----------------
-
-.. code-block:: python
-
-   from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersPOMDP
-   from POMDPPlanners.utils.belief_factory import create_environment_belief
-
-   env = ChicheckInvadersPOMDP()
-   belief = create_environment_belief(env, n_particles=200)
-
 Belief
-------
+~~~~~~
 
 ``ChicheckInvadersVectorizedBelief`` is a weighted particle filter with
 reinvigoration, and it is what ``create_environment_belief`` returns. It updates
@@ -409,22 +399,23 @@ scalar filter it was ported from, still available as
 ``create_environment_belief(env, belief_type=BeliefType.PARTICLE)``; the two
 carry the same model.
 
-The interesting half of the work is done by the likelihood above rather than by
-any special code: particles that put chickens where the sensors would have seen
-them die off on their own.
+Most of the filtering is done by the likelihood above: particles that put
+chickens where the sensors would have seen them get low weight and are dropped
+at resampling.
 
 What a weight-only filter cannot do is invent a hypothesis it never held, and
 two things here need that -- the opening placement is drawn from a large set of
 cells that a few hundred particles only partly cover, and a chicken outside both
 sensors for several steps drifts away from whichever patrol phase the particles
 guessed. After each reweight and resample, a fraction of the particles therefore
-have their *unreported* chickens re-drawn: a fresh direction, a fresh mode, and a
-one-cell jitter of the position. Chickens the sensors just reported are left
+have their *unreported* chickens re-drawn: a direction drawn uniformly from
+``-1``/``+1``, a mode drawn as dive with probability ``dive_probability``, and a
+position moved by up to one cell along each axis. Chickens the sensors just reported are left
 exactly as the weights found them, because perturbing one would throw away the
 only hard information the step produced.
 
 Metrics
--------
+~~~~~~~
 
 ``task_completion_rate`` is the fraction of episodes that cleared the flock,
 reduced with ``ANY`` -- clearing happens once and ends the episode.
@@ -433,14 +424,14 @@ reduced with ``ANY`` -- clearing happens once and ends the episode.
 ``average_chickens_killed`` and ``average_shots_fired`` are per-episode sums.
 
 The danger is a chicken getting close, reported both ways:
-``average_hits_taken`` counts the times the flock actually got through, and
+``average_hits_taken`` counts the times the flock got through, and
 ``max_chicken_encroachment_cells`` is the severity. The latter is reported as
 ``max(num_columns - 1, num_rows - 1)`` minus the smallest Chebyshev distance
 from the ship to a live chicken, so larger means closer and the distance itself
 is recoverable by subtraction. It is reported this way round because the episode
 reduction available for a severity is ``MAX`` and there is no ``MIN``.
 
-``average_shot_accuracy`` is kills per shot, which under hitscan is simply hits per
+``average_shot_accuracy`` is kills per shot, which under hitscan is hits per
 shot. It is the one metric that is not a channel
 reduction -- a ratio of two per-episode sums cannot be expressed as a reduction
 over a single channel, and a mean of per-step ratios is not the episode's ratio
@@ -449,20 +440,60 @@ counts are built from. Episodes that never fired are left out of the average
 rather than scored as zero.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
 Limits
-------
+~~~~~~
 
 There is no torch vectorized model and no C++ model, so VOPP cannot run on this
 environment. Scalar ``PFT_DPW`` runs on it directly, which is what the QA gate
 uses.
 
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``ChicheckInvadersPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersPOMDP
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+   env = ChicheckInvadersPOMDP()
+   belief = create_environment_belief(env, n_particles=200)
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

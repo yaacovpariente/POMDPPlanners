@@ -3,7 +3,7 @@ Snake
 
 .. episode-viewer:: traces/snake.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``SnakePOMDP`` is the arcade game with the food hidden. The snake observes its
@@ -49,7 +49,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Let :math:`n` = ``grid_size``, :math:`G = \{0..n{-}1\}^2` the
 playable cells, :math:`L` = ``target_length`` and :math:`K` =
 ``starvation_limit`` (default :math:`2n^2`).
@@ -86,7 +86,7 @@ quadrant, optional sighting and body:
 
 .. math::
 
-   \Omega = \{\textsf{TERM}\} \;\cup\; \{\textsf{LIVE}\} \times \{0,1,2,3\}
+   Z = \{\textsf{TERM}\} \;\cup\; \{\textsf{LIVE}\} \times \{0,1,2,3\}
    \times (G \cup \{\varnothing\}) \times G^{\leq L}
 
 **Transition model.** Deterministic except for where the food respawns.
@@ -190,7 +190,7 @@ centre, with the food uniform over every cell it leaves free:
    \mathbb{1}[m = 0] \cdot \mathbb{1}[\mathrm{status} = \textsf{RUNNING}]
 
 The opening observation is the sentinel and nothing conditions on it: the
-belief starts from this prior, and the first real reading arrives after the
+belief starts from this prior, and the first sensor reading arrives after the
 first action.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.98`.
@@ -203,6 +203,26 @@ eventually.
 .. math::
 
    S_T = \{s : \mathrm{status} \neq \textsf{RUNNING}\}
+
+Dynamics
+~~~~~~~~
+
+The body update is deterministic. The action turns the heading, the head steps
+into the next cell, and the tail is released — unless the step ate the food, in
+which case the tail stays and the snake grows by one. That pair decides a rule
+that is easy to get wrong: stepping into the cell the tail has just left is
+legal, but stepping into the tail while eating is a self hit.
+
+The only random part of a transition is where the food respawns after it is
+eaten: uniformly over the cells the new body does not occupy.
+
+Wall and self hits are checked first, then the win, then starvation. A snake
+that reaches its target length by walking into a wall has still hit the wall.
+``starvation_limit`` defaults to ``2 * grid_size ** 2``.
+
+The playable area is ``grid_size`` by ``grid_size`` cells. The walls are not
+cells of the state: they sit just outside that area, so a head that steps off
+the grid has hit one. The renderer draws them as a border around the board.
 
 Rewards
 -------
@@ -252,28 +272,8 @@ Key settings
      - ``0.98``
      -
 
-Dynamics
---------
-
-The body update is deterministic. The action turns the heading, the head steps
-into the next cell, and the tail is released — unless the step ate the food, in
-which case the tail stays and the snake grows by one. That pair decides a rule
-that is easy to get wrong: stepping into the cell the tail has just left is
-legal, but stepping into the tail while eating is a self hit.
-
-The only random part of a transition is where the food respawns after it is
-eaten: uniformly over the cells the new body does not occupy.
-
-Wall and self hits are checked first, then the win, then starvation. A snake
-that reaches its target length by walking into a wall has still hit the wall.
-``starvation_limit`` defaults to ``2 * grid_size ** 2``.
-
-The playable area is ``grid_size`` by ``grid_size`` cells. The walls are not
-cells of the state: they sit just outside that area, so a head that steps off
-the grid has hit one. The renderer draws them as a border around the board.
-
 Belief
-------
+~~~~~~
 
 The body is known and the food is one cell, so the belief is a categorical
 distribution over the grid. ``SnakeBelief`` carries it exactly. When the
@@ -297,7 +297,7 @@ that same reason: it would floor every weight and resample cells the sensor has
 already ruled out.
 
 Metrics
--------
+~~~~~~~
 
 ``task_completion_rate`` is the fraction of episodes that reached
 ``target_length``. ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
@@ -309,20 +309,42 @@ one that starves is not searching at all. ``max_steps_since_food`` reports how
 close an episode came to starving even when it did not.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
 No vectorized model
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 Snake has no torch vectorized generative model, so it cannot be run under VOPP.
 ``PFT_DPW`` runs on the scalar ``Environment`` API and is what the environment's
 QA pass uses.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``SnakePOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ❌ (import the class directly)
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -331,8 +353,15 @@ Minimal example
    env = SnakePOMDP(grid_size=12, target_length=10)
    belief = SnakeBelief.from_environment(env, n_particles=200)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.snake_pomdp.SnakePOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.snake_pomdp.SnakePOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

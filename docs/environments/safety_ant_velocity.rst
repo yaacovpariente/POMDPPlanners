@@ -3,22 +3,21 @@ Safety Ant Velocity
 
 .. episode-viewer:: traces/safety_ant_velocity.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 Move as fast as you can while keeping speed below a safety threshold, judging
-your own speed only through a noisy sensor. Reward grows with speed and a heavy
-penalty fires above the threshold, so the optimal behaviour sits just under a
+your own speed only through a noisy sensor. Reward grows with speed and a penalty
+(-100 by default) fires above the threshold, so the optimal behaviour sits just under a
 line whose position you cannot see exactly.
 
-Use it for constrained and risk-aware planners. It is the package's simplest
-environment where the interesting question is not "what is the best expected
-return" but "how much probability mass is over the limit".
+Use it for constrained and risk-aware planners: the quantity to control is not
+only the expected return but the probability that the speed is over the limit.
 
 .. note::
 
    Despite the name this is **not** a MuJoCo or Safety-Gymnasium wrapper. It is
-   a self-contained 2-D point mass. Nothing in the package imports ``mujoco``
+   a 2-D point mass simulated inside the class. Nothing in the package imports ``mujoco``
    or ``safety-gymnasium``.
 
 What the agent sees and does
@@ -36,7 +35,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
 :math:`\mathbf{p}, \mathbf{v} \in \mathbb{R}^2`, and let
 :math:`\lVert \mathbf{v} \rVert` be the speed.
@@ -57,7 +56,7 @@ Write the state as :math:`s = (\mathbf{p}, \mathbf{v})` with
 
 .. math::
 
-   \Omega = \mathbb{R}^4
+   Z = \mathbb{R}^4
 
 **Transition model.** The agent chooses a force *magnitude*; the **direction
 is drawn by the environment**:
@@ -85,8 +84,8 @@ Position is updated with the *new* velocity, not the old one.
 
 .. note::
 
-   The stochasticity here is unusual: it is in the force's **direction**, not
-   an additive Gaussian on the state. So :math:`T(\cdot \mid s, a)` is
+   The stochasticity here is in the force's **direction**, not an additive
+   Gaussian on the state. So :math:`T(\cdot \mid s, a)` is
    supported on a *circle* in velocity space — a one-dimensional set in
    :math:`\mathbb{R}^4` — rather than having a density over it. For
    :math:`a = 0` the transition is deterministic, since :math:`u = 0`
@@ -114,8 +113,8 @@ read off the state the action is taken **from**:
    \mathbb{1}\big[\lVert \mathbf{v} \rVert > v_{\text{safe}}\big]
 
 with :math:`v_{\text{safe}}` = ``safe_velocity_threshold``. This is the whole tension:
-:math:`R` grows linearly in speed right up to :math:`v_{\text{safe}}`, then falls off a
-cliff of :math:`-100` by default. Because the agent only ever sees
+:math:`R` grows linearly in speed right up to :math:`v_{\text{safe}}`, then drops by
+:math:`100` (the default penalty) just above it. Because the agent only ever sees
 :math:`\lVert \mathbf{v} \rVert` through noise of width :math:`\sigma_v`, it
 cannot know which side of :math:`v_{\text{safe}}` it is on — it can only trade expected
 speed against the probability of having crossed.
@@ -171,7 +170,7 @@ Key settings
      - What it changes
    * - ``safe_velocity_threshold``
      - ``2.0``
-     - Where the penalty starts, and (at 1.5×) where the episode dies.
+     - Where the penalty starts, and (at 1.5×) where the episode ends.
    * - ``safety_violation_penalty``
      - ``-100.0``
      - How risk-averse the optimal policy is.
@@ -195,8 +194,30 @@ at defaults, a 50 % margin above the penalty line.
    ``"SafeAntVelocityPOMDP"``. That string reaches result filenames and
    ``config_id``.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``SafeAntVelocityPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Continuous
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``SafetyAntVelocityVectorizedModel``
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -210,10 +231,17 @@ Minimal example
    observation = env.sample_observation(next_state, full_thrust)
    print(next_state, observation, env.reward(next_state, full_thrust))
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.safety_ant_velocity_pomdp.SafeAntVelocityPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
-- :class:`POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp.SafeAntVelocityPOMDP`
+- :class:`POMDPPlanners.environments.safety_ant_velocity_pomdp.SafeAntVelocityPOMDP`
 - Batched torch model:
   ``POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_vectorized_model.SafetyAntVelocityVectorizedModel``
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

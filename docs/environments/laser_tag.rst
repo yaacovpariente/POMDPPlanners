@@ -3,7 +3,7 @@ LaserTag
 
 .. episode-viewer:: traces/laser_tag.json
 
-   Grid variant, ``LaserTagPOMDP``: one real episode planned by PFT-DPW,
+   Grid variant, ``LaserTagPOMDP``: one recorded episode planned by PFT-DPW,
    replayed in 3D. Drag to orbit, scroll to zoom, and use the bar to play,
    scrub and switch camera.
 
@@ -15,14 +15,15 @@ LaserTag
 
 Chase an opponent through a walled arena and fire the tag action from its cell.
 The only sensor is eight noisy laser ranges, one per compass direction. A ray
-stops at a wall **or at the opponent**, so a ray that runs clear along the
-opponent's row or column pins it down exactly, while every other configuration
-says almost nothing.
+stops at a wall **or at the opponent**, so a ray that reaches the opponent
+gives its distance up to sensor noise, while a ray that ends at a wall only
+says the opponent is not on it.
 
-That is what makes the problem interesting: information arrives in rare, sharp
-bursts rather than continuously. Between sightings the belief spreads out under
+So the robot learns where the opponent is only on steps when the two share a
+row, column or diagonal with no wall between them. Between sightings the belief spreads out under
 the opponent's movement model, so a planner has to decide whether to manoeuvre
-for a clean line of sight or to commit to a tag on stale evidence. There is a
+for an unblocked ray to the opponent or to commit to a tag on evidence from
+earlier steps. There is a
 grid variant and a continuous one; see `Variants`_.
 
 What the agent sees and does
@@ -46,7 +47,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 It is written for the grid variant. Let :math:`G` be the free cells of an
 :math:`M \times N` grid with wall set :math:`\mathcal{W}`.
 
@@ -74,7 +75,7 @@ The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
 
 .. math::
 
-   \Omega = \mathbb{R}_{\geq 0}^{8} \cup \{(-1, \dots, -1)\}
+   Z = \mathbb{R}_{\geq 0}^{8} \cup \{(-1, \dots, -1)\}
 
 The continuous variant returns the same eight ranges as a length-8 array,
 in a different beam order (see above).
@@ -111,7 +112,7 @@ move). Per axis independently, the policy puts :math:`0.4` on one neighbour:
 
 plus :math:`0.2` on staying put. Invalid neighbours are dropped and their mass
 falls back onto *stay*, so the distribution always normalizes and a cornered
-opponent simply stands still.
+opponent stands still.
 
 ``EVADE_WHEN_SPOTTED`` switches on visibility: while the opponent is **not**
 on an unoccluded laser ray, it walks uniformly (:math:`0.2` per valid
@@ -125,7 +126,7 @@ axis the 0.4 splits 0.2/0.2 across both directions, and a blocked neighbour
 folds its mass into "stay", so 0.2 is a floor rather than the actual stay
 probability. ``opponent_policy`` selects ``EVADE`` (default; away from the
 robot's pre-move position), ``PURSUE``, or ``EVADE_WHEN_SPOTTED``, which only
-runs from the robot once a laser has actually seen it.
+runs from the robot once a laser has seen it.
 
 **Observation model.** Eight laser ranges, one per compass direction
 :math:`\Delta_k` (N, NE, E, SE, S, SW, W, NW). The true range is the number of
@@ -201,18 +202,6 @@ mass on it instead.
 **Terminal set.** :math:`S_T = \{s : \top = 1\}` — set by a successful tag,
 or by a hazard hit when ``is_dangerous_area_hit_terminal``.
 
-Variants
---------
-
-- :class:`LaserTagPOMDP
-  <POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp.LaserTagPOMDP>` —
-  a grid, five discrete actions.
-- :class:`ContinuousLaserTagPOMDP
-  <POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp.ContinuousLaserTagPOMDP>`
-  — continuous positions, axis-aligned box walls, and a continuous
-  ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
-  gives that world a five-action set.
-
 Rewards
 -------
 
@@ -272,8 +261,56 @@ Key settings
 An episode ends when the terminal flag is set — on a successful tag, or on a
 hazard hit when ``is_dangerous_area_hit_terminal=True``.
 
-Minimal example
----------------
+Variants
+~~~~~~~~
+
+- :class:`LaserTagPOMDP
+  <POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP>` —
+  a grid, five discrete actions.
+- :class:`ContinuousLaserTagPOMDP
+  <POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP>`
+  — continuous positions, axis-aligned box walls, and a continuous
+  ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
+  gives that world a five-action set.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 24 24 24
+
+   * - Capability
+     - ``LaserTagPOMDP``
+     - ``ContinuousLaserTagPOMDP``
+     - ``ContinuousLaserTagPOMDPDiscreteActions``
+   * - Action space
+     - Discrete
+     - Continuous
+     - Discrete
+   * - Observation space
+     - Continuous
+     - Continuous
+     - Continuous
+   * - Native C++ backend
+     - ✔️ (loaded lazily; falls back to Python if the extension is missing)
+     - ✔️
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``LaserTagVectorizedModel`` (some configurations; others raise NotImplementedError)
+     - ❌
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Optional dependencies
+     - None
+     - None
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -287,10 +324,25 @@ Minimal example
    laser_ranges = env.sample_observation(next_state, north)
    print(next_state, laser_ranges)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.laser_tag_pomdp.LaserTagPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp.ContinuousLaserTagPOMDPDiscreteActions
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - Batched torch model:
   ``POMDPPlanners.environments.laser_tag_pomdp.laser_tag_vectorized_model.LaserTagVectorizedModel``
   (grid variant only).
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

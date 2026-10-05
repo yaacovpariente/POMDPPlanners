@@ -66,7 +66,7 @@ Example
        alpha_o=0.5,
        alpha_a=0.5,
        action_sampler=action_sampler,
-       n_simulations=10,
+       time_out_in_seconds=2.0,
        name="ExamplePlanner",
    )
 
@@ -79,4 +79,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.pomcpow.POMCPOW
    :members:
    :show-inheritance:
-   :no-index:

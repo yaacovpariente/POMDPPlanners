@@ -1,255 +1,197 @@
 Planners Comparison Study
 =========================
 
-This example demonstrates how to conduct a comprehensive comparison of different POMDP planning algorithms using the SimulationsAPI. We'll compare POMCPOW and PFT-DPW planners on Push POMDP and Light-Dark POMDP environments, showcasing how to evaluate algorithm performance across different problem domains.
+This example compares two planners, POMCPOW and PFT-DPW, on two environments,
+Push and Light-Dark, and reads the result with confidence intervals. It runs in
+well under a minute on a laptop, so you can change it and run it again.
 
-Overview
---------
+Both environments have discrete actions and continuous observations, which is
+the case both planners were built for.
+They differ in how they hold the belief inside the search. POMCPOW weights one
+sampled state per simulation; PFT-DPW runs a particle filter update at every
+new node. Which of the two pays off is a question for an experiment, not for
+the planner pages.
 
-**Planning Algorithms Tested:**
-- **POMCPOW**: Monte Carlo Tree Search with double progressive widening
-- **PFT-DPW**: Progressive Function Transfer with Double Progressive Widening
+The setup
+---------
 
-**Environments Tested:**
-- **Push POMDP**: Object manipulation with continuous actions
-- **Light-Dark POMDP**: Navigation with position-dependent observation noise
+Three choices give each planner the same compute and let a rerun reuse the
+cache:
 
-**Key Features Demonstrated:**
-- Environment configuration using EnvironmentConfigsAPI
-- Pre-built action samplers from utils module for different action spaces
-- Statistical analysis with confidence intervals
-- Multi-environment, multi-algorithm evaluation
-- Performance profiling and result visualization
+- **Every planner gets the same time per decision.** Both use
+  ``time_out_in_seconds``, not ``n_simulations``. A PFT-DPW simulation does
+  more work than a POMCPOW one, so equal simulation counts would give them
+  unequal compute.
+- **Both planners share every other parameter**: depth, exploration constant
+  and widening. A difference in the result then comes from the algorithm, not
+  from one planner being tuned and the other not. Before you draw a conclusion
+  from a comparison, tune each planner first (:doc:`hyperparameter_tuning`).
+- **NumPy is seeded before the beliefs are built.** The initial belief is
+  part of the cache key. With a fixed belief, a second run of the script loads
+  the finished episodes from the cache instead of playing them again.
 
-Complete Example
-----------------
+The script
+----------
 
 .. code-block:: python
 
-    import numpy as np
-    from pathlib import Path
+   from pathlib import Path
 
-    # Core POMDPPlanners imports
-    from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
-    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
-    from POMDPPlanners.simulations.simulations_api import SimulationsAPI
-    from POMDPPlanners.core.simulation import EnvironmentRunParams
+   import numpy as np
 
-    # Setup environments
-    env_config = EnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-    push_env, push_belief = env_config.push_pomdp_config(n_particles=1000)
-    light_dark_env, light_dark_belief = env_config.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=1000)
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   from POMDPPlanners.core.simulation import EnvironmentRunParams
+   from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+   from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+   from POMDPPlanners.simulations.simulation_apis.local_simulations_api import (
+       LocalSimulationsAPI,
+   )
+   from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
-    # Create action samplers
-    push_action_sampler = UnitCircleActionSampler(max_action_magnitude=1.5)
-    light_dark_action_sampler = DiscreteActionSampler(actions=[0, 1, 2, 3])
+   DISCOUNT = 0.95
+   TIME_PER_DECISION = 0.1  # seconds, the same for every planner
+   DEPTH = 15
 
-    # Configure planners for Push POMDP
-    push_planners = [
-        POMCPOW(
-            environment=push_env,
-            discount_factor=0.95,
-            depth=15,
-            exploration_constant=1.41,
-            k_o=3.0,
-            k_a=3.0,
-            alpha_o=0.5,
-            alpha_a=0.5,
-            action_sampler=push_action_sampler,
-            n_simulations=1000,
-            name="POMCPOW_Push"
-        ),
-        PFT_DPW(
-            environment=push_env,
-            discount_factor=0.95,
-            depth=15,
-            name="PFT_DPW_Push",
-            action_sampler=push_action_sampler,
-            k_a=2.0,
-            alpha_a=0.6,
-            k_o=1.5,
-            alpha_o=0.5,
-            exploration_constant=1.0,
-            n_simulations=1000
-        )
-    ]
 
-    # Configure planners for Light-Dark POMDP
-    light_dark_planners = [
-        POMCPOW(
-            environment=light_dark_env,
-            discount_factor=0.95,
-            depth=20,
-            exploration_constant=2.0,
-            k_o=4.0,
-            k_a=2.0,
-            alpha_o=0.6,
-            alpha_a=0.4,
-            action_sampler=light_dark_action_sampler,
-            n_simulations=1500,
-            name="POMCPOW_LightDark"
-        ),
-        PFT_DPW(
-            environment=light_dark_env,
-            discount_factor=0.95,
-            depth=20,
-            name="PFT_DPW_LightDark",
-            action_sampler=light_dark_action_sampler,
-            k_a=1.5,
-            alpha_a=0.4,
-            k_o=2.0,
-            alpha_o=0.5,
-            exploration_constant=1.5,
-            n_simulations=1500
-        )
-    ]
+   def make_planners(env, tag):
+       action_sampler = DiscreteActionSampler(actions=env.get_actions())
+       return [
+           POMCPOW(
+               environment=env,
+               discount_factor=DISCOUNT,
+               depth=DEPTH,
+               exploration_constant=10.0,
+               k_a=4.0,
+               alpha_a=0.5,
+               k_o=4.0,
+               alpha_o=0.5,
+               action_sampler=action_sampler,
+               time_out_in_seconds=TIME_PER_DECISION,
+               name=f"POMCPOW_{tag}",
+           ),
+           PFT_DPW(
+               environment=env,
+               discount_factor=DISCOUNT,
+               depth=DEPTH,
+               exploration_constant=10.0,
+               k_a=4.0,
+               alpha_a=0.5,
+               k_o=4.0,
+               alpha_o=0.5,
+               action_sampler=action_sampler,
+               time_out_in_seconds=TIME_PER_DECISION,
+               name=f"PFT_DPW_{tag}",
+           ),
+       ]
 
-    # Create simulation configurations
-    environment_run_params = [
-        EnvironmentRunParams(
-            environment=push_env,
-            belief=push_belief,
-            policies=push_planners,
-            num_episodes=100,
-            num_steps=30
-        ),
-        EnvironmentRunParams(
-            environment=light_dark_env,
-            belief=light_dark_belief,
-            policies=light_dark_planners,
-            num_episodes=150,
-            num_steps=25
-        )
-    ]
 
-    # Run simulation
-    api = SimulationsAPI(cache_dir_path=Path("./planners_comparison_results"), debug=True)
-    results, statistics_df = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
-        environment_run_params=environment_run_params,
-        alpha=0.05,
-        confidence_interval_level=0.95,
-        experiment_name="Planners_Comparison_Study",
-        n_jobs=-1,
-        enable_profiling=True
-    )
+   np.random.seed(0)  # fixes both initial beliefs, so a rerun reuses the cache
+   configs = EnvironmentConfigsAPI(discount_factor=DISCOUNT)
+   push_env, push_belief = configs.push_pomdp_config(n_particles=100)
+   light_dark_env, light_dark_belief = (
+       configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=100)
+   )
 
-    # Display results
-    print("\\nPERFORMANCE RESULTS:")
-    for env_name in statistics_df['environment'].unique():
-        env_results = statistics_df[statistics_df['environment'] == env_name]
-        print(f"\\n{env_name}:")
-        for _, row in env_results.iterrows():
-            print(f"  {row['policy']}: {row['average_return']:.3f} [{row['average_return_ci_lower']:.3f}, {row['average_return_ci_upper']:.3f}]")
+   environment_run_params = [
+       EnvironmentRunParams(
+           environment=push_env,
+           belief=push_belief,
+           policies=make_planners(push_env, "Push"),
+           num_episodes=20,
+           num_steps=20,
+       ),
+       EnvironmentRunParams(
+           environment=light_dark_env,
+           belief=light_dark_belief,
+           policies=make_planners(light_dark_env, "LightDark"),
+           num_episodes=20,
+           num_steps=20,
+       ),
+   ]
 
-    print("\\nStudy complete! Check './planners_comparison_results' for detailed logs.")
+   api = LocalSimulationsAPI()
+   results, stats_df = api.run_multiple_environments_and_policies(
+       environment_run_params=environment_run_params,
+       alpha=0.05,
+       confidence_interval_level=0.95,
+       experiment_name="planners_comparison",
+       n_jobs=-1,
+       cache_dir_path=Path("results/planners-comparison"),
+   )
 
-Expected Output and Analysis
+   columns = [
+       "environment",
+       "policy",
+       "average_return",
+       "average_return_ci_lower",
+       "average_return_ci_upper",
+       "task_completion_rate",
+       "average_action_time",
+       "policy_info_root_visit_count",
+   ]
+   print(stats_df[columns].to_string(index=False))
+
+``EnvironmentConfigsAPI`` returns each environment together with an initial
+belief, with preset parameters.
+``run_multiple_environments_and_policies`` runs every planner on its
+environment, ``num_episodes`` times, with ``n_jobs=-1`` running episodes on all
+cores at once. Everything it writes goes under ``cache_dir_path``.
+
+Reading the statistics table
 ----------------------------
 
-**Performance Metrics:**
-The simulation will generate comprehensive statistics including:
+``stats_df`` has one row per environment and planner. One run on a 10-core
+Apple M5 laptop printed:
 
-- **Average Return**: Mean cumulative reward across episodes
-- **Confidence Intervals**: Statistical bounds on performance estimates
-- **Standard Deviation**: Measure of performance variability
-- **Episode Counts**: Number of episodes completed for each configuration
+.. code-block:: text
 
-**Comparative Analysis:**
-The study will reveal:
+                               environment            policy  average_return  average_return_ci_lower  average_return_ci_upper  task_completion_rate  average_action_time  policy_info_root_visit_count
+                                 PushPOMDP      POMCPOW_Push      -76.375927              -102.743274               -50.008580                  0.20             0.115861                   3040.878424
+                                 PushPOMDP      PFT_DPW_Push      -46.220239               -77.780618               -14.659859                  0.40             0.105867                   1506.417157
+   ContinuousLightDarkPOMDPDiscreteActions POMCPOW_LightDark      -16.962864               -20.109607               -13.816121                  0.25             0.107339                   1664.634167
+   ContinuousLightDarkPOMDPDiscreteActions PFT_DPW_LightDark      -14.700247               -18.393459               -11.007034                  0.60             0.101015                   3136.931667
 
-- **Algorithm Strengths**: Which planner excels in each environment type
-- **Statistical Significance**: Whether performance differences are meaningful
-- **Computational Efficiency**: Planning time and resource usage via profiling
-- **Robustness**: Performance consistency across different episodes
+Your numbers will differ: how many simulations fit in 0.1 seconds depends on
+the machine and on how many episodes run at once. The columns mean:
 
-**Expected Insights:**
+``average_return``, ``average_return_ci_lower``, ``average_return_ci_upper``
+   The mean discounted return over the episodes, and its confidence interval
+   at ``confidence_interval_level`` (95% here).
 
-1. **Push POMDP**:
-   - PFT-DPW may perform better due to its continuous action space design
-   - POMCPOW's double progressive widening may help with observation complexity
+``task_completion_rate``
+   The fraction of episodes in which the goal was reached. Each environment
+   defines its own goal.
 
-2. **Light-Dark POMDP**:
-   - POMCPOW may excel due to its mixed space handling capabilities
-   - PFT-DPW's discrete action sampling may be less optimal
+``average_action_time``
+   Seconds spent choosing an action, averaged over steps. It should sit close
+   to ``TIME_PER_DECISION`` for every planner, which confirms the budgets
+   matched. It runs slightly over because the clock is checked between
+   simulations, and the last one is allowed to finish.
 
-3. **Overall**:
-   - Progressive widening parameters significantly impact performance
-   - Environment complexity affects relative algorithm performance
-   - Statistical analysis provides confidence in comparative conclusions
+``policy_info_root_visit_count``
+   How many simulations the planner ran per decision, averaged within each
+   episode and then across episodes. Every column that starts with
+   ``policy_info_`` is one of the search metrics the planner reports.
 
-Customization Options
----------------------
+Every metric has ``_ci_lower`` and ``_ci_upper`` columns. Print
+``stats_df.columns`` to see them all, including each environment's own metrics
+and the time spent on each part of the episode loop.
 
-**Environment Modifications:**
+What the run shows
+------------------
 
-.. code-block:: python
+On both environments the two planners' return intervals overlap, so with 20
+episodes this run cannot say which planner has the higher mean return. That
+is the usual result of a 20-episode study, and the reason to read the intervals rather than the
+means. To separate them, raise ``num_episodes``: the interval's width shrinks
+roughly in proportion to one over the square root of the number of episodes.
 
-    # Modify environment parameters
-    env_config = EnvironmentConfigsAPI(discount_factor=0.99, debug=True)
+For single episodes, ``results[env_name][planner_name]`` holds the list of
+``History`` objects, and ``pomdp-report serve results/planners-comparison``
+serves the run as a website with the episode replays.
 
-    # Use risk-averse environment configurations
-    risk_averse_config = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
+See also
+--------
 
-**Action Sampler Customization:**
-
-.. code-block:: python
-
-    # Customize action samplers for different environments
-    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
-    
-    # Conservative movement for delicate tasks
-    conservative_sampler = UnitCircleActionSampler(max_action_magnitude=0.5)
-    
-    # Aggressive movement for fast tasks
-    aggressive_sampler = UnitCircleActionSampler(max_action_magnitude=2.0)
-    
-    # Custom discrete actions
-    custom_discrete_sampler = DiscreteActionSampler(actions=[0, 1, 2, 3, 4, 5])
-
-**Planner Tuning:**
-
-.. code-block:: python
-
-    # Adjust progressive widening parameters
-    pomcpow_tuned = POMCPOW(
-        environment=env,
-        k_o=5.0,        # More aggressive observation expansion
-        k_a=1.5,        # Conservative action expansion
-        alpha_o=0.7,    # Faster observation growth
-        alpha_a=0.3,    # Slower action growth
-        action_sampler=conservative_sampler,  # Use customized sampler
-        # ... other parameters
-    )
-
-**Simulation Scale:**
-
-.. code-block:: python
-
-    # Scale up for production studies
-    environment_run_params = [
-        EnvironmentRunParams(
-            environment=env,
-            belief=belief,
-            policies=policies,
-            num_episodes=500,    # More episodes for statistical power
-            num_steps=50         # Longer episodes
-        )
-    ]
-
-**Advanced Analysis:**
-
-.. code-block:: python
-
-    # Enable additional statistical analysis
-    results, statistics_df = api.run_multiple_environments_and_policies_local_run(
-        environment_run_params=environment_run_params,
-        alpha=0.01,                      # 99% confidence intervals
-        confidence_interval_level=0.99,
-        experiment_name="Detailed_Study",
-        enable_profiling=True,           # Performance analysis
-        profiling_output_limit=100      # Detailed profiling data
-    )
-
-This comprehensive example demonstrates the power of the POMDPPlanners framework for conducting rigorous algorithm comparisons across different problem domains, providing both statistical rigor and practical insights for algorithm selection and tuning.
+- :doc:`../core/simulations` — the simulation API, caching and parallel runs.
+- :doc:`hyperparameter_tuning` — tuning each planner before comparing them.

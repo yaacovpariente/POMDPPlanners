@@ -3,7 +3,7 @@ Firefighting
 
 .. episode-viewer:: traces/firefighting.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``FirefightingPOMDP`` puts ``N`` firefighting robots on an ``R x C``
@@ -36,7 +36,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Let the grid have :math:`H \times W` cells with obstacle set :math:`\mathcal{O}`,
 and let :math:`M` = ``num_robots``. Cell categories are
 
@@ -47,8 +47,8 @@ and let :math:`M` = ``num_robots``. Cell categories are
 
 with :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}` the
 alight categories. :math:`\textsf{BURNT}` and :math:`\textsf{WET}` are
-absorbing — no rule maps either back — which is what makes "no cell is alight"
-a genuine terminal state rather than a moment that can be undone.
+absorbing — no rule maps either back — so once no cell is alight, no later
+step can relight one.
 
 **State space**
 
@@ -82,9 +82,10 @@ is the **hidden wind**, which is never observed and never changes.
    \textsf{SUPPRESS}\}^{M}, \qquad |A| = 5^{M}
 
 encoded base-5. At the default :math:`M = 2` that is 25; at three robots 125,
-which is where a tree search starts to feel the branching.
+so a tree search expands 125 action children per belief node.
 
-**Transition model.** Six stages, in this order. The order is not cosmetic.
+**Transition model.** Six stages, in this order. Changing the order changes
+the outcome.
 
 1. **Motion.** A move is admissible if the target is on the grid, not an
    obstacle, and not :math:`\textsf{BURNT}`, judged against the *pre-step*
@@ -164,7 +165,7 @@ cell, with :math:`\textsf{UNKNOWN} = -1` for a cell no live robot senses:
 
 .. math::
 
-   \Omega = \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
+   Z = \big(\{0..H{-}1\} \times \{0..W{-}1\} \times \{0..\texttt{max\_tank}\}
    \times \{0..\texttt{max\_health}\}\big)^{M}
    \times \big(\mathcal{C} \cup \{\textsf{UNKNOWN}\}\big)^{HW}
 
@@ -229,7 +230,7 @@ without replacement from the non-obstacle cells and set to
    \mathrm{Unif}\big(\text{$n_0$-subsets of } \overline{\mathcal{O}}\big)
 
 The opening observation is a sentinel — known robot fields, every cell
-:math:`\textsf{UNKNOWN}` — not a scan; the first real reading arrives with the
+:math:`\textsf{UNKNOWN}` — not a scan; the first sensor reading arrives with the
 first transition.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
@@ -245,14 +246,13 @@ first transition.
 the middle set only when ``is_all_robots_disabled_terminal``.
 
 World and state
----------------
+~~~~~~~~~~~~~~~
 
 Every cell holds one of five categories: ``UNBURNT`` (has fuel), ``SMOLDERING``
 (intensity 1), ``BURNING`` (intensity 2), ``BURNT`` (fuel consumed) and ``WET``
 (soaked, cannot reignite). ``BURNT`` and ``WET`` are absorbing, and no rule maps
-either back into an alight category. That is what makes "no cell is alight"
-a genuine terminal state rather than a moment that can be undone, and therefore
-what makes the completion metric mean anything.
+either back into an alight category. So once no cell is alight, no later step
+can relight one, and a completed episode stays completed.
 
 The hidden wind is a direction in ``{N, E, S, W}`` crossed with a strength in
 ``{low, high}`` -- eight values, drawn uniformly at reset and constant for the
@@ -267,7 +267,7 @@ A robot's tank holds ``max_tank`` sprays (6 by default) and its health starts at
 the joint action is ignored and it sees nothing for the rest of the episode.
 
 Actions
--------
+~~~~~~~
 
 Each robot has five actions -- ``NORTH``, ``EAST``, ``SOUTH``, ``WEST`` and
 ``SUPPRESS``. The environment receives one centralized joint action: a single
@@ -277,8 +277,8 @@ first. Two robots give 25 joint actions, three give 125.
 A move is refused by the grid edge, by an obstacle and by a ``BURNT`` cell, and
 an otherwise admissible move fails with ``slip_probability`` (0.05 by default).
 ``SUPPRESS`` costs one tank unit and covers the robot's own cell *and its four
-neighbours* -- which is the point of the design: a careful planner fights from
-an adjacent cell and takes no damage, a careless one stands in the fire. An
+neighbours* -- so a planner can fight from an adjacent cell and take no
+damage instead of standing in the fire. An
 ``UNBURNT`` target becomes ``WET``, which is how a firebreak is built ahead of
 the front. A robot with an empty tank does nothing and pays nothing. Entering
 the depot refills the tank, with no separate action, so ``|A|`` stays at
@@ -286,17 +286,18 @@ the depot refills the tank, with no separate action, so ``|A|`` stays at
 the step full.
 
 Transition
-----------
+~~~~~~~~~~
 
-Six stages resolve in a fixed order, and the order is not cosmetic.
+Six stages resolve in a fixed order, and changing the order changes the
+outcome.
 
 1. **Motion.** Admissible moves succeed with ``1 - slip_probability``.
 2. **Suppression.** A cell covered by ``m`` sprays becomes ``WET`` with
    ``1 - (1 - q)^m``, where ``q`` depends on the cell's category: 1.0 unburnt,
    0.9 smoldering, 0.6 burning, 0 for burnt and wet. Burning resists one hose,
    which is why two robots on one cell are worth more than two robots dividing
-   the work -- this is the only place in the model where they genuinely
-   cooperate. Resolving suppression *before* spread is what lets a robot stop a
+   the work -- this is the only place in the model where two robots' actions
+   combine on one cell. Resolving suppression *before* spread is what lets a robot stop a
    front by soaking the cell ahead of it in the same step.
 3. **Spread.** An unburnt cell catches unless every alight four-neighbour fails
    to ignite it. The one neighbour sitting directly upwind ignites it at
@@ -315,7 +316,7 @@ Six stages resolve in a fixed order, and the order is not cosmetic.
 6. **Bookkeeping.** The step counter advances and the wind is copied unchanged.
 
 Observation
------------
+~~~~~~~~~~~
 
 An observation is one ``float64`` vector of length ``4N + R*C``::
 
@@ -333,10 +334,10 @@ on the fire, which is what makes this an inference problem rather than a lookup.
 Both the transition and the observation density are available in closed form:
 ``transition_log_probability`` is exact, because the intermediate map is
 recoverable from the pair of maps -- wet is reachable only by suppression, burnt
-only by burnout, and a freshly ignited cell cannot also grow.
+only by burnout, and a cell ignited this step cannot also grow.
 
-Reward and termination
-----------------------
+Rewards
+-------
 
 Every term reads the realised successor, so
 ``reward_requires_next_state`` is ``True``.
@@ -357,7 +358,7 @@ Every term reads the realised successor, so
      - ``-10.0`` per point of health lost, deliberately above the cell cost so
        a planner does not trade a robot for a cell
    * - suppressant
-     - ``-0.1`` per robot that actually sprayed
+     - ``-0.1`` per robot that sprayed (an empty tank does not)
    * - success
      - ``+100.0`` on the transition into a fire-free state
 
@@ -387,8 +388,8 @@ out is still a success.
 Key settings
 ------------
 
-The default world is 10 by 10 with two robots, one small obstacle blob just
-past the middle, and a depot in the north-west corner.
+The default world is 10 by 10 with two robots, a 2 by 2 obstacle block at
+rows 5–6 and columns 5–6, and a depot in the north-west corner.
 
 ``spread_probability`` defaults to **0.10** and ``burnout_probability`` to
 **0.03**, and the pair was measured rather than proposed. At the originally
@@ -399,21 +400,8 @@ measurable. At 0.10 and 0.03 the same unattended fire goes out 6% of the time, a
 uniformly random policy 27%, and a hand-written greedy firefighter 89%, so the
 completion rate reports what the planner did.
 
-Minimal example
----------------
-
-.. code-block:: python
-
-   from POMDPPlanners.environments.firefighting_pomdp import (
-       FirefightingPOMDP,
-   )
-   from POMDPPlanners.utils.belief_factory import create_environment_belief
-
-   env = FirefightingPOMDP()
-   belief = create_environment_belief(env, n_particles=100)
-
 Metrics
--------
+~~~~~~~
 
 ``task_completion_rate`` reports a fire-free map, reduced with ``ANY``: wet and
 burnt are absorbing, so a fire-free map cannot be undone and ``ANY`` and
@@ -426,16 +414,16 @@ The danger is reported both as a count -- ``average_robot_steps_in_fire``,
 ``max_simultaneous_alight_cells``, ``max_burnt_cell_fraction``. A planner that
 lets the fire reach forty cells and then beats it out is not the same as one
 that never let it past five, and the totals alone would not distinguish them.
-``average_suppressant_units_used`` and ``final_robots_disabled`` round out the picture.
+``average_suppressant_units_used`` and ``final_robots_disabled`` are also reported.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
 Filtering and limits
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 There is **no torch vectorized model and no C++ native model**, so VOPP is
 unsupported and the environment is deliberately absent from the vectorized
@@ -443,7 +431,7 @@ config contract. ``PFT_DPW`` takes the scalar API directly.
 
 The belief is ``FirefightingVectorizedBelief``, which
 ``create_environment_belief`` returns. It runs every stage of the transition
-over the particle axis and the grid at once, and it does two things a plain
+over the particle axis and the grid at once, and it does two things a
 bootstrap filter does not, both because a bootstrap filter over whole 100-cell
 maps is degenerate here. The poses, tanks and healths come back from the sensor
 exactly but depend on hidden state, so weighting by them puts every weight on
@@ -461,8 +449,50 @@ a six-episode check it held about 0.4 of its weight on the true wind after
 thirty steps, against a prior of 0.125. A flat histogram late in an episode is a
 statement about the filter, not about the environment.
 
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``FirefightingPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.firefighting_pomdp import (
+       FirefightingPOMDP,
+   )
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+   env = FirefightingPOMDP()
+   belief = create_environment_belief(env, n_particles=100)
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.firefighting_pomdp.FirefightingPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.firefighting_pomdp.FirefightingPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

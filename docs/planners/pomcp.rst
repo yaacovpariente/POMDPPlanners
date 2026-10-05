@@ -8,8 +8,9 @@ rollout. Returns are averaged back up the path it came down. The belief at a
 node is the set of particles that reached it, so no explicit belief update is
 needed during the search.
 
-It is the default starting point for a discrete-action problem, and the
-baseline every other MCTS planner here is a modification of.
+Start with it on a discrete-action problem: it needs only ``depth``,
+``exploration_constant`` and a budget. Every other MCTS planner here modifies
+it.
 
 Notes
 -----
@@ -63,7 +64,7 @@ Example
        depth=5,
        exploration_constant=1.0,
        name="ExamplePlanner",
-       n_simulations=10,
+       time_out_in_seconds=2.0,
    )
 
    belief = get_initial_belief(tiger, n_particles=10)
@@ -75,4 +76,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.pomcp.POMCP
    :members:
    :show-inheritance:
-   :no-index:

@@ -2,8 +2,8 @@ Realistic and experimental worlds
 =================================
 
 Four environments wrap an external simulator or dataset. They get a short entry
-rather than a full guide because you cannot run any of them from a plain
-``pip install``: each needs a separate install, and two need a server process.
+rather than a full guide because you cannot run any of them after
+``pip install POMDPPlanners`` alone: each needs a separate install, and two need a server process.
 
 They also differ from the rest of the package in kind. A benchmark environment
 is both the world and the planner's model of it. These are **forward-only
@@ -20,7 +20,7 @@ Formal definition
 -----------------
 
 These four are not POMDPs in the sense the rest of the catalog is. The tuple
-:math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle` still describes
+:math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle` still describes
 what they do, but :math:`T` is **not available in closed form and has no
 density**:
 
@@ -47,8 +47,8 @@ Two further departures matter:
 - **Termination is a property of the live world**, not a predicate on a state
   vector. ``is_terminal`` refuses a state other than the current one.
 
-What *is* fully specified is :math:`S`, :math:`A`, :math:`\Omega` and
-:math:`R`.
+What this page does state is :math:`S`, :math:`A`, :math:`Z` and, for
+CARLA and nuPlan, :math:`R`.
 
 **Driving reward (CARLA and nuPlan).** Both use the same gym-carla-style
 score. Let :math:`\mathrm{yaw}` be the ego yaw, :math:`e_{\mathrm{yaw}}` the heading error,
@@ -78,8 +78,8 @@ exceeding :math:`v_{\text{des}}` by a flat :math:`-10`, so the optimum sits
 just under the limit; the :math:`|u| v_\parallel^2` term is what
 discourages fast turns specifically rather than turning in general.
 
-**Isaac Lab** is the one wrapper with a genuine
-:math:`o = h(s) + \text{noise}` split — state read from the physics engine,
+**Isaac Lab** is the one wrapper whose observation is not the state,
+:math:`o = h(s) + \text{noise}` — state read from the physics engine,
 observation from a sensor buffer. Its :math:`R` passes through from the
 underlying task, so there is no declared ``reward_range`` and no closed form
 this page can state.
@@ -89,7 +89,7 @@ Racetrack
 
 :class:`RacetrackPOMDP
 <POMDPPlanners.environments.racetrack_pomdp.racetrack_pomdp.RacetrackPOMDP>`
-wraps HighwayEnv's ``racetrack-v0``. It is the easiest of the four to run — one
+wraps HighwayEnv's ``racetrack-v0``. It needs the least setup of the four — one
 ``pip install highway-env``, no server.
 
 Its point is the **matched pair**: one dynamics, reward and track, with two
@@ -99,8 +99,8 @@ cost of partial observability with everything else held fixed. No other
 environment in the package is built for that comparison.
 
 Discrete actions over control presets, continuous observations. ``highway-env``
-is imported lazily and is declared in the ``dev`` extra, so CI exercises the
-real simulator while a runtime install never loads it.
+is imported lazily and is declared in the ``dev`` extra, so CI runs
+``highway-env`` itself while a runtime install never loads it.
 
 CARLA
 -----
@@ -110,7 +110,7 @@ CARLA
    :width: 480px
 
 :class:`CarlaPOMDP
-<POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP>` drives a live
+<POMDPPlanners.environments.carla_pomdp.carla_pomdp.CarlaPOMDP>` drives a running
 CARLA server as the ground truth of an episode.
 
 - **State** — a flat vector of width ``7 + 5·max_tracked_agents + 5 + 3``: ego
@@ -121,7 +121,7 @@ CARLA server as the ground truth of an episode.
   then a goal slot ``[goal_x, goal_y, route_progress_fraction]``.
 - **Actions** (discrete) — an index into ``(throttle, steer, brake)`` presets;
   four by default.
-- **Observations** — declared ``CONTINUOUS``, but actually a dict of sensor
+- **Observations** — declared ``CONTINUOUS``, but returned as a dict of sensor
   payloads. A default ``CarlaPOMDP()`` emits all five: ``gnss``, ``agents``,
   ``camera``, ``lidar`` and a privileged ground-truth ``traffic_light``.
   ``include_camera``, ``include_lidar`` and ``include_traffic_light`` all
@@ -150,16 +150,17 @@ Isaac Lab
 
 :class:`IsaacLabPOMDP
 <POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_pomdp.IsaacLabPOMDP>`
-adapts any registered ``Isaac-*-v0`` task, and is the one wrapper with a genuine
-``observation = h(state)`` split: state is read from the physics engine, the
+adapts any registered ``Isaac-*-v0`` task, and is the one wrapper whose
+observation is not the state, ``observation = h(state)``: state is read from the physics engine, the
 observation from a sensor buffer such as a RayCaster LiDAR.
 
 Alone among the environments, its space types are constructor arguments —
 ``action_space_type`` and ``observation_space_type``, both defaulting to
 continuous. Reward passes through from the underlying task, so there is no
 declared ``reward_range`` unless you supply one. Success rate needs an explicit
-``success_termination_term`` or ``success_extractor``; the class refuses to
-guess.
+``success_termination_term`` or ``success_extractor``. With neither, success is
+not measured, and a term name the task does not have raises ``RuntimeError``
+instead of inferring success from termination.
 
 Two constraints shape how you can use it:
 
@@ -174,7 +175,8 @@ imported lazily.
 Planner-side models come in two stacks. The **factored** one —
 ``FactoredIsaacModelPOMDP`` with the task-specific ``UnicycleIsaacModel``,
 ``ManipulatorIsaacModel``, ``NavigationIsaacModel`` and ``LearnedIsaacModel`` —
-carves the state into named channels and can express a real sensor. Prefer it.
+splits the state into named channels, each observed through its own model, so
+a channel with no observation model stays hidden. Prefer it.
 The **one-space** ``IsaacLabModelPOMDP`` shares one space between state and
 observation with ``observation = state + N(0, Σ)``; it is generic but cannot
 express a hidden state variable, and its default reward model is ``None``,
@@ -198,6 +200,6 @@ plus the nuPlan dataset and maps. Models: ``KinematicNuPlanModelPOMDP`` and
 See also
 --------
 
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog.
 - :doc:`../core/simulations` — running a planner on an approximated model while
   the episode executes in the simulator.

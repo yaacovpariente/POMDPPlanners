@@ -3,9 +3,10 @@ POMCP-DPW
 
 POMCP with double progressive widening. The number of action children and the
 number of observation children of a node are both capped by ``k * n**alpha``,
-where ``n`` is the node's visit count. A node therefore starts narrow and widens
-only as it is visited, which keeps the tree deep enough to be useful when the
-action or observation space is large or continuous.
+where ``n`` is the node's visit count. A node therefore gets more children
+only as its visit count grows, so later simulations revisit existing children
+and reach deeper levels instead of each opening a new child. That matters when
+the action or observation space is large or continuous.
 
 Beliefs stay unweighted particle sets, as in :doc:`pomcp`. For weighted
 particles, use :doc:`pomcpow`.
@@ -68,7 +69,7 @@ Example
        alpha_o=0.5,
        alpha_a=0.5,
        action_sampler=action_sampler,
-       n_simulations=10,
+       time_out_in_seconds=2.0,
        name="ExamplePlanner",
    )
 
@@ -81,4 +82,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.mcts_planners.pomcp_dpw.POMCP_DPW
    :members:
    :show-inheritance:
-   :no-index:

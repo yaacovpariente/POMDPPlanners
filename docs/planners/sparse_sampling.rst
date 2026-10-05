@@ -1,14 +1,15 @@
 Sparse sampling
 ===============
 
-The classical forward-search baseline. Sparse sampling builds a full lookahead
-tree of fixed depth: at every node it expands every action, samples
+The forward-search baseline of Kearns, Mansour and Ng (2002). Sparse sampling
+builds a full lookahead tree of fixed depth: at every node it expands every
+action, samples
 ``branching_factor`` outcomes per action, and solves the tree by dynamic
 programming from the leaves up. Nothing is adaptive — the tree's shape is a
 function of ``branching_factor`` and ``depth`` alone, and the same tree is built
 no matter what the values turn out to be.
 
-That is exactly why it is useful as a comparison point: it has no exploration
+That is why it is useful as a comparison point: it has no exploration
 heuristic to tune, so a planner that beats it is beating the search, not the
 tuning.
 
@@ -75,4 +76,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling.SparseSamplingDiscreteActionsPlanner
    :members:
    :show-inheritance:
-   :no-index:

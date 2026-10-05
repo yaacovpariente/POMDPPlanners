@@ -3,7 +3,7 @@ Push
 
 .. episode-viewer:: traces/push.json
 
-   Grid variant, ``PushPOMDP``: one real episode planned by PFT-DPW, replayed
+   Grid variant, ``PushPOMDP``: one recorded episode planned by PFT-DPW, replayed
    in 3D. Drag to orbit, scroll to zoom, and use the bar to play, scrub and
    switch camera.
 
@@ -35,7 +35,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 Write the state as :math:`s = (\mathbf{r}, \mathbf{q}, \mathbf{t})` — robot,
 object and target positions — and let :math:`\mathcal{G} = [0, n{-}1]^2` with
 :math:`n` = ``grid_size``, :math:`\mathcal{O}` the obstacle discs.
@@ -49,7 +49,8 @@ when a hazard-terminal flag is on:
    \subseteq \mathbb{R}^6
 
 :math:`\mathbf{t}` is a constant of the episode — it is carried in the state
-so the model is self-contained, not because it moves.
+so ``reward`` and ``is_terminal`` can read it from the state, not because it
+moves.
 
 **Action space.**
 
@@ -69,7 +70,7 @@ slot when the continuous state carries one):
 
 .. math::
 
-   \Omega = \mathcal{G} \times \mathcal{G} \times \mathcal{G}
+   Z = \mathcal{G} \times \mathcal{G} \times \mathcal{G}
    \subseteq \mathbb{R}^6
 
 **Transition model.** The robot moves, and *then* drags the object if it is
@@ -167,21 +168,6 @@ radius:
 
 The target sits at :math:`(n{-}1, n{-}1)` and is not configurable.
 
-Variants
---------
-
-- :class:`PushPOMDP <POMDPPlanners.environments.push_pomdp.push_pomdp.PushPOMDP>`
-  — four grid moves.
-- :class:`ContinuousPushPOMDP
-  <POMDPPlanners.environments.push_pomdp.continuous_push_pomdp.ContinuousPushPOMDP>`
-  — a circular robot and free 2-D displacement actions, with square obstacles.
-
-.. note::
-
-   ``ContinuousPushPOMDP`` and ``ContinuousPushPOMDPDiscreteActions`` are **not**
-   in ``ENVIRONMENT_REGISTRY``, so ``get_environment("ContinuousPushPOMDP")``
-   fails. Import the class directly.
-
 Rewards
 -------
 
@@ -239,8 +225,60 @@ An episode ends when the object is within 0.5 of the target. On
 obstacle or hazard hit also ends the episode when the matching
 ``is_*_hit_terminal`` flag is on.
 
-Minimal example
----------------
+Variants
+~~~~~~~~
+
+- :class:`PushPOMDP <POMDPPlanners.environments.push_pomdp.PushPOMDP>`
+  — four grid moves.
+- :class:`ContinuousPushPOMDP
+  <POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP>`
+  — a circular robot and free 2-D displacement actions, with square obstacles.
+
+.. note::
+
+   ``ContinuousPushPOMDP`` and ``ContinuousPushPOMDPDiscreteActions`` are **not**
+   in ``ENVIRONMENT_REGISTRY``, so ``get_environment("ContinuousPushPOMDP")``
+   fails. Import the class directly.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 24 24 24
+
+   * - Capability
+     - ``PushPOMDP``
+     - ``ContinuousPushPOMDP``
+     - ``ContinuousPushPOMDPDiscreteActions``
+   * - Action space
+     - Discrete
+     - Continuous
+     - Discrete
+   * - Observation space
+     - Continuous
+     - Continuous
+     - Continuous
+   * - Native C++ backend
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``PushVectorizedModel`` (some configurations; others raise
+       ``NotImplementedError``)
+     - ❌
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+     - ❌
+     - ❌
+   * - Optional dependencies
+     - None
+     - None
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -253,10 +291,25 @@ Minimal example
    observation = env.sample_observation(next_state, "right")
    print(next_state, observation, env.reward(state, "right", next_state))
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.PushPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.continuous_push_pomdp.ContinuousPushPOMDPDiscreteActions
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - Batched torch model:
   ``POMDPPlanners.environments.push_pomdp.push_vectorized_model.PushVectorizedModel``
   (wraps the discrete variant).
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

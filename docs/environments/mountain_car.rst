@@ -3,15 +3,17 @@ Mountain Car
 
 .. episode-viewer:: traces/mountain_car.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
-The classic underpowered car: it cannot climb the hill directly and must rock
-back and forth to build momentum, while reading position and velocity through
+A car whose engine force (:math:`k = 0.001`) is smaller than the largest pull of
+gravity on the slope (:math:`g = 0.0025`), so it cannot climb the hill directly
+and must rock back and forth to build momentum, while reading position and velocity through
 noise.
 
-The long horizon and the sparse, purely negative reward make it a hard problem
-for short-horizon search: a planner that cannot see past its horizon never
+The reward is -1 on every step until the goal, so it says nothing about
+progress, and reaching the goal takes many steps. That makes it hard for
+short-horizon search: a planner that cannot see past its horizon never
 discovers that reversing first is what wins.
 
 What the agent sees and does
@@ -26,7 +28,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Write the state as :math:`s = (p, v)`.
 
 **State space**
@@ -45,9 +47,9 @@ The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
 
 .. math::
 
-   \Omega = \mathbb{R}^2
+   Z = \mathbb{R}^2
 
-**Transition model.** The deterministic part is the standard Mountain Car
+**Transition model.** The deterministic part is the Mountain Car
 map, with power :math:`k = 0.001` and gravity :math:`g = 0.0025`:
 
 .. math::
@@ -76,7 +78,7 @@ clipping rule :math:`\mathrm{proj}`:
    ``transition_log_probability`` returns the *unprojected* density
    :math:`\log \mathcal{N}(s'; f(s,a), \Sigma_T)`. At the boundary that
    density is not the density of the projected variable, which puts positive
-   mass on the walls. It matters only for beliefs pressed against a wall.
+   mass on the walls. It matters only for beliefs with particles at a wall.
 
 **Observation model.** The full state, read through independent noise:
 
@@ -123,13 +125,44 @@ Step at the goal        0.0
 The goal is ``position >= 0.5``. ``reward_range`` is ``(-1.0, 0.0)``, and the
 episode ends at the goal.
 
+Key settings
+------------
+
+``discount_factor`` is required; the class has no default.
+``state_transition_cov`` sets the process noise on ``[position, velocity]``.
+It defaults to ``None``, which means ``diag([2.5e-5, 1e-6])``. The observation
+noise (standard deviations 0.1 and 0.01) is fixed in the class, not an
+argument.
+
 Metrics
--------
+~~~~~~~
 
 It reports a ``task_completion_rate`` metric.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``MountainCarPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Continuous
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``MountainCarVectorizedModel``
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -142,9 +175,16 @@ Minimal example
    next_state = env.sample_next_state(state, 1)
    print(state, next_state, env.sample_observation(next_state, 1))
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp.MountainCarPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp.MountainCarPOMDP`
-- :doc:`sanity` — the other small debugging environment.
-- :doc:`index` — the full catalog.
+- :doc:`sanity` — the two-state debugging environment.
+- :doc:`base` — the full catalog and the environment interface.

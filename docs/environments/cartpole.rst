@@ -3,11 +3,11 @@ CartPole
 
 .. episode-viewer:: traces/cartpole.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 Balance a pole on a cart by pushing left or right, seeing only a noisy reading
-of the four-dimensional state. The dynamics are the familiar Gym CartPole; the
+of the four-dimensional state. The dynamics are Gym CartPole's; the
 partial observability comes from adding Gaussian sensor noise to every
 observation.
 
@@ -29,7 +29,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 Write the state as :math:`s = (x, \dot{x}, q, \dot{q})`.
 
 **State space**
@@ -48,7 +48,7 @@ Write the state as :math:`s = (x, \dot{x}, q, \dot{q})`.
 
 .. math::
 
-   \Omega = \mathbb{R}^4
+   Z = \mathbb{R}^4
 
 **Transition model.** The Gym CartPole physics, with :math:`m_c = 1.0`,
 :math:`m_p = 0.1`, half-length :math:`\ell = 0.5`, :math:`g = 9.8`,
@@ -92,7 +92,7 @@ on the action:
    \qquad \Sigma_O = \texttt{noise\_cov}
 
 :math:`\Sigma_O` is a **required** constructor argument: the partial
-observability is entirely this matrix, so there is no sensible default. With
+observability is entirely this matrix, so the class does not pick one. With
 :math:`\Sigma_O = 0` the problem is exactly Gym CartPole.
 
 **Reward function.** One unit per step survived:
@@ -104,15 +104,15 @@ observability is entirely this matrix, so there is no sensible default. With
 so :math:`R \in [0, 1]`. Note it is evaluated on the state the action is taken
 *from*, so the step that leaves the limits still pays :math:`1`.
 
-**Initial belief.** Every coordinate independently uniform on a small band
-around upright:
+**Initial belief.** Every coordinate independently uniform on
+:math:`[-0.05, 0.05]` around upright:
 
 .. math::
 
    b_0 = \mathrm{Unif}\big([-0.05,\, 0.05]^4\big)
 
-The opening observation is a real draw: a state from :math:`b_0` plus
-:math:`\mathcal{N}(0, \Sigma_O)`, so the belief starts already blurred.
+The opening observation is a draw, not a fixed placeholder: a state from
+:math:`b_0` plus :math:`\mathcal{N}(0, \Sigma_O)`.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, required.
 
@@ -133,7 +133,7 @@ Rewards
 
 ``+1.0`` for every step in a non-terminal state, ``0.0`` in a terminal one.
 ``reward_range`` is ``(0.0, 1.0)``. There is no step cost and no goal bonus:
-the return is simply how long you survived, discounted.
+the return is the number of steps survived, discounted.
 
 Key settings
 ------------
@@ -163,8 +163,30 @@ magnitude 10.0, timestep 0.02 s, Euler integration.
 An episode ends when ``|cart_position| > 2.4`` or ``|pole_angle| > 0.2094`` rad
 (12°).
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``CartPolePOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Continuous
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``CartPoleVectorizedModel``
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -181,10 +203,17 @@ Minimal example
    observation = env.sample_observation(next_state, push_right)
    print(next_state, observation, env.reward(state, push_right))
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp.CartPolePOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.cartpole_pomdp.cartpole_pomdp.CartPolePOMDP`
 - Batched torch model:
   ``POMDPPlanners.environments.cartpole_pomdp.cartpole_vectorized_model.CartPoleVectorizedModel``
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

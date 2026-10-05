@@ -3,7 +3,7 @@ Occupancy grid mapping
 
 .. episode-viewer:: traces/occupancy_grid_mapping.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 ``OccupancyGridMappingPOMDP`` models a robot mapping a hidden static grid with
@@ -33,7 +33,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Let the grid have :math:`H` rows and :math:`W` columns,
 :math:`C = HW` cells, and :math:`K` = ``num_beams``.
 
@@ -70,7 +70,7 @@ reward can be a function of it.
 
 .. math::
 
-   \Omega = \{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}
+   Z = \{0..H{-}1\} \times \{0..W{-}1\} \times \{0,1,2,3\}
    \times \mathbb{R}^{K}
 
 **Transition model.** Three stages.
@@ -128,7 +128,7 @@ in :math:`s'`, the observation kernel is a point mass:
 
 This is a deliberate reformulation, not a claim that the robot sees
 everything: all the stochasticity has been moved into :math:`T`. The quantity
-a filter actually needs is the predictive density, which integrates the
+a filter needs is the predictive density, which integrates the
 discrete motion outcome against the per-beam range law:
 
 .. math::
@@ -161,7 +161,7 @@ exactly :math:`1.0` and a wholly unknown grid exactly :math:`C`. Then
    Called without :math:`s'` — as a belief-space planner's expected reward
    does — the environment returns the numerical expectation
    :math:`\mathcal{H}(g) - \mathbb{E}[\mathcal{H}(g')]` over eight
-   fixed antithetic quadrature points per beam, not a fresh sample. It is an
+   fixed antithetic quadrature points per beam, not a random draw. It is an
    approximation and uses no global randomness. Neither quantity is posterior
    whole-map information gain.
 
@@ -193,7 +193,7 @@ with :math:`q` = ``entropy_threshold_fraction``. At the default
 96 % certainty per cell.
 
 State and observation contract
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The hidden map constrains motion and produces nominal ranges. Range noise is
 drawn once in the transition, then the same scan is stored, used for mapping,
@@ -208,7 +208,7 @@ The initial observation contains known pose and zero range placeholders.
 It is a sentinel before any scan and is never applied to the map.
 
 Range noise model
------------------
+~~~~~~~~~~~~~~~~~
 
 ``range_noise_model`` selects the per-beam range law that
 ``range_noise_std_cells`` parametrises. Both laws are centred on the noise-free
@@ -248,8 +248,8 @@ The mode is part of ``config_id`` and of both filters' identities, so results
 cached under one law are never reused for the other. The sensor contract
 version is 3 from this option onwards.
 
-Mapping and reward
-------------------
+Rewards
+-------
 
 Log-odds start at zero, or occupancy probability 0.5. The inverse update reads
 only the previous log-odds and observed pose/ranges. A reading below maximum
@@ -313,7 +313,7 @@ different rule.
 A true hit exactly at maximum range and a miss have identical range laws.
 They therefore produce identical updates for the same reading. Without an
 observed hit flag, this ambiguity cannot be removed. Range noise can place
-an apparent hit beyond a real obstacle or before it; the mapper follows the
+an apparent hit beyond a true obstacle or before it; the mapper follows the
 measurement, not hidden truth.
 
 Simulation reward is the realised decrease in the observed inverse map's
@@ -339,10 +339,21 @@ An episode completes when the observed inverse map's entropy reaches
 ``max_steps`` (40 by default) ends an unfinished episode. Reward and completion
 use the inverse estimate; neither substitutes the true occupancy grid.
 
-Filtering and limits
---------------------
+Key settings
+------------
 
-Use one of the environment's two whole-map filters with PFT_DPW. Ordinary
+The defaults are a 10 by 10 grid (``num_rows=10``, ``num_cols=10``) with a
+boundary wall and ``num_obstacles=3`` blocks of side at most
+``max_obstacle_size=2``. The sensor casts ``num_beams=24`` beams over
+``field_of_view_degrees=360.0``, out to ``max_range_cells=3.5``, with range
+noise ``range_noise_std_cells=0.35``. An episode runs at most ``max_steps=40``
+transitions and completes at ``entropy_threshold_fraction=0.25``.
+``step_cost`` defaults to ``0.0`` and ``discount_factor`` to ``0.95``.
+
+Filtering and limits
+~~~~~~~~~~~~~~~~~~~~
+
+Use one of the environment's two whole-map filters with PFT_DPW. The generic
 ``get_initial_belief`` returns a bootstrap filter which cannot condition this
 stored continuous scan correctly. No core planner changes are needed.
 
@@ -352,7 +363,7 @@ of the selected law and exact motion probability, with no epsilon floor for
 impossible poses.
 Routine resampling is disabled to retain low-weight hypotheses. If every
 particle contradicts observed motion, bounded prior replay tests up to 4096
-fresh maps against the entire observation history and resamples surviving
+maps newly drawn from the prior against the entire observation history and resamples surviving
 weighted maps. It raises if that search finds no support.
 
 ``OccupancyGridMappingVectorizedBelief`` is the default from
@@ -364,8 +375,8 @@ particles, weights, history and restart count as the scalar filter for the
 same seed. ``OccupancyGridMappingBelief`` is the scalar reference, available
 as ``BeliefType.PARTICLE``. Its updater also exposes the batched generative
 transition and point-mass observation likelihood that the shared vectorized
-updater interface expects, but the filter does not use them: a freshly drawn
-scan matches the observed one with probability zero.
+updater interface expects, but the filter does not use them: a scan sampled
+from the model matches the observed one with probability zero.
 
 The environment's ``reward_batch`` uses the same kernels. A belief-space
 planner asks for the expected reward of every particle at every node it
@@ -383,7 +394,7 @@ There is no torch vectorized or C++ model. VOPP is unsupported. Scalar PFT_DPW
 uses the environment and the whole-map filters shown above.
 
 Metrics
--------
+~~~~~~~
 
 ``task_completion_rate`` reports threshold crossing. ``ended_by_goal_rate``,
 ``ended_by_failure_rate`` and ``ended_by_timeout_rate`` report episode endings; failure
@@ -393,7 +404,7 @@ fraction. ``average_collisions`` counts blocked moves;
 It is not a unique-cell count.
 
 Visualization
--------------
+~~~~~~~~~~~~~
 
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
@@ -401,8 +412,30 @@ visualizer. The results site replays it in 3D, as the replay on this page does.
 Sensor contract versions 2 and 3 each changed cache identity; old results
 describe the earlier behavior.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``OccupancyGridMappingPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Continuous
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -414,8 +447,15 @@ Minimal example
    env = OccupancyGridMappingPOMDP()
    belief = create_environment_belief(env, n_particles=30)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.occupancy_grid_mapping_pomdp.OccupancyGridMappingPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

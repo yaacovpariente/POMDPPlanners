@@ -1,71 +1,107 @@
 AdaOPS
 ======
 
-Which problem does it solve?
-----------------------------
-
-AdaOPS is an online planner for partially observed problems with a generative
-model and scoreable observations. Fixed-particle searches can lose accuracy as
-weights collapse, while expanding every sampled observation makes the tree too
-wide. AdaOPS changes both parts: it resamples only when weight disparity is
-high, chooses the resample count with KLD sampling, and merges nearby sibling
-beliefs. The paper proves high-probability convergence under its stated
-assumptions; this implementation has correctness tests but no episode QA yet.
-
-What does its value function mean?
-----------------------------------
+Adaptive Online Packing-guided Search. AdaOPS plans online for problems with a
+generative model and observations whose likelihood can be scored. A search
+with a fixed particle count loses accuracy as the weight concentrates on a few
+particles, and expanding every sampled observation opens one branch per
+sample. AdaOPS changes both: it resamples a belief only when its design effect
+exceeds a threshold, picks the number of particles with KLD sampling, and
+merges sibling beliefs whose weights are within an L1 distance ``delta``.
 
 The objective is the finite-horizon discounted expected reward
 
 .. math:: V_D(b)=\max_\pi\mathbb{E}_{s_0\sim b,\pi}\left[\sum_{t=0}^{D-1}\gamma^t R(s_t,a_t)\right].
 
-Here ``b`` is the current state belief, ``D`` is the number of remaining
-rewards, ``pi`` is a policy, ``gamma`` is the discount factor, and ``R`` is the
-one-step reward. Larger values are better. Each tree node stores lower and
-upper bounds on this value. Action bounds use the weighted immediate reward
-plus ``gamma`` times the packed children. Search follows the largest upper
-bound; the returned action has the largest lower bound.
-
-What search structure does it build?
-------------------------------------
+Here ``b`` is the current belief, ``D`` is the number of remaining steps,
+``pi`` is a policy, ``gamma`` is the discount factor, and ``R`` is the one-step
+reward. Each tree node stores a lower and an upper bound on this value. An
+action's bounds are its weighted immediate reward plus ``gamma`` times the
+bounds of its packed children. The search descends along the largest upper
+bound; the returned action is the one with the largest lower bound.
 
 .. image:: adaops-tree.svg
    :alt: Comparison of an unpacked observation tree and AdaOPS packed weighted-belief tree
    :width: 760px
 
-The figure shows the defining change. Several sampled observations create
-posterior weight vectors over shared successor particles. A posterior within
-``delta`` L1 distance of an earlier sibling contributes its probability mass
-to that sibling instead of creating another value-evaluation branch. A node
-whose particle-count-to-effective-sample-size ratio crosses the configured
-threshold is resampled.
+The figure shows the packing step. Several sampled observations each give a
+posterior weight vector over the same successor particles. A posterior within
+``delta`` L1 distance of an earlier sibling adds its probability mass to that
+sibling instead of opening another branch. A node whose particle count divided
+by its effective sample size exceeds ``design_effect_threshold`` is resampled.
 
-Core benefits and limitations
------------------------------
+Notes
+-----
 
-Adaptive particles spend more samples on dispersed beliefs, while packing
-trades a bounded local bias for fewer observation branches. Both mechanisms
-need model support: observations must have stable keys and likelihoods, and
-KLD adaptation requires a user-supplied state-to-bin function plus a stable
-identifier. No bins are inferred. Bounds must be valid for the configured
-horizon. Search snapshots and numeric metrics are implemented and tested;
-ten-episode planner QA is deliberately pending.
+- Original paper: Wu, C., et al. (2021). *Adaptive Online Packing-guided
+  Search for POMDPs*. NeurIPS 34.
+  Author code: ``JuliaPOMDP/AdaOPS.jl`` (MIT license), ``main`` inspected on
+  2026-09-08.
+- KLD particle sizing needs explicit state bins: pass a ``state_binner`` that
+  maps a state to a hashable bin, plus a ``state_binner_id`` naming it. No
+  bins are inferred. Without a binner, adaptation is off and resampling uses
+  ``max_particles``.
+- The bounds must be valid for the configured ``depth``. Pass
+  ``lower_bound`` and ``upper_bound`` to supply your own.
+- Packing trades a bias, whose size grows with ``delta``, for fewer
+  observation branches. Choose another planner when that bias is unacceptable,
+  when states cannot be grouped into bins, or when the model cannot score
+  observations.
+- Subclasses :class:`DESPOT <POMDPPlanners.planners.scenario_tree_planners.despot.DESPOT>`.
+  The implementation has correctness tests; no episode QA results are
+  committed yet.
 
-Configuring the particle sizing
--------------------------------
+Can I use?
+----------
 
-KLD particle sizing needs explicit state bins: pass a ``state_binner``. Without
-one, adaptation is off and resampling uses ``max_particles`` instead.
+.. list-table::
+   :header-rows: 1
+   :widths: 34 14
 
-When to use it
---------------
+   * - Capability
+     - Supported
+   * - Discrete actions
+     - ✔️
+   * - Continuous actions
+     - ❌
+   * - Action widening
+     - ❌
+   * - Observation widening
+     - ❌
+   * - Cost constraints
+     - ❌
+   * - GPU
+     - ❌
 
-Use AdaOPS when actions are discrete, observation likelihoods are available,
-and ordinary particle trees either collapse weights or branch on too many
-observations. Choose another planner when state bins have no defensible meaning,
-the model cannot score observations, or packing bias is unacceptable. Expect
-more belief bookkeeping in exchange for a narrower, better allocated search.
+Example
+-------
 
-Revision note: Wu et al., NeurIPS 2021; author code ``JuliaPOMDP/AdaOPS.jl``
-``main`` inspected 2026-09-08 under the MIT license. Local planner QA is not
-part of this implementation job.
+.. code-block:: python
+
+   import numpy as np
+   from POMDPPlanners.core.belief import get_initial_belief
+   from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+   from POMDPPlanners.planners.scenario_tree_planners.adaops import AdaOPS
+
+   np.random.seed(0)
+   tiger = TigerPOMDP(discount_factor=0.95)
+
+   planner = AdaOPS(
+       environment=tiger,
+       discount_factor=0.95,
+       depth=5,
+       name="ExampleAdaOPS",
+       min_particles=10,
+       max_particles=50,
+       time_out_in_seconds=2.0,
+   )
+
+   belief = get_initial_belief(tiger, n_particles=50)
+   actions, run_data = planner.action(belief)
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.planners.scenario_tree_planners.adaops.adaops.AdaOPS
+   :members:
+   :show-inheritance:

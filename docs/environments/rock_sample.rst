@@ -3,7 +3,7 @@ RockSample
 
 .. episode-viewer:: traces/rock_sample.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
 A robot on a grid must sample the good rocks and skip the bad ones, then leave
@@ -11,9 +11,9 @@ by walking east off the right-hand edge. Whether a rock is good is hidden. A
 long-range sensor answers, but it gets less accurate with distance: at the rock
 it is always right, and far away it is a coin flip, never worse.
 
-This is the standard long-horizon information-gathering benchmark. Getting a
-good score means walking *towards* a rock to make its reading trustworthy, which
-costs steps — the trade-off that separates planners that reason about future
+RockSample is the long-horizon information-gathering benchmark of Smith &
+Simmons (2004). Getting a good score means walking *towards* a rock to raise
+the accuracy of its reading, which costs steps — the trade-off that separates planners that reason about future
 observations from ones that do not.
 
 What the agent sees and does
@@ -32,7 +32,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma \rangle`.
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 Fix a grid of :math:`M \times N` cells and rock positions :math:`y_1, \dots,
 y_R`. Write a state as :math:`s = (x, c)` with position :math:`x \in
 \mathbb{Z}^2` and rock qualities :math:`c \in \{0, 1\}^R` (:math:`1` good).
@@ -60,7 +60,7 @@ further binary slot :math:`h` is appended and :math:`S_T` grows accordingly.
 
 .. math::
 
-   \Omega = \{\textsf{none},\; \textsf{good},\; \textsf{bad}\}
+   Z = \{\textsf{none},\; \textsf{good},\; \textsf{bad}\}
 
 **Transition model.** Deterministic. Moves clamp at the north, south and west
 walls; moving east off the last column exits:
@@ -149,7 +149,7 @@ from :math:`D \equiv 0`.
 .. warning::
 
    Under the constant and decayed variants with :math:`q < 1`, :math:`R` draws
-   a fresh Bernoulli per call, so ``reward(s, a)`` is **not** a deterministic
+   a Bernoulli on every call, so ``reward(s, a)`` is **not** a deterministic
    function of its arguments. Pass the realised ``next_state`` to keep the
    reward on the same outcome as the trajectory. Setting
    ``is_dangerous_area_hit_terminal=True`` removes the problem by moving the
@@ -226,8 +226,30 @@ Key settings
 An episode ends when the robot exits east (its position becomes the sentinel
 ``(-1, -1)``), or on a hazard hit if that was made terminal.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``RockSamplePOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``RockSampleVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -240,10 +262,17 @@ Minimal example
    observation = env.sample_observation(state, check_first_rock)
    print(env.action_names[check_first_rock], observation)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.rock_sample_pomdp.RockSamplePOMDP`
 - Batched torch model:
   ``POMDPPlanners.environments.rock_sample_pomdp.rocksample_vectorized_model.RockSampleVectorizedModel``
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

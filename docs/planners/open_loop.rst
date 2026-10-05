@@ -69,4 +69,3 @@ Parameters
 .. autoclass:: POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner.DiscreteActionSequencesPlanner
    :members:
    :show-inheritance:
-   :no-index:

@@ -3,11 +3,11 @@ Tiger
 
 .. episode-viewer:: traces/tiger.json
 
-   One real episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
    to zoom, and use the bar to play, scrub and switch camera.
 
-The classic two-door POMDP: one door hides a tiger, the other hides a prize.
-Listening is cheap but only 85 % accurate, so the whole problem is deciding how
+The two-door POMDP: one door hides a tiger, the other hides a prize.
+Listening costs 1 but is only 85 % accurate, so the whole problem is deciding how
 much evidence to buy before committing.
 
 Use it as the first check on any new planner. A planner that opens a door
@@ -27,7 +27,7 @@ What the agent sees and does
 Formal definition
 -----------------
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Write :math:`\ell` for ``tiger_left`` and :math:`r` for
 ``tiger_right``.
 
@@ -47,11 +47,12 @@ The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
 
 .. math::
 
-   \Omega = \{\textsf{hear\_left},\; \textsf{hear\_right},\;
+   Z = \{\textsf{hear\_left},\; \textsf{hear\_right},\;
    \textsf{hear\_nothing}\}
 
 **Transition model.** Listening leaves the tiger where it is; opening either
-door resets it to a fresh coin flip.
+door places it behind the left or right door with probability 1/2 each,
+independent of where it was.
 
 .. math::
 
@@ -123,11 +124,34 @@ and it is **required** — there is no default. The 0.85 listening accuracy and
 the three rewards are constants in the class, not arguments.
 
 An episode never ends on its own: ``is_terminal`` always returns ``False``, and
-opening a door resets the tiger to a fresh 50/50 draw. Episode length comes from
+opening a door places the tiger behind either door with probability 1/2,
+independent of where it was. Episode length comes from
 the horizon the caller sets.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Capability
+     - ``TigerPOMDP``
+   * - Action space
+     - Discrete
+   * - Observation space
+     - Discrete
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ✔️ ``TigerVectorizedModel``
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -144,8 +168,15 @@ There is also a batched torch model,
 ``POMDPPlanners.environments.tiger_pomdp.tiger_pomdp_vectorized_model.TigerVectorizedModel``,
 for the vectorized planners.
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.tiger_pomdp.TigerPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - :class:`POMDPPlanners.environments.tiger_pomdp.TigerPOMDP`
-- :doc:`index` — the full catalog.
+- :doc:`base` — the full catalog and the environment interface.

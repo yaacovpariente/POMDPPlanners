@@ -1,21 +1,22 @@
 Light-Dark
 ==========
 
-**ContinuousLightDarkPOMDP** — continuous position, action and observation.
-The discrete variant has no replay.
-
 .. episode-viewer:: traces/light_dark.json
 
-   ``ContinuousLightDarkPOMDP``: one real episode planned by PFT-DPW, replayed
+   ``ContinuousLightDarkPOMDP``: one recorded episode planned by PFT-DPW, replayed
    in 3D. Drag to orbit, scroll to zoom, and use the bar to play, scrub and
    switch camera.
 
-Navigate to a goal in a world where your position sensor is sharp near beacons
-and vague everywhere else. The shortest path is rarely the best one: going the
-long way through a beacon buys the localization needed to actually land on the
-goal.
+**ContinuousLightDarkPOMDP** — continuous position, action and observation.
+The discrete variant has no replay.
 
-This is the cleanest test of whether a planner values information. A planner
+Navigate to a goal in a world where your position sensor is less noisy within
+``beacon_radius`` of a beacon than anywhere else. The shortest path is rarely
+the best one: going the long way through a beacon buys the localization needed
+to land on the goal.
+
+It tests whether a planner values information: visiting a beacon is the only
+way to shrink position uncertainty. A planner
 optimizing expected reward under a point estimate drives straight at the goal
 and misses; one that reasons over beliefs detours.
 
@@ -61,7 +62,7 @@ tuple.
 Continuous variant
 ~~~~~~~~~~~~~~~~~~
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
 **State space.** The plane, plus a terminal slot when
@@ -88,8 +89,8 @@ models that can withhold one:
 
 .. math::
 
-   \Omega = \mathbb{R}^2 \quad (\texttt{NORMAL\_NOISE}), \qquad
-   \Omega = \mathbb{R}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
+   Z = \mathbb{R}^2 \quad (\texttt{NORMAL\_NOISE}), \qquad
+   Z = \mathbb{R}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
 
 **Transition model.** Additive Gaussian, with the commanded displacement as
 the mean:
@@ -200,7 +201,7 @@ default.
 Discrete variant
 ~~~~~~~~~~~~~~~~
 
-The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
 **State space.** The integer grid, with the optional terminal slot when
@@ -222,8 +223,8 @@ The environment is the POMDP :math:`\langle S, A, \Omega, T, O, R, b_0, \gamma
 
 .. math::
 
-   \Omega = \mathbb{Z}^2 \quad (\texttt{NORMAL}), \qquad
-   \Omega = \mathbb{Z}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
+   Z = \mathbb{Z}^2 \quad (\texttt{NORMAL}), \qquad
+   Z = \mathbb{Z}^2 \cup \{\textsf{None}\} \quad (\text{otherwise})
 
 **Transition model.** The commanded move is executed with probability
 :math:`1 - e_T`, and otherwise one of the other three fires, uniformly:
@@ -345,7 +346,8 @@ Key settings
      - World extent.
    * - ``beacons``
      - 9 points on a 3×3 lattice
-     - Where localization is cheap. Removing beacons makes the problem harder.
+     - Where observation noise is lower. Removing beacons makes the problem
+       harder.
    * - ``start_state`` / ``goal_state``
      - ``[0, 5]`` / ``[10, 5]``
      -
@@ -376,7 +378,7 @@ variant, on the exact cell on the discrete one — or on an obstacle hit under
 the rule above. Leaving the grid is penalized but not terminal.
 
 Variants
---------
+~~~~~~~~
 
 - :class:`ContinuousLightDarkPOMDP
   <POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP>`
@@ -389,8 +391,46 @@ There is also ``ContinuousLightDarkPOMDPDiscreteActions``: the continuous world
 with the four discrete moves, for planners that need a finite action set. Note
 its noise defaults differ — ``np.eye(2)`` rather than ``np.eye(2) * 0.05``.
 
-Minimal example
----------------
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 24 24 24
+
+   * - Capability
+     - ``ContinuousLightDarkPOMDP``
+     - ``ContinuousLightDarkPOMDPDiscreteActions``
+     - ``DiscreteLightDarkPOMDP``
+   * - Action space
+     - Continuous
+     - Discrete
+     - Discrete
+   * - Observation space
+     - Continuous
+     - Continuous
+     - Discrete
+   * - Native C++ backend
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise
+       ``NotImplementedError``)
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise
+       ``NotImplementedError``)
+     - ❌
+   * - In the ``get_environment`` registry
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Optional dependencies
+     - None
+     - None
+     - None
+
+Example
+-------
 
 .. code-block:: python
 
@@ -408,10 +448,26 @@ Minimal example
    observation = env.sample_observation(next_state, step_right)
    print(state[:2], "->", next_state[:2], "seen as", observation)
 
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP
+   :members:
+   :show-inheritance:
+
 See also
 --------
 
 - Batched torch model:
   ``POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model.ContinuousLightDarkVectorizedModel``
-  (continuous variant only — the discrete one has none).
-- :doc:`index` — the full catalog.
+  (the two continuous classes only, with ``is_obstacle_hit_terminal=False`` —
+  ``DiscreteLightDarkPOMDP`` has none).
+- :doc:`base` — the full catalog and the environment interface.

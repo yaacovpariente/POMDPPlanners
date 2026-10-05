@@ -519,7 +519,7 @@ def get_metric_names_from_environment_policy_pair(
 
     The metrics are returned in the same order as compute_statistics_environment_policy_pair:
     1. Environment-specific metrics - Custom metrics from the environment
-    2. Policy-specific metrics - Info variables tracked by the policy (prefixed with "policy_info_")
+    2. Policy-specific metrics - Info variables tracked by the policy (prefixed with ``"policy_info_"``)
     3. Standard metrics - Always computed for all environment-policy pairs
 
     Args:

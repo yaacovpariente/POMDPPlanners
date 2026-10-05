@@ -14,18 +14,18 @@ POMDPPlanners
    :alt: Code style: black
 
 A Python package for POMDP planning: a library of planning algorithms, a suite
-of environments to run them on, and a simulation framework that makes the
-comparison between them reproducible.
+of environments to run them on, and a simulation framework that runs batches
+of episodes, caches each episode under its configuration, and reports
+confidence intervals.
 
 Start here
 ----------
 
 - :doc:`quickstart` — **run your first example**, from install to a planned
   action.
-- :doc:`environments/index` — **choose an environment**: the catalog, with each
+- :doc:`environments/base` — **choose an environment**: the catalog, with each
   one's state, actions, observations and dependencies.
-- :doc:`planners/index` — **choose a planner**: the catalog of MCTS, scenario
-  tree, sparse sampling, vectorized and open-loop planners.
+- :doc:`planners/base` — **compare planners**: what each one supports.
 
 Install
 -------
@@ -58,7 +58,7 @@ Plan one action
        depth=10,
        exploration_constant=50.0,
        name="tiger_planner",
-       n_simulations=1000,
+       time_out_in_seconds=2.0,
    )
 
    # ``action`` returns a list; it has length 1 for closed-loop planning.
@@ -80,46 +80,87 @@ What is in the package
 
 .. toctree::
    :maxdepth: 2
-   :caption: Getting started
+   :caption: User Guide
    :hidden:
 
    installation
    quickstart
-   examples/basic_usage
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Library
-   :hidden:
-
-   environments/index
-   planners/index
+   examples/index
    core/beliefs
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Running experiments
-   :hidden:
-
    core/simulations
-   core/results_site
    examples/planners_comparison
    examples/hyperparameter_tuning
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Extending the package
-   :hidden:
-
    environments/custom
+   guide/custom_planners
+   guide/saving_loading
 
 .. toctree::
    :maxdepth: 1
-   :caption: API reference
+   :caption: Planners
    :hidden:
 
-   api/modules
+   planners/base
+   planners/pomcp
+   planners/pomcp_dpw
+   planners/pomcpow
+   planners/pft_dpw
+   planners/sparse_pft
+   planners/sparse_sampling
+   planners/despot
+   planners/ardespot
+   planners/hyp_despot/index
+   planners/adaops/index
+   planners/vopp
+   planners/beta_zero
+   planners/constrained_zero
+   planners/constrained_and_cvar
+   planners/open_loop
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Environments
+   :hidden:
+
+   environments/base
+   environments/tiger
+   environments/rock_sample
+   environments/battleship
+   environments/capture_the_flag
+   environments/occupancy_grid_mapping
+   environments/chicheck_invaders
+   environments/firefighting
+   environments/snake
+   environments/pacman
+   environments/maze
+   environments/light_dark
+   environments/cartpole
+   environments/push
+   environments/laser_tag
+   environments/safety_ant_velocity
+   environments/sanity
+   environments/mountain_car
+   environments/realistic
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Common
+   :hidden:
+
+   common/beliefs
+   common/distributions_and_spaces
+   common/simulation_api
+   common/metrics
+   common/statistics
+   common/visualization
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Misc
+   :hidden:
+
    misc/changelog
+   misc/citation
+   misc/papers
 
 Citation
 --------
