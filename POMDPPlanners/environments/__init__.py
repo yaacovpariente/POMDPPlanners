@@ -23,7 +23,7 @@ Available Environments:
     TMazePOMDP: Compatibility class for the original T-shaped layout
     OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
     ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
-    FirefightingPOMDP: Several robots fighting a wind-driven grid fire
+    FirefightingPOMDP: Several firefighters fighting a wind-driven grid fire
     CaptureTheFlagPOMDP: Two teams racing to carry the other side's flag home
 
 Factory Functions:

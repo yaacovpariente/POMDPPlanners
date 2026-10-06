@@ -109,7 +109,7 @@ class TestFirefightingVectorizedUpdater:
     def test_observation_log_likelihood_matches_the_environment(self, env, updater):
         """Test that the batched likelihood equals the environment's.
 
-        Purpose: The reading is a delta on the robot fields and a confusion
+        Purpose: The reading is a delta on the firefighter fields and a confusion
         matrix on every visible cell. Both halves decide which fire maps
         survive, and a mismatch in either reweights the wind posterior.
 
@@ -162,7 +162,7 @@ class TestFirefightingVectorizedBelief:
 
         Purpose: Registration is what makes the updater reachable; without it
         this environment falls back to a generic filter that dies on the
-        exactly-reported robot fields.
+        exactly-reported firefighter fields.
 
         Given: A firefighting environment.
         When: The top-level factory is asked for its belief.
@@ -188,16 +188,16 @@ class TestFirefightingVectorizedBelief:
         belief = create_environment_belief(env, belief_type=BeliefType.PARTICLE, n_particles=32)
         assert not isinstance(belief, FirefightingVectorizedBelief)
 
-    def test_update_conditions_on_the_reported_robot_fields(self, env):
+    def test_update_conditions_on_the_reported_firefighter_fields(self, env):
         """Test that every particle adopts the poses, tanks and healths reported.
 
         Purpose: Those come back without noise but depend on hidden state --
-        heat damage is read off a cell the robot may not have seen -- so
+        heat damage is read off a cell the firefighter may not have seen -- so
         weighting by them empties the particle set instead of informing it.
 
         Given: The prior belief and one step of an episode.
         When: The reading is conditioned on.
-        Then: Every particle carries the reported robot fields.
+        Then: Every particle carries the reported firefighter fields.
 
         Test type: integration
         """
@@ -212,7 +212,7 @@ class TestFirefightingVectorizedBelief:
         observation = np.asarray(env.sample_observation(next_state, 0), dtype=np.float64)
         belief = belief.update(0, observation, env)
 
-        width = 4 * env.num_robots
+        width = 4 * env.num_firefighters
         fields = belief.particles[:, 1 : 1 + width]
         np.testing.assert_array_equal(fields, np.tile(observation[:width], (64, 1)))
 

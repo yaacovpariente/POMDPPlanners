@@ -1,23 +1,23 @@
 # SPDX-License-Identifier: MIT
 
-"""Several robots fight a wind-driven grid fire they can only see nearby.
+"""Several firefighters fight a wind-driven grid fire they can only see nearby.
 
-``N`` firefighting robots stand on an ``R x C`` grid. Every cell is one of five
+``N`` firefighters stand on an ``R x C`` grid. Every cell is one of five
 categories -- unburnt, smoldering, burning, burnt, wet -- and the fire spreads
 from alight cells into their unburnt neighbours under a **hidden wind** that is
 drawn uniformly from eight values at reset and is constant for the episode. The
 wind is never observed. It has to be inferred from which neighbours catch.
 
-The robots are driven by one centralized joint action: a single integer whose
-base-5 digits are the per-robot actions, four moves and SUPPRESS. Suppression
-soaks the robot's own cell and its four neighbours, so a careful planner fights
+The firefighters are driven by one centralized joint action: a single integer whose
+base-5 digits are the per-firefighter actions, four moves and SUPPRESS. Suppression
+soaks the firefighter's own cell and its four neighbours, so a careful planner fights
 from an adjacent cell and takes no damage while a careless one stands in the
 fire. Suppressant is finite and refilled by stepping on the depot; health is
-finite and spent by standing in fire. A robot at zero health is disabled and
+finite and spent by standing in fire. A firefighter at zero health is disabled and
 its digit of the joint action is ignored.
 
-Each robot sees the exact poses, tanks and healths of all of them, plus a noisy
-category for every cell within Chebyshev radius ``rho`` of any live robot.
+Each firefighter sees the exact poses, tanks and healths of all of them, plus a noisy
+category for every cell within Chebyshev radius ``rho`` of any live firefighter.
 Cells nobody is looking at report an unknown marker. The task is complete when
 no cell is smoldering or burning. Burnt and wet are absorbing and no rule maps
 either back into an alight category, so a fire-free map cannot be undone and
@@ -63,10 +63,10 @@ from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     HEAT_DAMAGE,
     MAX_HEAT_DAMAGE_PER_STEP,
     NUM_CATEGORIES,
-    NUM_ROBOT_ACTIONS,
+    NUM_FIREFIGHTER_ACTIONS,
     NUM_WIND_VALUES,
-    ROBOT_FIELD_WIDTH,
-    ROBOT_OFFSET,
+    FIREFIGHTER_FIELD_WIDTH,
+    FIREFIGHTER_OFFSET,
     STEP_INDEX,
     FireCategory,
     FirefightingAction,
@@ -75,7 +75,7 @@ from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     WindStrength,
     default_depot_cell,
     default_obstacle_cells,
-    default_robot_start_cells,
+    default_firefighter_start_cells,
     resolve_cells,
 )
 
@@ -85,7 +85,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle only matters to type checke
     )
 
 #: The category an unobserved cell reports. Encoded as a number because the
-#: observation is one flat ``float64`` vector of fixed shape whatever the robots
+#: observation is one flat ``float64`` vector of fixed shape whatever the firefighters
 #: do, which is what lets a particle filter compare two observations elementwise.
 UNKNOWN_CATEGORY = -1.0
 
@@ -97,15 +97,15 @@ class FirefightingStepChannel(Enum):
     """Per-step channels reported by :meth:`FirefightingPOMDP.step_info`."""
 
     FIRE_EXTINGUISHED = "fire_extinguished"
-    ALL_ROBOTS_DISABLED = "all_robots_disabled"
+    ALL_FIREFIGHTERS_DISABLED = "all_firefighters_disabled"
     TIMED_OUT_WITH_FIRE = "timed_out_with_fire"
     RECORDED_STEP = "recorded_step"
-    ROBOT_IN_ALIGHT_CELL = "robot_in_alight_cell"
+    FIREFIGHTER_IN_ALIGHT_CELL = "firefighter_in_alight_cell"
     HEALTH_LOST = "health_lost"
     SUPPRESS_ACTIONS = "suppress_actions"
     ALIGHT_CELLS = "alight_cells"
     BURNT_CELL_FRACTION = "burnt_cell_fraction"
-    ROBOTS_DISABLED = "robots_disabled"
+    FIREFIGHTERS_DISABLED = "firefighters_disabled"
 
 
 class FirefightingMetrics(Enum):
@@ -116,22 +116,22 @@ class FirefightingMetrics(Enum):
     ENDED_BY_FAILURE_RATE = CommonMetricName.ENDED_BY_FAILURE_RATE.value
     ENDED_BY_TIMEOUT_RATE = CommonMetricName.ENDED_BY_TIMEOUT_RATE.value
     AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
-    AVERAGE_ROBOT_STEPS_IN_FIRE = "average_robot_steps_in_fire"
-    AVERAGE_ROBOT_HEALTH_LOST = "average_robot_health_lost"
+    AVERAGE_FIREFIGHTER_STEPS_IN_FIRE = "average_firefighter_steps_in_fire"
+    AVERAGE_FIREFIGHTER_HEALTH_LOST = "average_firefighter_health_lost"
     AVERAGE_SUPPRESSANT_UNITS_USED = "average_suppressant_units_used"
     MAX_SIMULTANEOUS_ALIGHT_CELLS = "max_simultaneous_alight_cells"
     MAX_BURNT_CELL_FRACTION = "max_burnt_cell_fraction"
-    FINAL_ROBOTS_DISABLED = "final_robots_disabled"
+    FINAL_FIREFIGHTERS_DISABLED = "final_firefighters_disabled"
 
 
 # pylint: disable-next=too-many-public-methods,too-many-instance-attributes
 class FirefightingPOMDP(DiscreteActionsEnvironment):
-    """Put out a wind-driven grid fire with ``N`` partially sighted robots.
+    """Put out a wind-driven grid fire with ``N`` partially sighted firefighters.
 
-    The episode ends when no cell is alight (goal), when every robot is
+    The episode ends when no cell is alight (goal), when every firefighter is
     disabled while fire is still active (failure, when
-    ``is_all_robots_disabled_terminal``), or when the step budget runs out
-    (timeout). Goal wins over failure: a fire put out by robots that then
+    ``is_all_firefighters_disabled_terminal``), or when the step budget runs out
+    (timeout). Goal wins over failure: a fire put out by firefighters that then
     burned out is still a success.
     """
 
@@ -140,10 +140,10 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         self,
         num_rows: int = 10,
         num_cols: int = 10,
-        num_robots: int = 2,
+        num_firefighters: int = 2,
         obstacle_cells: Optional[List[Tuple[int, int]]] = None,
         depot_cell: Optional[Tuple[int, int]] = None,
-        robot_start_cells: Optional[List[Tuple[int, int]]] = None,
+        firefighter_start_cells: Optional[List[Tuple[int, int]]] = None,
         num_initial_fires: int = 1,
         max_tank: int = 6,
         max_health: int = 3,
@@ -167,7 +167,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         burnt_cell_cost: float = 5.0,
         damage_cost: float = 10.0,
         water_cost: float = 0.1,
-        is_all_robots_disabled_terminal: bool = True,
+        is_all_firefighters_disabled_terminal: bool = True,
         discount_factor: float = 0.95,
         name: str = "Firefighting",
         output_dir: Optional[Path] = None,
@@ -182,9 +182,9 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 100 cells, small enough that a particle carries a whole world
                 cheaply and large enough that two sensing footprints of 25
                 cells each leave most of it unseen.
-            num_robots: How many robots. Defaults to 2. This sets the size of
-                the joint action space, ``5 ** num_robots``: 25 at the default,
-                125 at three robots, which is where a tree search starts to
+            num_firefighters: How many firefighters. Defaults to 2. This sets the size of
+                the joint action space, ``5 ** num_firefighters``: 25 at the default,
+                125 at three firefighters, which is where a tree search starts to
                 feel the branching.
             obstacle_cells: Cells that are never enterable and never ignitable.
                 Defaults to ``None``, which places one small square blob just
@@ -193,23 +193,23 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             depot_cell: The cell that refills a tank on entry. Defaults to
                 ``None``, which puts it on the first non-obstacle cell in
                 row-major order, i.e. the north-west corner.
-            robot_start_cells: Where the robots begin. Defaults to ``None``,
+            firefighter_start_cells: Where the firefighters begin. Defaults to ``None``,
                 which seats them on the first free cells scanned from a quarter
                 of the way into the grid -- ``(2, 2)`` and ``(2, 3)`` at the
                 default size.
             num_initial_fires: Cells alight at reset, drawn uniformly without
                 replacement from the non-obstacle cells and set to ``BURNING``.
                 Defaults to 1. Raising it makes the fire harder to contain and
-                makes splitting the robots up the better policy.
-            max_tank: Tank capacity, and the tank every robot starts with.
-                Defaults to 6: how many sprays a robot gets between depot
+                makes splitting the firefighters up the better policy.
+            max_tank: Tank capacity, and the tank every firefighter starts with.
+                Defaults to 6: how many sprays a firefighter gets between depot
                 trips, and therefore how often logistics interrupts
                 firefighting.
-            max_health: Health capacity, and the health every robot starts
-                with. Defaults to 3, so a robot survives one burning step and
+            max_health: Health capacity, and the health every firefighter starts
+                with. Defaults to 3, so a firefighter survives one burning step and
                 is disabled by the second.
             sensing_radius: Chebyshev sensing radius. Defaults to 2, so each
-                robot reports the 5x5 block centred on itself.
+                firefighter reports the 5x5 block centred on itself.
             observation_error_probability: Chance a sensed cell is reported as
                 the wrong category, the wrong mass spread evenly over the other
                 four. Defaults to 0.1. At 0 the fire map is exact inside the
@@ -217,7 +217,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 at 0.8 a reading carries nothing. Both extremes are legal and
                 both make a poor task.
             slip_probability: Chance an otherwise admissible move fails and the
-                robot stays put, standing in for smoke and debris. Defaults to
+                firefighter stays put, standing in for smoke and debris. Defaults to
                 0.05.
             spread_probability: Base chance that one alight neighbour ignites a
                 cell in one step, before wind. Defaults to 0.10. This is the
@@ -245,7 +245,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 identifiable at all -- with no asymmetry the hidden wind would
                 be unobservable noise rather than something to infer.
             growth_probability: Chance a smoldering cell grows to burning in
-                one step. Defaults to 0.35. It sets how long the robots have to
+                one step. Defaults to 0.35. It sets how long the firefighters have to
                 reach a new ignition while it is still cheap to put out.
             burnout_probability: Chance a burning cell burns out to ``BURNT``
                 in one step. Defaults to 0.03, so a burning cell lives about
@@ -261,8 +261,8 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 smoldering cell wet. Defaults to 0.9.
             suppression_probability_burning: Chance one spray turns a burning
                 cell wet. Defaults to 0.6: a developed fire resists one hose,
-                which is why two robots spraying the same cell is worth more
-                than two robots dividing the work.
+                which is why two firefighters spraying the same cell is worth more
+                than two firefighters dividing the work.
             max_steps: Transitions allowed per episode. Defaults to 100.
             success_reward: Paid once, on the transition into a fire-free
                 state. Defaults to 100.0.
@@ -274,14 +274,14 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 to 1.0. Together with the line above, this is the pressure to
                 shrink the fire rather than sit safely beside it.
             burnt_cell_cost: Cost per cell destroyed this step. Defaults to
-                5.0. This is the property the robots are there to save.
-            damage_cost: Cost per point of robot health lost. Defaults to 10.0,
+                5.0. This is the property the firefighters are there to save.
+            damage_cost: Cost per point of firefighter health lost. Defaults to 10.0,
                 deliberately above ``burnt_cell_cost`` so a planner does not
-                trade a robot for a cell.
+                trade a firefighter for a cell.
             water_cost: Cost per spray. Defaults to 0.1: small, just enough to
                 stop spraying at nothing.
-            is_all_robots_disabled_terminal: Whether an episode ends when every
-                robot is disabled and fire is still active. Defaults to
+            is_all_firefighters_disabled_terminal: Whether an episode ends when every
+                firefighter is disabled and fire is still active. Defaults to
                 ``True``. This changes only termination, never the reward, so
                 it does not move either end of the declared reward range.
             discount_factor: Discount factor. Defaults to 0.95.
@@ -296,15 +296,16 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         """
         if num_rows < 1 or num_cols < 1:
             raise ValueError(f"grid must be at least 1x1, got {num_rows}x{num_cols}")
-        if num_robots < 1:
-            raise ValueError(f"num_robots must be at least 1, got {num_robots}")
+        if num_firefighters < 1:
+            raise ValueError(f"num_firefighters must be at least 1, got {num_firefighters}")
         if max_steps < 1:
             raise ValueError(f"max_steps must be at least 1, got {max_steps}")
         if max_tank < 0:
             raise ValueError(f"max_tank must be non-negative, got {max_tank}")
         if max_health < 1:
             raise ValueError(
-                f"max_health must be at least 1, or every robot starts disabled, got {max_health}"
+                "max_health must be at least 1, or every firefighter starts disabled, "
+                f"got {max_health}"
             )
         if sensing_radius < 0:
             raise ValueError(f"sensing_radius must be non-negative, got {sensing_radius}")
@@ -353,21 +354,24 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         if depot in set(obstacles):
             raise ValueError(f"depot {depot} is an obstacle")
         # The default is built only when it is needed. It refuses to seat a
-        # robot on the depot, which explicit starts are allowed to do, so
+        # firefighter on the depot, which explicit starts are allowed to do, so
         # computing it eagerly would let a perfectly legal explicit layout be
         # rejected by a placement rule nothing was going to use.
         starts = (
-            default_robot_start_cells(num_rows, num_cols, num_robots, obstacles, depot)
-            if robot_start_cells is None
-            else [(int(row), int(col)) for row, col in robot_start_cells]
+            default_firefighter_start_cells(num_rows, num_cols, num_firefighters, obstacles, depot)
+            if firefighter_start_cells is None
+            else [(int(row), int(col)) for row, col in firefighter_start_cells]
         )
-        if len(starts) != int(num_robots):
-            raise ValueError(f"robot_start_cells has {len(starts)} cells for {num_robots} robots")
+        if len(starts) != int(num_firefighters):
+            raise ValueError(
+                f"firefighter_start_cells has {len(starts)} cells for "
+                f"{num_firefighters} firefighters"
+            )
         for row, col in starts:
             if not 0 <= row < int(num_rows) or not 0 <= col < int(num_cols):
-                raise ValueError(f"robot start ({row}, {col}) is outside the grid")
+                raise ValueError(f"firefighter start ({row}, {col}) is outside the grid")
             if (row, col) in set(obstacles):
-                raise ValueError(f"robot start ({row}, {col}) is an obstacle")
+                raise ValueError(f"firefighter start ({row}, {col}) is an obstacle")
         num_ignitable = num_cells - len(set(obstacles))
         if not 1 <= int(num_initial_fires) <= num_ignitable:
             raise ValueError(
@@ -384,8 +388,8 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         # ``success_reward - step_cost``. It is not ``success_reward``.
         #
         # Minimum: the step cost is always charged; the water cost is at most
-        # one spray per robot; damage is capped per robot per step at the
-        # burning-cell damage, and also by the health the robot has, hence the
+        # one spray per firefighter; damage is capped per firefighter per step at the
+        # burning-cell damage, and also by the health the firefighter has, hence the
         # ``min``. The three map terms -- smoldering cells, burning cells and
         # cells newly burnt this step -- look as though they stack, but they
         # cannot: in the successor a cell is smoldering, or burning, or newly
@@ -396,7 +400,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         # wrong in the loose direction hides a real bug while getting it wrong
         # in the tight direction fails the conformance suite.
         #
-        # ``is_all_robots_disabled_terminal`` changes only termination, never
+        # ``is_all_firefighters_disabled_terminal`` changes only termination, never
         # any reward term, so it moves neither end of this bound.
         max_reward = float(success_reward) - float(step_cost)
         min_reward = -(
@@ -404,9 +408,9 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             + max(float(smoldering_cell_cost), float(burning_cell_cost), float(burnt_cell_cost))
             * float(num_cells)
             + float(damage_cost)
-            * float(num_robots)
+            * float(num_firefighters)
             * float(min(int(max_health), MAX_HEAT_DAMAGE_PER_STEP))
-            + float(water_cost) * float(num_robots)
+            + float(water_cost) * float(num_firefighters)
         )
 
         super().__init__(
@@ -423,10 +427,10 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
 
         self.num_rows = int(num_rows)
         self.num_cols = int(num_cols)
-        self.num_robots = int(num_robots)
+        self.num_firefighters = int(num_firefighters)
         self.obstacle_cells = obstacles
         self.depot_cell = depot
-        self.robot_start_cells = starts
+        self.firefighter_start_cells = starts
         self.num_initial_fires = int(num_initial_fires)
         self.max_tank = int(max_tank)
         self.max_health = int(max_health)
@@ -450,15 +454,17 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         self.burnt_cell_cost = float(burnt_cell_cost)
         self.damage_cost = float(damage_cost)
         self.water_cost = float(water_cost)
-        self.is_all_robots_disabled_terminal = bool(is_all_robots_disabled_terminal)
+        self.is_all_firefighters_disabled_terminal = bool(is_all_firefighters_disabled_terminal)
 
         self.num_cells = num_cells
-        self.num_actions = NUM_ROBOT_ACTIONS**self.num_robots
-        self.wind_direction_index = ROBOT_OFFSET + ROBOT_FIELD_WIDTH * self.num_robots
+        self.num_actions = NUM_FIREFIGHTER_ACTIONS**self.num_firefighters
+        self.wind_direction_index = (
+            FIREFIGHTER_OFFSET + FIREFIGHTER_FIELD_WIDTH * self.num_firefighters
+        )
         self.wind_strength_index = self.wind_direction_index + 1
         self.fire_offset = self.wind_strength_index + 1
         self.state_size = self.fire_offset + self.num_cells
-        self.observation_size = ROBOT_FIELD_WIDTH * self.num_robots + self.num_cells
+        self.observation_size = FIREFIGHTER_FIELD_WIDTH * self.num_firefighters + self.num_cells
 
         # Derived read-only tables. Underscored so they stay out of
         # ``config_id`` and ``__eq__``: every one is a pure function of
@@ -484,24 +490,24 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
     # -- construction helpers -------------------------------------------
 
     def _build_action_table(self) -> np.ndarray:
-        """Return the ``(num_actions, num_robots)`` base-5 decoding table.
+        """Return the ``(num_actions, num_firefighters)`` base-5 decoding table.
 
-        Robot ``i`` is the ``i``-th base-5 digit of the joint action, least
+        Firefighter ``i`` is the ``i``-th base-5 digit of the joint action, least
         significant first, which is the convention the formal definition uses.
 
         Built with array arithmetic rather than a nested Python loop, because
-        the table has ``5 ** num_robots`` rows: at two robots either is
+        the table has ``5 ** num_firefighters`` rows: at two firefighters either is
         instant, but the loop is quadratic in a number that is already
-        exponential, and at six or seven robots it would add seconds to every
+        exponential, and at six or seven firefighters it would add seconds to every
         construction -- including the one every parallel worker does.
 
         Returns:
-            ``int64`` array whose row ``a`` holds the per-robot actions of
+            ``int64`` array whose row ``a`` holds the per-firefighter actions of
             joint action ``a``.
         """
         joint = np.arange(self.num_actions, dtype=np.int64)[:, None]
-        place = NUM_ROBOT_ACTIONS ** np.arange(self.num_robots, dtype=np.int64)[None, :]
-        return (joint // place) % NUM_ROBOT_ACTIONS
+        place = NUM_FIREFIGHTER_ACTIONS ** np.arange(self.num_firefighters, dtype=np.int64)[None, :]
+        return (joint // place) % NUM_FIREFIGHTER_ACTIONS
 
     # -- state accessors ------------------------------------------------
 
@@ -516,18 +522,23 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         """
         return int(round(float(np.asarray(state, dtype=np.float64)[STEP_INDEX])))
 
-    def robots(self, state: FirefightingState) -> np.ndarray:
-        """Return the per-robot block of ``state`` as integers.
+    def firefighters(self, state: FirefightingState) -> np.ndarray:
+        """Return the per-firefighter block of ``state`` as integers.
 
         Args:
             state: A state vector.
 
         Returns:
-            ``(num_robots, 4)`` ``int64`` array of row, column, tank, health.
+            ``(num_firefighters, 4)`` ``int64`` array of row, column, tank, health.
         """
         values = np.asarray(state, dtype=np.float64)
-        block = values[ROBOT_OFFSET : ROBOT_OFFSET + ROBOT_FIELD_WIDTH * self.num_robots]
-        return np.rint(block).astype(np.int64).reshape(self.num_robots, ROBOT_FIELD_WIDTH)
+        block = values[
+            FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET
+            + FIREFIGHTER_FIELD_WIDTH * self.num_firefighters
+        ]
+        return (
+            np.rint(block).astype(np.int64).reshape(self.num_firefighters, FIREFIGHTER_FIELD_WIDTH)
+        )
 
     def wind(self, state: FirefightingState) -> Tuple[int, int]:
         """Return the hidden wind of ``state``.
@@ -569,14 +580,14 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         return self._obstacle_mask
 
     def decode_action(self, action: Any) -> np.ndarray:
-        """Return the per-robot actions of a joint action.
+        """Return the per-firefighter actions of a joint action.
 
         Args:
-            action: The joint action, an integer in ``[0, 5 ** num_robots)``.
+            action: The joint action, an integer in ``[0, 5 ** num_firefighters)``.
 
         Returns:
-            ``(num_robots,)`` ``int64`` array of :class:`FirefightingAction`
-            codes, robot 0 first.
+            ``(num_firefighters,)`` ``int64`` array of :class:`FirefightingAction`
+            codes, firefighter 0 first.
 
         Raises:
             ValueError: If the joint action is outside the action space.
@@ -607,14 +618,14 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         that cost ContinuousPush 95% of its steps cannot arise here.
 
         Returns:
-            ``[0, 1, ..., 5 ** num_robots - 1]``.
+            ``[0, 1, ..., 5 ** num_firefighters - 1]``.
         """
         return list(range(self.num_actions))
 
     # -- transition -----------------------------------------------------
 
     def _is_admissible(self, row: int, col: int, fire: np.ndarray) -> bool:
-        """Whether a robot may enter ``(row, col)`` given the pre-step fire map.
+        """Whether a firefighter may enter ``(row, col)`` given the pre-step fire map.
 
         Args:
             row: Target row.
@@ -634,71 +645,73 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         return fire[row, col] != int(FireCategory.BURNT)
 
     def _move_targets(
-        self, robots: np.ndarray, actions: np.ndarray, fire: np.ndarray
+        self, firefighters: np.ndarray, actions: np.ndarray, fire: np.ndarray
     ) -> List[Optional[Tuple[int, int]]]:
-        """Return each robot's admissible move target, or ``None``.
+        """Return each firefighter's admissible move target, or ``None``.
 
         Args:
-            robots: ``(num_robots, 4)`` state block.
-            actions: Per-robot actions.
+            firefighters: ``(num_firefighters, 4)`` state block.
+            actions: Per-firefighter actions.
             fire: The pre-step fire map.
 
         Returns:
-            One entry per robot: the cell it would move into if the move does
-            not slip, or ``None`` when the robot is disabled, is suppressing,
+            One entry per firefighter: the cell it would move into if the move does
+            not slip, or ``None`` when the firefighter is disabled, is suppressing,
             or the target is inadmissible -- the three cases in which the
             motion draw is not taken at all.
         """
         targets: List[Optional[Tuple[int, int]]] = []
-        for robot in range(self.num_robots):
-            if robots[robot, 3] <= 0 or actions[robot] == int(FirefightingAction.SUPPRESS):
+        for firefighter in range(self.num_firefighters):
+            if firefighters[firefighter, 3] <= 0 or actions[firefighter] == int(
+                FirefightingAction.SUPPRESS
+            ):
                 targets.append(None)
                 continue
-            offset = DIRECTION_OFFSETS[int(actions[robot])]
-            row = int(robots[robot, 0]) + offset[0]
-            col = int(robots[robot, 1]) + offset[1]
+            offset = DIRECTION_OFFSETS[int(actions[firefighter])]
+            row = int(firefighters[firefighter, 0]) + offset[0]
+            col = int(firefighters[firefighter, 1]) + offset[1]
             targets.append((row, col) if self._is_admissible(row, col, fire) else None)
         return targets
 
-    def _spraying_robots(self, robots: np.ndarray, actions: np.ndarray) -> List[int]:
-        """Return the robots that actually spray this step.
+    def _spraying_firefighters(self, firefighters: np.ndarray, actions: np.ndarray) -> List[int]:
+        """Return the firefighters that actually spray this step.
 
         Args:
-            robots: ``(num_robots, 4)`` state block.
-            actions: Per-robot actions.
+            firefighters: ``(num_firefighters, 4)`` state block.
+            actions: Per-firefighter actions.
 
         Returns:
-            Indices of the live robots that chose SUPPRESS with a non-empty
-            tank. A robot with an empty tank that chooses SUPPRESS does nothing
+            Indices of the live firefighters that chose SUPPRESS with a non-empty
+            tank. A firefighter with an empty tank that chooses SUPPRESS does nothing
             and pays nothing.
         """
         return [
-            robot
-            for robot in range(self.num_robots)
-            if robots[robot, 3] > 0
-            and actions[robot] == int(FirefightingAction.SUPPRESS)
-            and robots[robot, 2] > 0
+            firefighter
+            for firefighter in range(self.num_firefighters)
+            if firefighters[firefighter, 3] > 0
+            and actions[firefighter] == int(FirefightingAction.SUPPRESS)
+            and firefighters[firefighter, 2] > 0
         ]
 
     def _coverage_counts(self, positions: np.ndarray, sprayers: Sequence[int]) -> np.ndarray:
         """Return how many sprays cover each cell.
 
-        Each spraying robot covers its own cell and its four neighbours, and
-        the counts add: two robots covering the same cell each get an
+        Each spraying firefighter covers its own cell and its four neighbours, and
+        the counts add: two firefighters covering the same cell each get an
         independent attempt at soaking it. That is the only place in the model
-        where the robots genuinely cooperate rather than merely divide the
+        where the firefighters genuinely cooperate rather than merely divide the
         work.
 
         Args:
-            positions: ``(num_robots, 2)`` post-motion cells.
-            sprayers: Indices of the robots that sprayed.
+            positions: ``(num_firefighters, 2)`` post-motion cells.
+            sprayers: Indices of the firefighters that sprayed.
 
         Returns:
             ``(num_rows, num_cols)`` ``int64`` counts.
         """
         counts = np.zeros((self.num_rows, self.num_cols), dtype=np.int64)
-        for robot in sprayers:
-            row, col = int(positions[robot, 0]), int(positions[robot, 1])
+        for firefighter in sprayers:
+            row, col = int(positions[firefighter, 0]), int(positions[firefighter, 1])
             counts[row, col] += 1
             for offset_row, offset_col in DIRECTION_OFFSETS:
                 target_row, target_col = row + offset_row, col + offset_col
@@ -766,7 +779,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         The six stages resolve in the order the formal definition fixes:
         motion, suppression, spread, growth and burnout, heat damage,
         bookkeeping. The order is not cosmetic -- resolving suppression before
-        spread is what lets a robot stop a front by soaking the cell ahead of
+        spread is what lets a firefighter stop a front by soaking the cell ahead of
         it in the same step, and resolving growth only on cells that were
         already alight *before* the spread is what stops a cell igniting and
         growing to burning within one step.
@@ -781,24 +794,24 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         values = np.asarray(state, dtype=np.float64)
         successor = values.copy()
         actions = self.decode_action(action)
-        robots = self.robots(values)
+        firefighters = self.firefighters(values)
         fire = self.fire_map(values)
         wind = self.wind(values)
 
         # 1. Motion. The slip draw is taken only where a move could succeed,
-        #    so a robot walking into a wall consumes no randomness.
-        positions = robots[:, :2].copy()
-        for robot, target in enumerate(self._move_targets(robots, actions, fire)):
+        #    so a firefighter walking into a wall consumes no randomness.
+        positions = firefighters[:, :2].copy()
+        for firefighter, target in enumerate(self._move_targets(firefighters, actions, fire)):
             if target is None:
                 continue
             if np.random.random() >= self.slip_probability:
-                positions[robot] = target
+                positions[firefighter] = target
 
         # 2. Suppression, then the tank, with a refill overriding the cost: a
-        #    robot that sprays and steps into the depot on the same step ends
+        #    firefighter that sprays and steps into the depot on the same step ends
         #    the step full.
-        sprayers = self._spraying_robots(robots, actions)
-        tanks = robots[:, 2].copy()
+        sprayers = self._spraying_firefighters(firefighters, actions)
+        tanks = firefighters[:, 2].copy()
         if sprayers:
             counts = self._coverage_counts(positions, sprayers)
             probabilities = self._suppression_probability(fire, counts)
@@ -806,11 +819,11 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             draws = np.random.random(covered.size)
             soaked = covered[draws < probabilities.ravel()[covered]]
             fire.flat[soaked] = int(FireCategory.WET)
-            for robot in sprayers:
-                tanks[robot] -= 1
-        for robot in range(self.num_robots):
-            if (int(positions[robot, 0]), int(positions[robot, 1])) == self.depot_cell:
-                tanks[robot] = self.max_tank
+            for firefighter in sprayers:
+                tanks[firefighter] -= 1
+        for firefighter in range(self.num_firefighters):
+            if (int(positions[firefighter, 0]), int(positions[firefighter, 1])) == self.depot_cell:
+                tanks[firefighter] = self.max_tank
 
         # 3. Spread. ``fire`` is the post-suppression map; the alight cells it
         #    is read from are the ones that survived the hoses.
@@ -836,21 +849,23 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             burnt = burning[np.random.random(burning.size) < self.burnout_probability]
             fire.flat[burnt] = int(FireCategory.BURNT)
 
-        # 5. Heat damage, read off the final map at each robot's final cell.
-        healths = robots[:, 3].copy()
-        for robot in range(self.num_robots):
-            damage = self._heat_damage[fire[int(positions[robot, 0]), int(positions[robot, 1])]]
-            healths[robot] = max(0, int(healths[robot]) - int(damage))
+        # 5. Heat damage, read off the final map at each firefighter's final cell.
+        healths = firefighters[:, 3].copy()
+        for firefighter in range(self.num_firefighters):
+            damage = self._heat_damage[
+                fire[int(positions[firefighter, 0]), int(positions[firefighter, 1])]
+            ]
+            healths[firefighter] = max(0, int(healths[firefighter]) - int(damage))
 
         # 6. Bookkeeping. The wind is copied unchanged, which is what makes it
         #    identifiable from the spread pattern across a whole episode.
         successor[STEP_INDEX] = values[STEP_INDEX] + 1.0
-        for robot in range(self.num_robots):
-            base = ROBOT_OFFSET + ROBOT_FIELD_WIDTH * robot
-            successor[base] = float(positions[robot, 0])
-            successor[base + 1] = float(positions[robot, 1])
-            successor[base + 2] = float(tanks[robot])
-            successor[base + 3] = float(healths[robot])
+        for firefighter in range(self.num_firefighters):
+            base = FIREFIGHTER_OFFSET + FIREFIGHTER_FIELD_WIDTH * firefighter
+            successor[base] = float(positions[firefighter, 0])
+            successor[base + 1] = float(positions[firefighter, 1])
+            successor[base + 2] = float(tanks[firefighter])
+            successor[base + 3] = float(healths[firefighter])
         successor[self.fire_offset :] = fire.ravel().astype(np.float64)
         return successor
 
@@ -885,7 +900,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         ``(fire, next fire)``: wet is reachable only by suppression, burnt only
         by burnout, and a cell that ignites this step cannot also grow this
         step. So there is no marginalisation to do and the density is a plain
-        product over robots and cells.
+        product over firefighters and cells.
 
         Args:
             state: The state the step was taken from.
@@ -905,22 +920,22 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             return -np.inf
 
         actions = self.decode_action(action)
-        robots = self.robots(values)
-        next_robots = self.robots(candidate)
+        firefighters = self.firefighters(values)
+        next_firefighters = self.firefighters(candidate)
         fire = self.fire_map(values)
         next_fire = self.fire_map(candidate)
 
         # 1. Motion.
         log_probability = 0.0
-        targets = self._move_targets(robots, actions, fire)
-        positions = next_robots[:, :2]
-        for robot, target in enumerate(targets):
-            stayed = tuple(positions[robot]) == tuple(robots[robot, :2])
+        targets = self._move_targets(firefighters, actions, fire)
+        positions = next_firefighters[:, :2]
+        for firefighter, target in enumerate(targets):
+            stayed = tuple(positions[firefighter]) == tuple(firefighters[firefighter, :2])
             if target is None:
                 if not stayed:
                     return -np.inf
                 continue
-            if tuple(positions[robot]) == target:
+            if tuple(positions[firefighter]) == target:
                 log_probability += np.log1p(-self.slip_probability)
             elif stayed:
                 log_probability += (
@@ -932,16 +947,16 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             return -np.inf
 
         # 2. Suppression and the deterministic tank rule.
-        sprayers = self._spraying_robots(robots, actions)
+        sprayers = self._spraying_firefighters(firefighters, actions)
         counts = self._coverage_counts(positions, sprayers)
         soak = self._suppression_probability(fire, counts)
-        expected_tanks = robots[:, 2].copy()
-        for robot in sprayers:
-            expected_tanks[robot] -= 1
-        for robot in range(self.num_robots):
-            if (int(positions[robot, 0]), int(positions[robot, 1])) == self.depot_cell:
-                expected_tanks[robot] = self.max_tank
-        if not np.array_equal(next_robots[:, 2], expected_tanks):
+        expected_tanks = firefighters[:, 2].copy()
+        for firefighter in sprayers:
+            expected_tanks[firefighter] -= 1
+        for firefighter in range(self.num_firefighters):
+            if (int(positions[firefighter, 0]), int(positions[firefighter, 1])) == self.depot_cell:
+                expected_tanks[firefighter] = self.max_tank
+        if not np.array_equal(next_firefighters[:, 2], expected_tanks):
             return -np.inf
 
         # 3-4. Per-cell map law. ``intermediate`` is the post-suppression map,
@@ -1017,11 +1032,13 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             log_probability += float(np.log(probability))
 
         # 5. Heat damage is deterministic given the final map and the poses.
-        for robot in range(self.num_robots):
+        for firefighter in range(self.num_firefighters):
             damage = self._heat_damage[
-                next_fire[int(positions[robot, 0]), int(positions[robot, 1])]
+                next_fire[int(positions[firefighter, 0]), int(positions[firefighter, 1])]
             ]
-            if int(next_robots[robot, 3]) != max(0, int(robots[robot, 3]) - int(damage)):
+            if int(next_firefighters[firefighter, 3]) != max(
+                0, int(firefighters[firefighter, 3]) - int(damage)
+            ):
                 return -np.inf
         return float(log_probability)
 
@@ -1046,10 +1063,10 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
     # -- observations ---------------------------------------------------
 
     def visible_mask(self, state: FirefightingState) -> np.ndarray:
-        """Return the cells some live robot can see.
+        """Return the cells some live firefighter can see.
 
-        Two robots standing together see barely more than one, so spreading
-        out is what buys information. A disabled robot sees nothing.
+        Two firefighters standing together see barely more than one, so spreading
+        out is what buys information. A disabled firefighter sees nothing.
 
         Args:
             state: A state vector.
@@ -1057,30 +1074,33 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         Returns:
             ``(num_rows, num_cols)`` boolean mask.
         """
-        robots = self.robots(state)
+        firefighters = self.firefighters(state)
         visible = np.zeros((self.num_rows, self.num_cols), dtype=bool)
-        for robot in range(self.num_robots):
-            if robots[robot, 3] <= 0:
+        for firefighter in range(self.num_firefighters):
+            if firefighters[firefighter, 3] <= 0:
                 continue
-            row, col = int(robots[robot, 0]), int(robots[robot, 1])
+            row, col = int(firefighters[firefighter, 0]), int(firefighters[firefighter, 1])
             visible[
                 max(0, row - self.sensing_radius) : row + self.sensing_radius + 1,
                 max(0, col - self.sensing_radius) : col + self.sensing_radius + 1,
             ] = True
         return visible
 
-    def _robot_fields(self, state: FirefightingState) -> np.ndarray:
+    def _firefighter_fields(self, state: FirefightingState) -> np.ndarray:
         """Return the exactly-reported part of an observation.
 
         Args:
             state: A state vector.
 
         Returns:
-            ``(4 * num_robots,)`` ``float64`` array of row, column, tank and
-            health per robot.
+            ``(4 * num_firefighters,)`` ``float64`` array of row, column, tank and
+            health per firefighter.
         """
         values = np.asarray(state, dtype=np.float64)
-        return values[ROBOT_OFFSET : ROBOT_OFFSET + ROBOT_FIELD_WIDTH * self.num_robots].copy()
+        return values[
+            FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET
+            + FIREFIGHTER_FIELD_WIDTH * self.num_firefighters
+        ].copy()
 
     def _draw_observation(self, next_state: FirefightingState) -> np.ndarray:
         """Draw one noisy reading of ``next_state``.
@@ -1103,7 +1123,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             # off-diagonal mass the confusion matrix spreads.
             offsets = np.random.randint(1, NUM_CATEGORIES, size=seen.size)
             reported[seen] = np.where(wrong, (truth + offsets) % NUM_CATEGORIES, truth)
-        return np.concatenate([self._robot_fields(next_state), reported])
+        return np.concatenate([self._firefighter_fields(next_state), reported])
 
     def sample_observation(
         self, next_state: FirefightingState, action: Any, n_samples: int = 1
@@ -1146,7 +1166,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             One log-likelihood per candidate.
         """
         del action
-        expected = self._robot_fields(next_state)
+        expected = self._firefighter_fields(next_state)
         visible = self.visible_mask(next_state).ravel()
         truth = self.fire_map(next_state).ravel()
         candidates = np.atleast_2d(np.asarray(observations, dtype=np.float64))
@@ -1258,8 +1278,8 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         successor = np.asarray(next_state, dtype=np.float64)
         fire = self.fire_map(values)
         next_fire = self.fire_map(successor)
-        robots = self.robots(values)
-        next_robots = self.robots(successor)
+        firefighters = self.firefighters(values)
+        next_firefighters = self.firefighters(successor)
 
         smoldering = int(np.count_nonzero(next_fire == int(FireCategory.SMOLDERING)))
         burning = int(np.count_nonzero(next_fire == int(FireCategory.BURNING)))
@@ -1268,8 +1288,8 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 (next_fire == int(FireCategory.BURNT)) & (fire != int(FireCategory.BURNT))
             )
         )
-        health_lost = int(np.sum(robots[:, 3] - next_robots[:, 3]))
-        sprays = len(self._spraying_robots(robots, self.decode_action(action)))
+        health_lost = int(np.sum(firefighters[:, 3] - next_firefighters[:, 3]))
+        sprays = len(self._spraying_firefighters(firefighters, self.decode_action(action)))
 
         reward = -self.step_cost
         reward -= self.smoldering_cell_cost * smoldering
@@ -1284,7 +1304,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
     # -- termination ----------------------------------------------------
 
     def is_terminal(self, state: FirefightingState) -> bool:
-        """Whether the fire is out, every robot is down, or time has run out.
+        """Whether the fire is out, every firefighter is down, or time has run out.
 
         Args:
             state: A state vector.
@@ -1294,14 +1314,16 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         """
         if not np.any(self.alight_mask(self.fire_map(state))):
             return True
-        if self.is_all_robots_disabled_terminal and not np.any(self.robots(state)[:, 3] > 0):
+        if self.is_all_firefighters_disabled_terminal and not np.any(
+            self.firefighters(state)[:, 3] > 0
+        ):
             return True
         return self.step_count(state) >= self.max_steps
 
     # -- distributions --------------------------------------------------
 
     def initial_state_dist(self) -> Distribution:
-        """A uniform hidden wind and a uniformly placed fire, robots at their posts.
+        """A uniform hidden wind and a uniformly placed fire, firefighters at their posts.
 
         Returns:
             The reset distribution.
@@ -1311,7 +1333,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             fire_offset=self.fire_offset,
             wind_direction_index=self.wind_direction_index,
             wind_strength_index=self.wind_strength_index,
-            robot_start_cells=self.robot_start_cells,
+            firefighter_start_cells=self.firefighter_start_cells,
             max_tank=self.max_tank,
             max_health=self.max_health,
             num_initial_fires=self.num_initial_fires,
@@ -1320,18 +1342,18 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         )
 
     def initial_observation_dist(self) -> DiscreteDistribution:
-        """The pre-episode reading: robots at their posts, nothing sensed yet.
+        """The pre-episode reading: firefighters at their posts, nothing sensed yet.
 
         Returns:
-            A point mass on the known robot fields with every cell marked
+            A point mass on the known firefighter fields with every cell marked
             unknown. This is a sentinel, not a scan: the first real reading
             arrives with the first transition, and scoring this one against a
             state would be scoring a reading that no observation model
             produced.
         """
         observation = np.full(self.observation_size, UNKNOWN_CATEGORY, dtype=np.float64)
-        for robot, (row, col) in enumerate(self.robot_start_cells):
-            base = ROBOT_FIELD_WIDTH * robot
+        for firefighter, (row, col) in enumerate(self.firefighter_start_cells):
+            base = FIREFIGHTER_FIELD_WIDTH * firefighter
             observation[base] = float(row)
             observation[base + 1] = float(col)
             observation[base + 2] = float(self.max_tank)
@@ -1368,36 +1390,39 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         health_lost = 0.0
         sprays = 0.0
         if action is not None and next_state is not None:
-            robots = self.robots(state)
-            health_lost = float(np.sum(robots[:, 3] - self.robots(next_state)[:, 3]))
-            sprays = float(len(self._spraying_robots(robots, self.decode_action(action))))
+            firefighters = self.firefighters(state)
+            health_lost = float(np.sum(firefighters[:, 3] - self.firefighters(next_state)[:, 3]))
+            sprays = float(
+                len(self._spraying_firefighters(firefighters, self.decode_action(action)))
+            )
 
         scored = state if next_state is None else next_state
         fire = self.fire_map(scored)
-        robots = self.robots(scored)
+        firefighters = self.firefighters(scored)
         alight = self.alight_mask(fire)
         alight_cells = float(np.count_nonzero(alight))
         extinguished = float(alight_cells == 0.0)
-        disabled = float(np.count_nonzero(robots[:, 3] <= 0))
+        disabled = float(np.count_nonzero(firefighters[:, 3] <= 0))
         # Precedence: goal, then failure, then timeout. Goal wins over failure
-        # so a fire put out by robots that then burned out still counts as a
+        # so a fire put out by firefighters that then burned out still counts as a
         # success, and timeout is written as the residual so the three
         # ``ended_by_*`` rates always sum to one.
         failure = float(
             extinguished == 0.0
-            and self.is_all_robots_disabled_terminal
-            and disabled == float(self.num_robots)
+            and self.is_all_firefighters_disabled_terminal
+            and disabled == float(self.num_firefighters)
         )
         return {
             FirefightingStepChannel.FIRE_EXTINGUISHED.value: extinguished,
-            FirefightingStepChannel.ALL_ROBOTS_DISABLED.value: failure,
+            FirefightingStepChannel.ALL_FIREFIGHTERS_DISABLED.value: failure,
             FirefightingStepChannel.TIMED_OUT_WITH_FIRE.value: 1.0 - extinguished - failure,
             FirefightingStepChannel.RECORDED_STEP.value: 1.0,
-            FirefightingStepChannel.ROBOT_IN_ALIGHT_CELL.value: float(
+            FirefightingStepChannel.FIREFIGHTER_IN_ALIGHT_CELL.value: float(
                 sum(
                     1
-                    for robot in range(self.num_robots)
-                    if robots[robot, 3] > 0 and alight[int(robots[robot, 0]), int(robots[robot, 1])]
+                    for firefighter in range(self.num_firefighters)
+                    if firefighters[firefighter, 3] > 0
+                    and alight[int(firefighters[firefighter, 0]), int(firefighters[firefighter, 1])]
                 )
             ),
             FirefightingStepChannel.HEALTH_LOST.value: health_lost,
@@ -1407,7 +1432,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 np.count_nonzero(fire == int(FireCategory.BURNT))
             )
             / float(self.num_cells),
-            FirefightingStepChannel.ROBOTS_DISABLED.value: disabled,
+            FirefightingStepChannel.FIREFIGHTERS_DISABLED.value: disabled,
         }
 
     def get_metric_specs(self) -> List[StepInfoMetric]:
@@ -1442,7 +1467,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             ),
             StepInfoMetric(
                 name=FirefightingMetrics.ENDED_BY_FAILURE_RATE.value,
-                channel=channel.ALL_ROBOTS_DISABLED.value,
+                channel=channel.ALL_FIREFIGHTERS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
             StepInfoMetric(
@@ -1456,12 +1481,12 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.AVERAGE_ROBOT_STEPS_IN_FIRE.value,
-                channel=channel.ROBOT_IN_ALIGHT_CELL.value,
+                name=FirefightingMetrics.AVERAGE_FIREFIGHTER_STEPS_IN_FIRE.value,
+                channel=channel.FIREFIGHTER_IN_ALIGHT_CELL.value,
                 per_episode=EpisodeReduction.SUM,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.AVERAGE_ROBOT_HEALTH_LOST.value,
+                name=FirefightingMetrics.AVERAGE_FIREFIGHTER_HEALTH_LOST.value,
                 channel=channel.HEALTH_LOST.value,
                 per_episode=EpisodeReduction.SUM,
             ),
@@ -1481,8 +1506,8 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
                 per_episode=EpisodeReduction.MAX,
             ),
             StepInfoMetric(
-                name=FirefightingMetrics.FINAL_ROBOTS_DISABLED.value,
-                channel=channel.ROBOTS_DISABLED.value,
+                name=FirefightingMetrics.FINAL_FIREFIGHTERS_DISABLED.value,
+                channel=channel.FIREFIGHTERS_DISABLED.value,
                 per_episode=EpisodeReduction.LAST,
             ),
         ]
@@ -1503,7 +1528,7 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
 
 def create_firefighting_state(
     env: FirefightingPOMDP,
-    robots: Sequence[Sequence[int]],
+    firefighters: Sequence[Sequence[int]],
     wind: Tuple[int, int],
     fire: np.ndarray,
     step: int = 0,
@@ -1515,7 +1540,7 @@ def create_firefighting_state(
 
     Args:
         env: The environment whose layout is used.
-        robots: One ``(row, col, tank, health)`` sequence per robot.
+        firefighters: One ``(row, col, tank, health)`` sequence per firefighter.
         wind: ``(direction, strength)``.
         fire: ``(num_rows, num_cols)`` category codes.
         step: Step counter. Defaults to 0.
@@ -1524,19 +1549,19 @@ def create_firefighting_state(
         A ``float64`` state vector.
 
     Raises:
-        ValueError: If the robots or the fire map do not fit the environment.
+        ValueError: If the firefighters or the fire map do not fit the environment.
     """
-    if len(robots) != env.num_robots:
-        raise ValueError(f"expected {env.num_robots} robots, got {len(robots)}")
+    if len(firefighters) != env.num_firefighters:
+        raise ValueError(f"expected {env.num_firefighters} firefighters, got {len(firefighters)}")
     grid = np.asarray(fire, dtype=np.float64)
     if grid.shape != (env.num_rows, env.num_cols):
         raise ValueError(f"expected a {env.num_rows}x{env.num_cols} fire map, got {grid.shape}")
 
     state = np.zeros(env.state_size, dtype=np.float64)
     state[STEP_INDEX] = float(step)
-    for robot, fields in enumerate(robots):
-        base = ROBOT_OFFSET + ROBOT_FIELD_WIDTH * robot
-        state[base : base + ROBOT_FIELD_WIDTH] = np.asarray(fields, dtype=np.float64)
+    for firefighter, fields in enumerate(firefighters):
+        base = FIREFIGHTER_OFFSET + FIREFIGHTER_FIELD_WIDTH * firefighter
+        state[base : base + FIREFIGHTER_FIELD_WIDTH] = np.asarray(fields, dtype=np.float64)
     state[env.wind_direction_index] = float(wind[0])
     state[env.wind_strength_index] = float(wind[1])
     state[env.fire_offset :] = grid.ravel()
@@ -1551,8 +1576,8 @@ __all__ = [
     "FirefightingPOMDP",
     "FirefightingStepChannel",
     "NUM_WIND_VALUES",
-    "ROBOT_FIELD_WIDTH",
-    "ROBOT_OFFSET",
+    "FIREFIGHTER_FIELD_WIDTH",
+    "FIREFIGHTER_OFFSET",
     "STEP_INDEX",
     "UNKNOWN_CATEGORY",
     "WindDirection",

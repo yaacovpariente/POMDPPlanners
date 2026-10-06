@@ -2,8 +2,8 @@
 
 """Vectorized particle belief for the firefighting POMDP.
 
-The robots see the exact poses, tanks and healths of all of them, plus a noisy
-category for every cell within sensing range of a live robot. What they never
+The firefighters see the exact poses, tanks and healths of all of them, plus a noisy
+category for every cell within sensing range of a live firefighter. What they never
 see is the wind, which is drawn once at reset and held for the episode: it has
 to be inferred from which neighbours catch. So the hidden state is one static
 eight-valued variable and the categories of the cells nobody is looking at, and
@@ -13,7 +13,7 @@ That makes the per-particle cost a grid, not a scalar, which is why this
 updater exists: every stage of the transition -- motion, suppression, spread,
 growth and burnout, heat damage -- runs over the particle axis and the grid at
 once, in the order the environment fixes. The order is the model. Suppression
-before spread is what lets a robot stop a front by soaking the cell ahead of it
+before spread is what lets a firefighter stop a front by soaking the cell ahead of it
 in the same step, and growth on the cells that were alight *before* the spread
 is what stops a cell igniting and growing to burning inside one step.
 
@@ -21,7 +21,7 @@ Two things the belief does beyond the plain filter, both for the same reason --
 the reading is sharp enough to empty a naive particle set:
 
 * the poses, tanks and healths are reported exactly and depend on hidden state
-  (heat damage is read off a cell the robot may not have seen), so a particle
+  (heat damage is read off a cell the firefighter may not have seen), so a particle
   that disagrees with them is impossible. :class:`FirefightingVectorizedBelief`
   writes the reported values onto every particle instead of weighting by them;
 * the wind is static, so ordinary resampling deletes wind values permanently --
@@ -57,8 +57,8 @@ from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
     NUM_CATEGORIES,
-    ROBOT_FIELD_WIDTH,
-    ROBOT_OFFSET,
+    FIREFIGHTER_FIELD_WIDTH,
+    FIREFIGHTER_OFFSET,
     STEP_INDEX,
     FireCategory,
     FirefightingAction,
@@ -80,8 +80,8 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
     Attributes:
         num_rows: Grid rows.
         num_cols: Grid columns.
-        num_robots: Robots on the grid.
-        sensing_radius: Chebyshev radius each live robot sees.
+        num_firefighters: Firefighters on the grid.
+        sensing_radius: Chebyshev radius each live firefighter sees.
         observation_error_probability: Chance a visible cell is misreported.
     """
 
@@ -100,7 +100,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.num_rows = int(env.num_rows)
         self.num_cols = int(env.num_cols)
         self.num_cells = int(env.num_cells)
-        self.num_robots = int(env.num_robots)
+        self.num_firefighters = int(env.num_firefighters)
         self.max_tank = int(env.max_tank)
         self.depot_cell = (int(env.depot_cell[0]), int(env.depot_cell[1]))
         self.slip_probability = float(env.slip_probability)
@@ -117,7 +117,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         self.fire_offset = int(env.fire_offset)
         self.state_size = int(env.state_size)
         self.observation_size = int(env.observation_size)
-        self.robot_block = ROBOT_FIELD_WIDTH * self.num_robots
+        self.firefighter_block = FIREFIGHTER_FIELD_WIDTH * self.num_firefighters
 
         self.obstacle_mask = np.asarray(env.obstacle_mask, dtype=bool)
         self._action_table = np.asarray(
@@ -154,25 +154,26 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             return successors
         actions = self._action_table[int(np.asarray(action).ravel()[0])]
 
-        robots = self.robot_block_view(states)
+        firefighters = self.firefighter_block_view(states)
         fire = self.fire_maps(states)
 
-        positions = self._move(robots, actions, fire)
-        tanks = self._suppress(robots, actions, positions, fire)
+        positions = self._move(firefighters, actions, fire)
+        tanks = self._suppress(firefighters, actions, positions, fire)
         fire_after_suppression = np.array(fire, copy=True)
         self._spread(fire, fire_after_suppression, states)
         self._grow_and_burn_out(fire, fire_after_suppression)
-        healths = self._heat(robots, positions, fire)
+        healths = self._heat(firefighters, positions, fire)
 
         successors[:, STEP_INDEX] = states[:, STEP_INDEX] + 1.0
-        block = np.empty((len(states), self.num_robots, ROBOT_FIELD_WIDTH), dtype=np.float64)
+        block = np.empty(
+            (len(states), self.num_firefighters, FIREFIGHTER_FIELD_WIDTH), dtype=np.float64
+        )
         block[:, :, 0] = positions[:, :, 0]
         block[:, :, 1] = positions[:, :, 1]
         block[:, :, 2] = tanks
         block[:, :, 3] = healths
-        successors[:, ROBOT_OFFSET : ROBOT_OFFSET + self.robot_block] = block.reshape(
-            len(states), -1
-        )
+        fields = slice(FIREFIGHTER_OFFSET, FIREFIGHTER_OFFSET + self.firefighter_block)
+        successors[:, fields] = block.reshape(len(states), -1)
         successors[:, self.fire_offset :] = fire.reshape(len(states), -1).astype(np.float64)
         return successors
 
@@ -205,7 +206,8 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
             return np.full(states.shape[0], -np.inf, dtype=np.float64)
 
         exact = np.all(
-            states[:, ROBOT_OFFSET : ROBOT_OFFSET + self.robot_block] == values[: self.robot_block],
+            states[:, FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET + self.firefighter_block]
+            == values[: self.firefighter_block],
             axis=1,
         )
         return np.where(exact, self.cell_log_likelihood(states, values), -np.inf)
@@ -213,7 +215,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
     def cell_log_likelihood(self, next_particles: np.ndarray, observation: Any) -> np.ndarray:
         """Score only the cell categories of a reading.
 
-        The exactly-reported robot fields are a delta factor, so they contribute
+        The exactly-reported firefighter fields are a delta factor, so they contribute
         either zero or ``-inf``, and :class:`FirefightingVectorizedBelief`
         handles them by conditioning rather than by weighting. This is what it
         weights with.
@@ -227,7 +229,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         """
         states = np.asarray(next_particles, dtype=np.float64).reshape(-1, self.state_size)
         values = np.asarray(observation, dtype=np.float64).ravel()
-        reported = values[self.robot_block :]
+        reported = values[self.firefighter_block :]
         truth = np.rint(states[:, self.fire_offset :]).astype(np.int64)
 
         # The visible set follows from the poses, which every particle shares
@@ -270,7 +272,7 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 "class": "FirefightingVectorizedUpdater",
                 "num_rows": self.num_rows,
                 "num_cols": self.num_cols,
-                "num_robots": self.num_robots,
+                "num_firefighters": self.num_firefighters,
                 "max_tank": self.max_tank,
                 "depot_cell": list(self.depot_cell),
                 "obstacles": np.flatnonzero(self.obstacle_mask.ravel()).tolist(),
@@ -291,10 +293,10 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # Views
     # ------------------------------------------------------------------
 
-    def robot_block_view(self, states: np.ndarray) -> np.ndarray:
-        """``(N, num_robots, 4)`` robot fields. A copy, not a view."""
-        return states[:, ROBOT_OFFSET : ROBOT_OFFSET + self.robot_block].reshape(
-            -1, self.num_robots, ROBOT_FIELD_WIDTH
+    def firefighter_block_view(self, states: np.ndarray) -> np.ndarray:
+        """``(N, num_firefighters, 4)`` firefighter fields. A copy, not a view."""
+        return states[:, FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET + self.firefighter_block].reshape(
+            -1, self.num_firefighters, FIREFIGHTER_FIELD_WIDTH
         )
 
     def fire_maps(self, states: np.ndarray) -> np.ndarray:
@@ -306,19 +308,23 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         )
 
     def visible_masks(self, states: np.ndarray) -> np.ndarray:
-        """``(N, num_cells)`` mask of the cells some live robot can see.
+        """``(N, num_cells)`` mask of the cells some live firefighter can see.
 
-        Two robots standing together see barely more than one, so spreading out
-        is what buys information. A disabled robot sees nothing.
+        Two firefighters standing together see barely more than one, so spreading out
+        is what buys information. A disabled firefighter sees nothing.
         """
-        robots = self.robot_block_view(states)
+        firefighters = self.firefighter_block_view(states)
         rows = np.arange(self.num_rows)[None, :, None]
         cols = np.arange(self.num_cols)[None, None, :]
         visible = np.zeros((len(states), self.num_rows, self.num_cols), dtype=bool)
-        for robot in range(self.num_robots):
-            live = robots[:, robot, 3] > 0
-            near_row = np.abs(rows - robots[:, robot, 0][:, None, None]) <= self.sensing_radius
-            near_col = np.abs(cols - robots[:, robot, 1][:, None, None]) <= self.sensing_radius
+        for firefighter in range(self.num_firefighters):
+            live = firefighters[:, firefighter, 3] > 0
+            near_row = (
+                np.abs(rows - firefighters[:, firefighter, 0][:, None, None]) <= self.sensing_radius
+            )
+            near_col = (
+                np.abs(cols - firefighters[:, firefighter, 1][:, None, None]) <= self.sensing_radius
+            )
             visible |= live[:, None, None] & near_row & near_col
         return visible.reshape(len(states), -1)
 
@@ -326,23 +332,25 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
     # Transition stages
     # ------------------------------------------------------------------
 
-    def _move(self, robots: np.ndarray, actions: np.ndarray, fire: np.ndarray) -> np.ndarray:
+    def _move(self, firefighters: np.ndarray, actions: np.ndarray, fire: np.ndarray) -> np.ndarray:
         """Stage 1: motion, resolved against the pre-step fire map.
 
-        A disabled robot, a suppressing robot and a robot whose target is
+        A disabled firefighter, a suppressing firefighter and a firefighter whose target is
         inadmissible all stay put; the slip draw is taken only where a move
         could succeed.
         """
-        positions = np.array(robots[:, :, :2], copy=True)
-        for robot in range(self.num_robots):
-            action = int(actions[robot])
+        positions = np.array(firefighters[:, :, :2], copy=True)
+        for firefighter in range(self.num_firefighters):
+            action = int(actions[firefighter])
             if action == int(FirefightingAction.SUPPRESS):
                 continue
             offset = DIRECTION_OFFSETS[action]
-            target = positions[:, robot, :] + np.asarray(offset, dtype=np.float64)
-            admissible = self._is_admissible(target, fire) & (robots[:, robot, 3] > 0)
+            target = positions[:, firefighter, :] + np.asarray(offset, dtype=np.float64)
+            admissible = self._is_admissible(target, fire) & (firefighters[:, firefighter, 3] > 0)
             moved = admissible & (np.random.random(len(positions)) >= self.slip_probability)
-            positions[:, robot, :] = np.where(moved[:, None], target, positions[:, robot, :])
+            positions[:, firefighter, :] = np.where(
+                moved[:, None], target, positions[:, firefighter, :]
+            )
         return positions
 
     def _is_admissible(self, target: np.ndarray, fire: np.ndarray) -> np.ndarray:
@@ -358,28 +366,28 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
 
     def _suppress(
         self,
-        robots: np.ndarray,
+        firefighters: np.ndarray,
         actions: np.ndarray,
         positions: np.ndarray,
         fire: np.ndarray,
     ) -> np.ndarray:
         """Stage 2: suppression, then the tank, with a refill overriding the cost.
 
-        Each spraying robot covers its own cell and its four neighbours and the
-        counts add, so two robots covering one cell each get an independent
-        attempt at soaking it. A robot that sprays and steps into the depot on
+        Each spraying firefighter covers its own cell and its four neighbours and the
+        counts add, so two firefighters covering one cell each get an independent
+        attempt at soaking it. A firefighter that sprays and steps into the depot on
         the same step ends the step full.
         """
-        tanks = np.array(robots[:, :, 2], copy=True)
+        tanks = np.array(firefighters[:, :, 2], copy=True)
         counts = np.zeros((len(fire), self.num_rows, self.num_cols), dtype=np.int64)
-        for robot in range(self.num_robots):
-            if int(actions[robot]) != int(FirefightingAction.SUPPRESS):
+        for firefighter in range(self.num_firefighters):
+            if int(actions[firefighter]) != int(FirefightingAction.SUPPRESS):
                 continue
-            sprays = (robots[:, robot, 3] > 0) & (robots[:, robot, 2] > 0)
+            sprays = (firefighters[:, firefighter, 3] > 0) & (firefighters[:, firefighter, 2] > 0)
             if not np.any(sprays):
                 continue
-            rows = np.rint(positions[:, robot, 0]).astype(np.int64)
-            cols = np.rint(positions[:, robot, 1]).astype(np.int64)
+            rows = np.rint(positions[:, firefighter, 0]).astype(np.int64)
+            cols = np.rint(positions[:, firefighter, 1]).astype(np.int64)
             for offset_row, offset_col in ((0, 0),) + tuple(DIRECTION_OFFSETS):
                 target_row = rows + offset_row
                 target_col = cols + offset_col
@@ -391,7 +399,9 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
                 )
                 hit = np.flatnonzero(sprays & inside)
                 np.add.at(counts, (hit, target_row[hit], target_col[hit]), 1)
-            tanks[:, robot] = np.where(sprays, tanks[:, robot] - 1.0, tanks[:, robot])
+            tanks[:, firefighter] = np.where(
+                sprays, tanks[:, firefighter] - 1.0, tanks[:, firefighter]
+            )
 
         probability = 1.0 - np.power(1.0 - self._suppression_probabilities[fire], counts)
         soaked = (counts > 0) & (np.random.random(fire.shape) < probability)
@@ -447,22 +457,24 @@ class FirefightingVectorizedUpdater(VectorizedParticleBeliefUpdater):
         burnt = burning & (np.random.random(fire.shape) < self.burnout_probability)
         fire[burnt] = int(FireCategory.BURNT)
 
-    def _heat(self, robots: np.ndarray, positions: np.ndarray, fire: np.ndarray) -> np.ndarray:
-        """Stage 5: heat damage, read off the final map at each robot's final cell."""
-        healths = np.array(robots[:, :, 3], copy=True)
+    def _heat(
+        self, firefighters: np.ndarray, positions: np.ndarray, fire: np.ndarray
+    ) -> np.ndarray:
+        """Stage 5: heat damage, read off the final map at each firefighter's final cell."""
+        healths = np.array(firefighters[:, :, 3], copy=True)
         index = np.arange(len(fire))
-        for robot in range(self.num_robots):
-            rows = np.rint(positions[:, robot, 0]).astype(np.int64)
-            cols = np.rint(positions[:, robot, 1]).astype(np.int64)
+        for firefighter in range(self.num_firefighters):
+            rows = np.rint(positions[:, firefighter, 0]).astype(np.int64)
+            cols = np.rint(positions[:, firefighter, 1]).astype(np.int64)
             damage = self._heat_damage[fire[index, rows, cols]]
-            healths[:, robot] = np.maximum(healths[:, robot] - damage, 0.0)
+            healths[:, firefighter] = np.maximum(healths[:, firefighter] - damage, 0.0)
         return healths
 
 
 class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
-    """Vectorized belief that conditions on the robot fields and stratifies by wind.
+    """Vectorized belief that conditions on the firefighter fields and stratifies by wind.
 
-    See the module docstring for why both are needed. In short: the robot fields
+    See the module docstring for why both are needed. In short: the firefighter fields
     are reported without noise but depend on hidden state, so weighting by them
     empties the particle set; and the wind never changes, so resampling across
     wind values throws away hypotheses that no later evidence can restore.
@@ -475,7 +487,7 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
         pomdp: Any = None,
         state: Any = None,
     ) -> "FirefightingVectorizedBelief":
-        """Step, condition on the reported robot fields, reweight, resample by wind.
+        """Step, condition on the reported firefighter fields, reweight, resample by wind.
 
         Args:
             action: The joint action that was executed.
@@ -492,9 +504,9 @@ class FirefightingVectorizedBelief(VectorizedWeightedParticleBelief):
         next_particles = updater.batch_transition(self.particles, action)
 
         if values.size == updater.observation_size:
-            next_particles[:, ROBOT_OFFSET : ROBOT_OFFSET + updater.robot_block] = values[
-                : updater.robot_block
-            ]
+            next_particles[
+                :, FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET + updater.firefighter_block
+            ] = values[: updater.firefighter_block]
             log_likelihoods = updater.cell_log_likelihood(next_particles, values)
         else:
             log_likelihoods = updater.batch_observation_log_likelihood(

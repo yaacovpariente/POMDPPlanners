@@ -48,7 +48,7 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
   <img src="docs/images/pft_dpw_capture_the_flag.webp" alt="3D replay of part of a Capture the Flag episode planned by PFT-DPW" width="49%">
 </p>
 <p align="center">
-  <em>Episodes planned online by PFT-DPW and replayed in the package's 3D viewer. Left: <a href="POMDPPlanners/environments/firefighting_pomdp">Firefighting</a>, where the two robots put the fire out. Right: <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a>, where the blue team defends its half and tags a red attacker; it does not capture the flag in this episode.</em>
+  <em>Episodes planned online by PFT-DPW and replayed in the package's 3D viewer. Left: <a href="POMDPPlanners/environments/firefighting_pomdp">Firefighting</a>, where the two firefighters put the fire out. Right: <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a>, where the blue team defends its half and tags a red attacker; it does not capture the flag in this episode.</em>
 </p>
 </details>
 
@@ -374,7 +374,7 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | Occupancy Grid Mapping | Exploration that maps a hidden grid from noisy range scans |
 | CartPole / MountainCar | Partially observable versions of the Gym classics |
 | Push | Object manipulation under contact uncertainty |
-| Firefighting | Several robots put out a grid fire spread by a hidden wind |
+| Firefighting | Several firefighters put out a grid fire spread by a hidden wind |
 | Capture the Flag | Team game against hidden opponents and a hidden flag, sensed through noisy range readings |
 | Safety-Ant-Velocity | Safety-constrained quadruped locomotion |
 | Racetrack | Racing on [HighwayEnv](https://github.com/Farama-Foundation/HighwayEnv)'s racetrack, with matched fully and partially observed modes |

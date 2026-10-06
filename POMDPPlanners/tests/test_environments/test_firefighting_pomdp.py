@@ -42,16 +42,16 @@ def build_env(**overrides) -> FirefightingPOMDP:
     return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs(**overrides))
 
 
-def joint(*per_robot: int) -> int:
-    """Encode per-robot actions as one base-5 joint action.
+def joint(*per_firefighter: int) -> int:
+    """Encode per-firefighter actions as one base-5 joint action.
 
     Args:
-        *per_robot: One action per robot, robot 0 first.
+        *per_firefighter: One action per firefighter, firefighter 0 first.
 
     Returns:
         The joint action.
     """
-    return int(sum(int(action) * 5**index for index, action in enumerate(per_robot)))
+    return int(sum(int(action) * 5**index for index, action in enumerate(per_firefighter)))
 
 
 def empty_fire(env: FirefightingPOMDP) -> np.ndarray:
@@ -72,7 +72,7 @@ def empty_fire(env: FirefightingPOMDP) -> np.ndarray:
 
 
 def test_reward_range_is_derived_from_the_constructor_arguments() -> None:
-    """The declared range tracks the coefficients, the grid and the robot count.
+    """The declared range tracks the coefficients, the grid and the firefighter count.
 
     Purpose: The reward range is this repository's most-repeated bug, and the
         failure mode is a constant that was right for one configuration and
@@ -81,7 +81,7 @@ def test_reward_range_is_derived_from_the_constructor_arguments() -> None:
         derived bound from a hard-coded one that happens to match.
 
     Given: The default environment, one with a bigger grid, and one with more
-        robots and a different damage cost.
+        firefighters and a different damage cost.
     When: Their declared reward ranges are read.
     Then: Each equals the formula re-derived from that environment's own
         arguments, and the three differ from each other.
@@ -94,9 +94,13 @@ def test_reward_range_is_derived_from_the_constructor_arguments() -> None:
             "num_rows": 4,
             "num_cols": 7,
             "obstacle_cells": [(2, 3)],
-            "robot_start_cells": [(1, 1), (1, 2)],
+            "firefighter_start_cells": [(1, 1), (1, 2)],
         },
-        {"num_robots": 3, "robot_start_cells": [(2, 2), (2, 3), (3, 2)], "damage_cost": 3.0},
+        {
+            "num_firefighters": 3,
+            "firefighter_start_cells": [(2, 2), (2, 3), (3, 2)],
+            "damage_cost": 3.0,
+        },
         {"max_health": 1},
     ):
         env = build_env(**kwargs)
@@ -105,8 +109,8 @@ def test_reward_range_is_derived_from_the_constructor_arguments() -> None:
             env.step_cost
             + max(env.smoldering_cell_cost, env.burning_cell_cost, env.burnt_cell_cost)
             * env.num_cells
-            + env.damage_cost * env.num_robots * min(env.max_health, 2)
-            + env.water_cost * env.num_robots
+            + env.damage_cost * env.num_firefighters * min(env.max_health, 2)
+            + env.water_cost * env.num_firefighters
         )
         assert env.reward_range == pytest.approx((expected_min, expected_max))
 
@@ -116,7 +120,7 @@ def test_reward_range_is_derived_from_the_constructor_arguments() -> None:
             num_rows=4,
             num_cols=7,
             obstacle_cells=[(2, 3)],
-            robot_start_cells=[(1, 1), (1, 2)],
+            firefighter_start_cells=[(1, 1), (1, 2)],
         ).reward_range
     )
 
@@ -140,8 +144,8 @@ def test_reward_range_does_not_stack_the_alight_and_newly_burnt_budgets() -> Non
     summed = -(
         env.step_cost
         + (env.smoldering_cell_cost + env.burning_cell_cost + env.burnt_cell_cost) * env.num_cells
-        + env.damage_cost * env.num_robots * 2
-        + env.water_cost * env.num_robots
+        + env.damage_cost * env.num_firefighters * 2
+        + env.water_cost * env.num_firefighters
     )
     assert env.reward_range[0] > summed
 
@@ -151,10 +155,10 @@ def test_declared_minimum_bounds_a_hand_built_worst_case_step() -> None:
 
     Purpose: The bound is only worth anything if a bad step really cannot beat
         it. A hand-built step that burns a whole grid's worth of cells and
-        disables both robots is the closest a reachable transition gets.
+        disables both firefighters is the closest a reachable transition gets.
 
     Given: A successor where every non-obstacle cell is newly burnt and both
-        robots lost their maximum per-step health, reached by a joint SUPPRESS.
+        firefighters lost their maximum per-step health, reached by a joint SUPPRESS.
     When: The reward is computed for that transition.
     Then: It lies inside the declared range.
 
@@ -202,25 +206,28 @@ def test_declared_minimum_bounds_a_hand_built_worst_case_step() -> None:
 
 
 def test_joint_action_decodes_as_base_five_digits() -> None:
-    """Robot ``i`` is the ``i``-th base-5 digit, least significant first.
+    """Firefighter ``i`` is the ``i``-th base-5 digit, least significant first.
 
-    Purpose: The joint action is the one place several robots are squeezed into
-        one integer, and an endianness slip there swaps the robots silently --
+    Purpose: The joint action is the one place several firefighters are squeezed into
+        one integer, and an endianness slip there swaps the firefighters silently --
         every episode still runs, and every result is wrong.
 
-    Given: The default two-robot environment and a three-robot one.
+    Given: The default two-firefighter environment and a three-firefighter one.
     When: Every joint action is decoded and re-encoded.
     Then: The decoding round-trips, and a known action decodes to the digits
         the formal definition gives.
 
     Test type: unit
     """
-    for env in (build_env(), build_env(num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)])):
+    for env in (
+        build_env(),
+        build_env(num_firefighters=3, firefighter_start_cells=[(2, 2), (2, 3), (3, 2)]),
+    ):
         actions = env.get_actions()
-        assert actions == list(range(5**env.num_robots))
+        assert actions == list(range(5**env.num_firefighters))
         for action in actions:
-            per_robot = env.decode_action(action)
-            assert joint(*per_robot) == action
+            per_firefighter = env.decode_action(action)
+            assert joint(*per_firefighter) == action
     env = build_env()
     assert list(env.decode_action(joint(FirefightingAction.SUPPRESS, FirefightingAction.EAST))) == [
         int(FirefightingAction.SUPPRESS),
@@ -236,13 +243,13 @@ def test_joint_action_decodes_as_base_five_digits() -> None:
 
 
 def test_motion_is_refused_by_edges_obstacles_and_burnt_cells() -> None:
-    """The three inadmissible targets all leave the robot where it was.
+    """The three inadmissible targets all leave the firefighter where it was.
 
     Purpose: "Admissible" has three separate clauses and each has been an
-        off-by-one somewhere. A robot that can walk through a wall, or onto
+        off-by-one somewhere. A firefighter that can walk through a wall, or onto
         ash, changes what the task is.
 
-    Given: A robot placed against the north edge, beside the obstacle blob,
+    Given: A firefighter placed against the north edge, beside the obstacle blob,
         and beside a burnt cell, with slipping turned off.
     When: It is told to move into each of them, many times.
     Then: It never moves, and a legal move always succeeds.
@@ -263,23 +270,23 @@ def test_motion_is_refused_by_edges_obstacles_and_burnt_cells() -> None:
         state = create_firefighting_state(env, [(row, col, 6, 3), (9, 0, 6, 3)], (0, 0), fire)
         for _ in range(5):
             successor = env.sample_next_state(state, joint(action, FirefightingAction.SUPPRESS))
-            assert tuple(env.robots(successor)[0, :2]) == (row, col)
+            assert tuple(env.firefighters(successor)[0, :2]) == (row, col)
 
     state = create_firefighting_state(env, [(4, 4, 6, 3), (9, 0, 6, 3)], (0, 0), fire)
     successor = env.sample_next_state(
         state, joint(FirefightingAction.EAST, FirefightingAction.SUPPRESS)
     )
-    assert tuple(env.robots(successor)[0, :2]) == (4, 5)
+    assert tuple(env.firefighters(successor)[0, :2]) == (4, 5)
 
 
 def test_slipping_sometimes_refuses_an_otherwise_legal_move() -> None:
     """The slip probability is the rate at which an admissible move fails.
 
-    Purpose: Slipping is the only stochasticity in the robots' own motion, and
+    Purpose: Slipping is the only stochasticity in the firefighters' own motion, and
         a version that never fires would make the poses deterministic and quietly
         change what the belief has to track.
 
-    Given: A robot with a legal move and a slip probability of 0.5.
+    Given: A firefighter with a legal move and a slip probability of 0.5.
     When: The move is sampled many times.
     Then: Roughly half the attempts stay put, and at a slip probability of 1.0
         none of them move.
@@ -293,7 +300,7 @@ def test_slipping_sometimes_refuses_an_otherwise_legal_move() -> None:
     np.random.seed(0)
     moved = sum(
         tuple(
-            fire_env.robots(
+            fire_env.firefighters(
                 fire_env.sample_next_state(
                     state, joint(FirefightingAction.EAST, FirefightingAction.SUPPRESS)
                 )
@@ -310,18 +317,18 @@ def test_slipping_sometimes_refuses_an_otherwise_legal_move() -> None:
         successor = always.sample_next_state(
             state, joint(FirefightingAction.EAST, FirefightingAction.SUPPRESS)
         )
-        assert tuple(always.robots(successor)[0, :2]) == (4, 4)
+        assert tuple(always.firefighters(successor)[0, :2]) == (4, 4)
 
 
-def test_a_disabled_robot_ignores_its_digit_of_the_joint_action() -> None:
-    """Zero health means the robot is scenery, not a smaller action space.
+def test_a_disabled_firefighter_ignores_its_digit_of_the_joint_action() -> None:
+    """Zero health means the firefighter is scenery, not a smaller action space.
 
     Purpose: The action space stays ``5 ** N`` whatever has happened to the
-        robots, so the inert part of it has to be genuinely inert -- a disabled
-        robot that still moved, or still sprayed, would keep costing water and
+        firefighters, so the inert part of it has to be genuinely inert -- a disabled
+        firefighter that still moved, or still sprayed, would keep costing water and
         keep changing the map.
 
-    Given: A disabled robot told to move, and a disabled robot told to spray a
+    Given: A disabled firefighter told to move, and a disabled firefighter told to spray a
         burning cell it is standing next to.
     When: The transition is sampled, with slipping off.
     Then: It does not move, its tank is untouched, and the fire is unchanged.
@@ -335,13 +342,13 @@ def test_a_disabled_robot_ignores_its_digit_of_the_joint_action() -> None:
     successor = env.sample_next_state(
         state, joint(FirefightingAction.EAST, FirefightingAction.SUPPRESS)
     )
-    assert tuple(env.robots(successor)[0, :2]) == (4, 4)
+    assert tuple(env.firefighters(successor)[0, :2]) == (4, 4)
 
     state = create_firefighting_state(env, [(4, 4, 6, 0), (9, 0, 6, 0)], (0, 0), fire)
     successor = env.sample_next_state(
         state, joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS)
     )
-    assert int(env.robots(successor)[0, 2]) == 6
+    assert int(env.firefighters(successor)[0, 2]) == 6
     assert int(env.fire_map(successor)[4, 5]) != int(FireCategory.WET)
 
 
@@ -350,14 +357,14 @@ def test_a_disabled_robot_ignores_its_digit_of_the_joint_action() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_suppression_soaks_the_robot_cell_and_its_four_neighbours() -> None:
+def test_suppression_soaks_the_firefighter_cell_and_its_four_neighbours() -> None:
     """One spray covers ``N+(p)``, and unburnt cells are pre-wetted.
 
     Purpose: Suppression reaching neighbours is the point of the design -- it
         is what lets a careful planner fight from an adjacent cell -- and the
         unburnt case is how a firebreak gets built ahead of the front.
 
-    Given: A robot in the middle of an all-unburnt grid, whose unburnt
+    Given: A firefighter in the middle of an all-unburnt grid, whose unburnt
         suppression probability is 1.
     When: It sprays once.
     Then: Exactly its own cell and its four neighbours are wet, and one unit
@@ -373,20 +380,20 @@ def test_suppression_soaks_the_robot_cell_and_its_four_neighbours() -> None:
     wet = {tuple(cell) for cell in np.argwhere(env.fire_map(successor) == int(FireCategory.WET))}
     expected = {(4, 4)} | {(4 + dr, 4 + dc) for dr, dc in DIRECTION_OFFSETS}
     assert wet == expected
-    assert int(env.robots(successor)[0, 2]) == 5
+    assert int(env.firefighters(successor)[0, 2]) == 5
 
 
 def test_two_sprays_on_one_cell_beat_one() -> None:
-    """Overlapping coverage gives each robot an independent attempt.
+    """Overlapping coverage gives each firefighter an independent attempt.
 
-    Purpose: This is the only place in the model where the robots genuinely
+    Purpose: This is the only place in the model where the firefighters genuinely
         cooperate rather than divide the work, so a version that took the
         maximum rather than compounding would silently remove the reason to
-        put two robots on one cell.
+        put two firefighters on one cell.
 
-    Given: A burning cell covered by one robot, then by two.
+    Given: A burning cell covered by one firefighter, then by two.
     When: The soak rate is measured over many samples.
-    Then: The two-robot rate matches ``1 - (1 - q)^2`` and beats the one-robot
+    Then: The two-firefighter rate matches ``1 - (1 - q)^2`` and beats the one-firefighter
         rate, which matches ``q``.
 
     Test type: integration
@@ -424,13 +431,13 @@ def test_two_sprays_on_one_cell_beat_one() -> None:
 
 
 def test_an_empty_tank_sprays_nothing_and_pays_nothing() -> None:
-    """A dry robot choosing SUPPRESS is a no-op, not a free spray.
+    """A dry firefighter choosing SUPPRESS is a no-op, not a free spray.
 
     Purpose: If an empty tank still soaked cells the depot would be pointless,
         and if it still charged the water cost the planner would be paying for
         nothing it could observe.
 
-    Given: A robot with an empty tank beside a burning cell.
+    Given: A firefighter with an empty tank beside a burning cell.
     When: It chooses SUPPRESS many times.
     Then: The cell never becomes wet, the tank stays at zero, and the reward
         carries no water cost.
@@ -446,7 +453,7 @@ def test_an_empty_tank_sprays_nothing_and_pays_nothing() -> None:
     for _ in range(40):
         successor = env.sample_next_state(state, action)
         assert int(env.fire_map(successor)[4, 4]) != int(FireCategory.WET)
-        assert int(env.robots(successor)[0, 2]) == 0
+        assert int(env.firefighters(successor)[0, 2]) == 0
     assert (
         env.step_info(state, action, successor)[FirefightingStepChannel.SUPPRESS_ACTIONS.value]
         == 0.0
@@ -454,13 +461,13 @@ def test_an_empty_tank_sprays_nothing_and_pays_nothing() -> None:
 
 
 def test_entering_the_depot_refills_and_overrides_the_spray_cost() -> None:
-    """A robot that sprays into the depot ends the step full.
+    """A firefighter that sprays into the depot ends the step full.
 
     Purpose: The refill rule is written to override the suppression cost rather
         than to be applied before it, and getting the order wrong costs the
         planner one unit on exactly the step it was trying to top up.
 
-    Given: A robot one cell from the depot, and a robot standing on it.
+    Given: A firefighter one cell from the depot, and a firefighter standing on it.
     When: It moves in, and separately sprays while standing on it.
     Then: Both end the step with a full tank.
 
@@ -477,8 +484,8 @@ def test_entering_the_depot_refills_and_overrides_the_spray_cost() -> None:
     successor = env.sample_next_state(
         state, joint(FirefightingAction.NORTH, FirefightingAction.NORTH)
     )
-    assert tuple(env.robots(successor)[0, :2]) == env.depot_cell
-    assert int(env.robots(successor)[0, 2]) == env.max_tank
+    assert tuple(env.firefighters(successor)[0, :2]) == env.depot_cell
+    assert int(env.firefighters(successor)[0, 2]) == env.max_tank
 
     state = create_firefighting_state(
         env, [(depot_row, depot_col, 1, 3), (5, 0, 6, 3)], (0, 0), fire
@@ -486,7 +493,7 @@ def test_entering_the_depot_refills_and_overrides_the_spray_cost() -> None:
     successor = env.sample_next_state(
         state, joint(FirefightingAction.SUPPRESS, FirefightingAction.NORTH)
     )
-    assert int(env.robots(successor)[0, 2]) == env.max_tank
+    assert int(env.firefighters(successor)[0, 2]) == env.max_tank
 
 
 # ---------------------------------------------------------------------------
@@ -505,7 +512,7 @@ def test_spread_favours_the_downwind_neighbour_under_every_wind(direction, stren
         asymmetric fire, so nothing else in the suite would notice.
 
     Given: One burning cell in the middle of an otherwise unburnt grid, no
-        robots near it, and each of the eight wind values in turn.
+        firefighters near it, and each of the eight wind values in turn.
     When: A single transition is sampled many times and the ignition rate of
         each of the four neighbours is measured.
     Then: The neighbour in the wind's own direction ignites at the boosted
@@ -517,7 +524,7 @@ def test_spread_favours_the_downwind_neighbour_under_every_wind(direction, stren
     env = build_env(obstacle_cells=[], growth_probability=0.0, burnout_probability=0.0)
     fire = empty_fire(env)
     fire[4, 4] = float(FireCategory.BURNING)
-    # Both robots parked far away with SUPPRESS so nothing they do reaches the fire.
+    # Both firefighters parked far away with SUPPRESS so nothing they do reaches the fire.
     state = create_firefighting_state(
         env, [(0, 0, 0, 3), (9, 9, 0, 3)], (int(direction), int(strength)), fire
     )
@@ -580,7 +587,7 @@ def test_a_cell_cannot_ignite_and_grow_in_the_same_step() -> None:
 
     Purpose: If a freshly ignited cell were eligible for growth in its own
         step, a fire would reach full intensity a step earlier everywhere, and
-        the window the robots have to reach a new ignition while it is still
+        the window the firefighters have to reach a new ignition while it is still
         cheap -- which is exactly what ``growth_probability`` is there to set --
         would shrink with nothing to show for it.
 
@@ -616,12 +623,12 @@ def test_a_cell_cannot_ignite_and_grow_in_the_same_step() -> None:
 def test_heat_damage_is_one_on_smoldering_and_two_on_burning() -> None:
     """Standing in fire costs health in proportion to its intensity.
 
-    Purpose: With the default health of 3 a robot survives one burning step and
+    Purpose: With the default health of 3 a firefighter survives one burning step and
         is disabled by the second, which is what makes fighting from an
         adjacent cell the intended play rather than a nicety. A damage table
         off by one changes that policy.
 
-    Given: A robot standing on each category in turn, unable to move.
+    Given: A firefighter standing on each category in turn, unable to move.
     When: One transition is taken.
     Then: It loses 1 on smoldering, 2 on burning and nothing otherwise, and
         health never goes below zero.
@@ -644,7 +651,7 @@ def test_heat_damage_is_one_on_smoldering_and_two_on_burning() -> None:
         successor = env.sample_next_state(
             state, joint(FirefightingAction.NORTH, FirefightingAction.NORTH)
         )
-        assert int(env.robots(successor)[0, 3]) == 3 - damage
+        assert int(env.firefighters(successor)[0, 3]) == 3 - damage
 
     fire = empty_fire(env)
     fire[4, 4] = float(FireCategory.BURNING)
@@ -652,7 +659,7 @@ def test_heat_damage_is_one_on_smoldering_and_two_on_burning() -> None:
     successor = env.sample_next_state(
         state, joint(FirefightingAction.NORTH, FirefightingAction.NORTH)
     )
-    assert int(env.robots(successor)[0, 3]) == 0
+    assert int(env.firefighters(successor)[0, 3]) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -661,16 +668,16 @@ def test_heat_damage_is_one_on_smoldering_and_two_on_burning() -> None:
 
 
 def test_only_cells_inside_a_live_footprint_are_reported() -> None:
-    """Chebyshev radius ``rho`` around every live robot, and nothing else.
+    """Chebyshev radius ``rho`` around every live firefighter, and nothing else.
 
     Purpose: The visible set is what makes this a POMDP rather than a fully
-        observed grid, and a disabled robot that still saw would quietly
+        observed grid, and a disabled firefighter that still saw would quietly
         remove the cost of losing one.
 
-    Given: One live robot and one disabled robot far apart.
+    Given: One live firefighter and one disabled firefighter far apart.
     When: An observation is drawn.
-    Then: Exactly the live robot's ``(2 rho + 1)`` block carries a category,
-        every other cell carries the unknown marker, and the robots' own poses,
+    Then: Exactly the live firefighter's ``(2 rho + 1)`` block carries a category,
+        every other cell carries the unknown marker, and the firefighters' own poses,
         tanks and healths are reported exactly.
 
     Test type: unit
@@ -682,7 +689,7 @@ def test_only_cells_inside_a_live_footprint_are_reported() -> None:
     np.random.seed(1)
     observation = env.sample_observation(state, 0)
 
-    reported = observation[4 * env.num_robots :].reshape(env.num_rows, env.num_cols)
+    reported = observation[4 * env.num_firefighters :].reshape(env.num_rows, env.num_cols)
     seen = np.argwhere(reported >= 0)
     expected = {
         (row, col)
@@ -690,7 +697,7 @@ def test_only_cells_inside_a_live_footprint_are_reported() -> None:
         for col in range(4 - env.sensing_radius, 4 + env.sensing_radius + 1)
     }
     assert {tuple(cell) for cell in seen} == expected
-    assert np.array_equal(observation[: 4 * env.num_robots], [4, 4, 6, 3, 0, 9, 6, 0])
+    assert np.array_equal(observation[: 4 * env.num_firefighters], [4, 4, 6, 3, 0, 9, 6, 0])
 
 
 def test_the_observation_likelihood_is_the_confusion_matrix() -> None:
@@ -721,20 +728,20 @@ def test_the_observation_likelihood_is_the_confusion_matrix() -> None:
     wrong = 0
     total = 0
     for _ in range(400):
-        reported = env.sample_observation(state, 0)[4 * env.num_robots :]
+        reported = env.sample_observation(state, 0)[4 * env.num_firefighters :]
         wrong += int(np.count_nonzero(reported[visible] != truth[visible]))
         total += int(np.count_nonzero(visible))
     assert wrong / total == pytest.approx(0.2, abs=0.02)
 
     observation = env.sample_observation(state, 0)
-    reported = observation[4 * env.num_robots :]
+    reported = observation[4 * env.num_firefighters :]
     mismatches = int(np.count_nonzero(reported[visible] != truth[visible]))
     matches = int(np.count_nonzero(visible)) - mismatches
     expected = matches * np.log(0.8) + mismatches * np.log(0.2 / 4.0)
     assert env.observation_log_probability(state, 0, [observation])[0] == pytest.approx(expected)
 
     impossible = observation.copy()
-    impossible[4 * env.num_robots + 0] = float(FireCategory.UNBURNT)  # cell (0, 0) is unseen
+    impossible[4 * env.num_firefighters + 0] = float(FireCategory.UNBURNT)  # cell (0, 0) is unseen
     assert env.observation_log_probability(state, 0, [impossible])[0] == -np.inf
 
     wrong_pose = observation.copy()
@@ -780,7 +787,7 @@ def test_the_transition_density_matches_sampling_and_sums_to_one() -> None:
         is invisible in every rollout and corrupts every belief. On a world
         small enough to enumerate, the two can simply be compared.
 
-    Given: A 3x3 world with one robot, a mixed fire map, and three actions.
+    Given: A 3x3 world with one firefighter, a mixed fire map, and three actions.
     When: Many successors are sampled and each distinct one is also scored
         analytically.
     Then: The analytic masses of the sampled successors sum to one, and each
@@ -792,10 +799,10 @@ def test_the_transition_density_matches_sampling_and_sums_to_one() -> None:
         discount_factor=0.95,
         num_rows=3,
         num_cols=3,
-        num_robots=1,
+        num_firefighters=1,
         obstacle_cells=[(0, 2)],
         depot_cell=(2, 2),
-        robot_start_cells=[(1, 1)],
+        firefighter_start_cells=[(1, 1)],
         num_initial_fires=1,
         max_tank=2,
         max_health=2,
@@ -903,15 +910,15 @@ def test_the_wind_is_identifiable_from_the_spread_pattern() -> None:
 
 
 def test_terminal_precedence_puts_the_goal_ahead_of_the_failure() -> None:
-    """A fire put out by robots that then burned out is still a success.
+    """A fire put out by firefighters that then burned out is still a success.
 
     Purpose: Terminal does not mean success anywhere in this repository, and
         the three end-reason rates are what tell a reader whether a low
         completion rate is bad risk-taking or too small a step budget. Scoring
         a won episode as a failure would invert that reading.
 
-    Given: A fire-free state whose robots are all disabled, a still-burning
-        state whose robots are all disabled, and a still-burning state at the
+    Given: A fire-free state whose firefighters are all disabled, a still-burning
+        state whose firefighters are all disabled, and a still-burning state at the
         step budget.
     When: Terminality and the end-reason channels are read.
     Then: All three are terminal, and they report goal, failure and timeout
@@ -926,23 +933,23 @@ def test_terminal_precedence_puts_the_goal_ahead_of_the_failure() -> None:
         (None, [(4, 4, 6, 3), (4, 5, 6, 3)], env.max_steps, "timeout"),
     ]
     channel = FirefightingStepChannel
-    for fire, robots, step, expected in cases:
+    for fire, firefighters, step, expected in cases:
         grid = empty_fire(env) if fire is None else fire
         if expected != "goal":
             grid[0, 0] = float(FireCategory.BURNING)
-        state = create_firefighting_state(env, robots, (0, 0), grid, step=step)
+        state = create_firefighting_state(env, firefighters, (0, 0), grid, step=step)
         assert env.is_terminal(state)
         info = env.step_info(state, None, None)
         rates = {
             "goal": info[channel.FIRE_EXTINGUISHED.value],
-            "failure": info[channel.ALL_ROBOTS_DISABLED.value],
+            "failure": info[channel.ALL_FIREFIGHTERS_DISABLED.value],
             "timeout": info[channel.TIMED_OUT_WITH_FIRE.value],
         }
         assert rates[expected] == 1.0
         assert sum(rates.values()) == pytest.approx(1.0)
 
 
-def test_all_robots_disabled_is_only_terminal_when_the_flag_is_set() -> None:
+def test_all_firefighters_disabled_is_only_terminal_when_the_flag_is_set() -> None:
     """The flag changes termination and nothing else.
 
     Purpose: It is the kind of flag that has added a reward term elsewhere in
@@ -958,11 +965,11 @@ def test_all_robots_disabled_is_only_terminal_when_the_flag_is_set() -> None:
     """
     fire = empty_fire(build_env())
     fire[0, 0] = float(FireCategory.BURNING)
-    on = build_env(is_all_robots_disabled_terminal=True)
-    off = build_env(is_all_robots_disabled_terminal=False)
-    robots = [(4, 4, 6, 0), (4, 5, 6, 0)]
-    assert on.is_terminal(create_firefighting_state(on, robots, (0, 0), fire, step=5))
-    assert not off.is_terminal(create_firefighting_state(off, robots, (0, 0), fire, step=5))
+    on = build_env(is_all_firefighters_disabled_terminal=True)
+    off = build_env(is_all_firefighters_disabled_terminal=False)
+    firefighters = [(4, 4, 6, 0), (4, 5, 6, 0)]
+    assert on.is_terminal(create_firefighting_state(on, firefighters, (0, 0), fire, step=5))
+    assert not off.is_terminal(create_firefighting_state(off, firefighters, (0, 0), fire, step=5))
     assert on.reward_range == off.reward_range
 
 
@@ -975,7 +982,7 @@ def test_step_info_reports_the_danger_channels_from_the_realised_transition() ->
         the wrong state or the wrong step is invisible until someone compares
         two planners.
 
-    Given: A transition in which one robot stands in a burning cell and both
+    Given: A transition in which one firefighter stands in a burning cell and both
         spray.
     When: ``step_info`` is called on it, and again on the terminal bookkeeping
         step.
@@ -999,9 +1006,9 @@ def test_step_info_reports_the_danger_channels_from_the_realised_transition() ->
     assert info[channel.HEALTH_LOST.value] == 2.0
     assert info[channel.SUPPRESS_ACTIONS.value] == 2.0
     assert info[channel.ALIGHT_CELLS.value] == 2.0
-    assert info[channel.ROBOT_IN_ALIGHT_CELL.value] == 1.0
+    assert info[channel.FIREFIGHTER_IN_ALIGHT_CELL.value] == 1.0
     assert info[channel.BURNT_CELL_FRACTION.value] == pytest.approx(1.0 / env.num_cells)
-    assert info[channel.ROBOTS_DISABLED.value] == 0.0
+    assert info[channel.FIREFIGHTERS_DISABLED.value] == 0.0
 
     terminal = env.step_info(successor, None, None)
     assert terminal[channel.HEALTH_LOST.value] == 0.0
@@ -1050,7 +1057,7 @@ def test_reset_always_lights_a_fire_and_never_lights_an_obstacle() -> None:
     Given: Many draws from the reset distribution.
     When: Their fire maps, winds, poses, tanks and healths are inspected.
     Then: Each has exactly ``num_initial_fires`` burning cells, none on an
-        obstacle, robots at their posts with full tanks and health, and the
+        obstacle, firefighters at their posts with full tanks and health, and the
         eight winds all appear.
 
     Test type: integration
@@ -1067,10 +1074,10 @@ def test_reset_always_lights_a_fire_and_never_lights_an_obstacle() -> None:
         for row, col in burning:
             assert not env.obstacle_mask[row, col]
         assert np.count_nonzero(fire != int(FireCategory.UNBURNT)) == 3
-        robots = env.robots(state)
-        assert [tuple(cell) for cell in robots[:, :2]] == env.robot_start_cells
-        assert np.all(robots[:, 2] == env.max_tank)
-        assert np.all(robots[:, 3] == env.max_health)
+        firefighters = env.firefighters(state)
+        assert [tuple(cell) for cell in firefighters[:, :2]] == env.firefighter_start_cells
+        assert np.all(firefighters[:, 2] == env.max_tank)
+        assert np.all(firefighters[:, 3] == env.max_health)
         winds.add(env.wind(state))
     assert len(winds) == 8
 
@@ -1136,7 +1143,7 @@ def test_serialization_round_trips_the_cell_sequence_arguments() -> None:
         assert rebuilt == env
         assert rebuilt.obstacle_cells == env.obstacle_cells
         assert rebuilt.depot_cell == env.depot_cell
-        assert rebuilt.robot_start_cells == env.robot_start_cells
+        assert rebuilt.firefighter_start_cells == env.firefighter_start_cells
 
 
 def test_an_empty_obstacle_list_is_not_the_default_obstacle_blob() -> None:
@@ -1174,8 +1181,8 @@ def test_the_constructor_rejects_an_impossible_world() -> None:
     """
     bad = [
         {"depot_cell": (5, 5)},  # inside the default obstacle blob
-        {"robot_start_cells": [(5, 5), (2, 3)]},  # a robot inside it
-        {"robot_start_cells": [(2, 2)]},  # one cell for two robots
+        {"firefighter_start_cells": [(5, 5), (2, 3)]},  # a firefighter inside it
+        {"firefighter_start_cells": [(2, 2)]},  # one cell for two firefighters
         {"num_initial_fires": 0},  # goal free at reset
         {"num_initial_fires": 1000},  # more fires than ignitable cells
         {"spread_probability": 1.5},
@@ -1183,7 +1190,7 @@ def test_the_constructor_rejects_an_impossible_world() -> None:
         {"step_cost": -1.0},
         {"max_steps": 0},
         {"max_health": 0},
-        {"num_robots": 0},
+        {"num_firefighters": 0},
     ]
     for kwargs in bad:
         with pytest.raises(ValueError):
@@ -1220,19 +1227,19 @@ def test_the_observation_likelihood_is_finite_at_both_error_extremes(error) -> N
     assert score == pytest.approx(0.0) if error == 0.0 else np.isfinite(score)
 
 
-def test_explicit_robot_starts_are_not_judged_by_the_default_placement_rule() -> None:
+def test_explicit_firefighter_starts_are_not_judged_by_the_default_placement_rule() -> None:
     """A supplied layout is accepted even where the default rule would refuse.
 
-    Purpose: The default placement keeps robots off the depot so that nobody
+    Purpose: The default placement keeps firefighters off the depot so that nobody
         starts with a free refill. That is a rule about the *default*, not about
         what a caller may ask for -- and on a grid with no free cell to spare it
         cannot be satisfied at all. Building it eagerly let it reject layouts
         nothing was going to use.
 
     Given: A one-cell open grid whose only cell is both the depot and the
-        robot's explicit start.
+        firefighter's explicit start.
     When: The environment is constructed.
-    Then: It builds, and the robot starts where it was told to.
+    Then: It builds, and the firefighter starts where it was told to.
 
     Test type: unit
     """
@@ -1240,11 +1247,11 @@ def test_explicit_robot_starts_are_not_judged_by_the_default_placement_rule() ->
         discount_factor=0.95,
         num_rows=1,
         num_cols=1,
-        num_robots=1,
+        num_firefighters=1,
         obstacle_cells=[],
         depot_cell=(0, 0),
-        robot_start_cells=[(0, 0)],
+        firefighter_start_cells=[(0, 0)],
         num_initial_fires=1,
     )
-    assert env.robot_start_cells == [(0, 0)]
+    assert env.firefighter_start_cells == [(0, 0)]
     assert env.depot_cell == (0, 0)

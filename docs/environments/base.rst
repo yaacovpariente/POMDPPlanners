@@ -102,8 +102,8 @@ Guide column says which page to open for a given class.
      - none
      - :doc:`chicheck_invaders`
    * - ``FirefightingPOMDP``
-     - Put out a wind-driven grid fire with several partially sighted robots.
-     - ``[step, robots, wind, cells]``
+     - Put out a wind-driven grid fire with several partially sighted firefighters.
+     - ``[step, firefighters, wind, cells]``
      - discrete
      - discrete
      - none

@@ -288,13 +288,13 @@ _HAND_WRITTEN_BELIEF_SPECS: List[BeliefSpec] = [
         "FirefightingVectorizedBelief",
         # Slip, spread and burn-out are drawn in another order.
         transition_shares_rng=False,
-        # Writes the noiseless robot fields into the particles and resamples
+        # Writes the noiseless firefighter fields into the particles and resamples
         # within each wind value.
         update_matches_reference=False,
         **_SHARP_READING,
     ),
     BeliefSpec(
-        "FirefightingPOMDP[3 robots]",
+        "FirefightingPOMDP[3 firefighters]",
         "FirefightingVectorizedUpdater",
         "FirefightingVectorizedBelief",
         transition_shares_rng=False,

@@ -47,7 +47,10 @@ def _belief(env: FirefightingPOMDP, winds, fire) -> WeightedParticleBelief:
     particles = [
         create_firefighting_state(
             env,
-            robots=[(2, 2, env.max_tank, env.max_health), (2, 3, env.max_tank, env.max_health)],
+            firefighters=[
+                (2, 2, env.max_tank, env.max_health),
+                (2, 3, env.max_tank, env.max_health),
+            ],
             wind=wind,
             fire=fire,
         )
@@ -73,7 +76,7 @@ def _episode(env: FirefightingPOMDP, length: int = 3) -> List[StepData]:
         is_last = step == length - 1
         state = create_firefighting_state(
             env,
-            robots=[
+            firefighters=[
                 (2, 2 + step, env.max_tank - step, env.max_health),
                 (2, 3 + step, env.max_tank, env.max_health - step),
             ],
@@ -131,11 +134,11 @@ def test_trace_carries_the_recorded_state_not_a_reconstruction(env):
         blocks. Re-deriving any of them from the environment's defaults would
         produce a convincing picture of an episode nobody ran.
 
-    Given: An episode whose robots move and spend tank and health, over a fire
+    Given: An episode whose firefighters move and spend tank and health, over a fire
         map with one burning cell.
     When: The trace is built.
-    Then: Each step's fire map, robot block and wind equal the recorded state's,
-        and the joint action is written as its per-robot digits.
+    Then: Each step's fire map, firefighter block and wind equal the recorded state's,
+        and the joint action is written as its per-firefighter digits.
 
     Test type: unit
     """
@@ -144,16 +147,18 @@ def test_trace_carries_the_recorded_state_not_a_reconstruction(env):
 
     for index, step in enumerate(history):
         assert payload["fires"][index] == [int(v) for v in env.fire_map(step.state).ravel()]
-        assert payload["robots"][index] == [[int(f) for f in row] for row in env.robots(step.state)]
+        assert payload["firefighters"][index] == [
+            [int(f) for f in row] for row in env.firefighters(step.state)
+        ]
         assert payload["winds"][index] == list(env.wind(step.state))
         assert payload["step_counts"][index] == env.step_count(step.state)
 
-    assert payload["robot_actions"][0] == [
+    assert payload["firefighter_actions"][0] == [
         int(FirefightingAction.SUPPRESS),
         int(FirefightingAction.EAST),
     ]
     # The terminal bookkeeping step carries a state but no decision.
-    assert payload["robot_actions"][-1] is None
+    assert payload["firefighter_actions"][-1] is None
 
 
 def test_trace_delegates_belief_serialization_to_core(env):
@@ -228,7 +233,7 @@ def test_trace_takes_the_world_from_the_instance(env):
 
     assert payload["num_rows"] == env.num_rows
     assert payload["num_cols"] == env.num_cols
-    assert payload["num_robots"] == env.num_robots
+    assert payload["num_firefighters"] == env.num_firefighters
     assert payload["depot_cell"] == [env.depot_cell[0], env.depot_cell[1]]
     assert payload["obstacle_cells"] == [[r, c] for r, c in env.obstacle_cells]
     assert payload["sensing_radius"] == env.sensing_radius
@@ -252,7 +257,10 @@ def test_trace_inherits_the_subsampling_cap(env):
         StepData(
             state=create_firefighting_state(
                 env,
-                robots=[(2, 2, env.max_tank, env.max_health), (2, 3, env.max_tank, env.max_health)],
+                firefighters=[
+                    (2, 2, env.max_tank, env.max_health),
+                    (2, 3, env.max_tank, env.max_health),
+                ],
                 wind=(int(WindDirection.EAST), int(WindStrength.HIGH)),
                 fire=fire,
             ),

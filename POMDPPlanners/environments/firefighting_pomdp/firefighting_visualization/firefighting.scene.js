@@ -3,8 +3,8 @@
  * Firefighting scene module.
  *
  * Builds the world from a trace's `payload.world` block and moves it from the
- * trace's recorded fire maps, robot poses and beliefs. Nothing here is
- * invented: there is no fallback episode, no hand-placed robot and no
+ * trace's recorded fire maps, firefighter poses and beliefs. Nothing here is
+ * invented: there is no fallback episode, no hand-placed firefighter and no
  * synthetic belief. If the player hands this module no trace, it draws
  * nothing and says so.
  *
@@ -37,12 +37,12 @@
 
   /* The five category codes, in FireCategory order. */
   var UNBURNT = 0, SMOLDERING = 1, BURNING = 2, BURNT = 3, WET = 4;
-  /* SUPPRESS is the last per-robot action, as FirefightingAction declares. */
+  /* SUPPRESS is the last per-firefighter action, as FirefightingAction declares. */
   var SUPPRESS = 4;
 
   /* Engine trim colours. Helmet and pack panel only: a figure painted head to
      toe in a team colour is a game piece. Cycled, so a run with more than two
-     robots still gives each one an identity. */
+     firefighters still gives each one an identity. */
   var CREW_COLORS = [
     { helmet: 0xE8641E, panel: 0xD4581A, tag: "#FF8E5E" },
     { helmet: 0xE8C022, panel: 0xD4A81A, tag: "#FFD24C" },
@@ -345,10 +345,10 @@
    * Build the wind panel and put it under the viewer.
    *
    * @param {Object} world   The trace's world block, for the labels.
-   * @param {number} robots  How many engines to give a crew line to.
+   * @param {number} firefighters  How many engines to give a crew line to.
    * @returns {Object} Handles the scene writes into each step.
    */
-  function buildPanel(world, robots) {
+  function buildPanel(world, firefighters) {
     if (!document.getElementById("ff-panel-style")) {
       var style = document.createElement("style");
       style.id = "ff-panel-style";
@@ -426,7 +426,7 @@
     var crew = document.createElement("div");
     crew.className = "ff-crew";
     var crewCells = [];
-    for (var r = 0; r < robots; r++) {
+    for (var r = 0; r < firefighters; r++) {
       var item = document.createElement("div");
       var tag = document.createElement("i");
       tag.className = "ff-tag";
@@ -968,7 +968,7 @@
 
     var ROWS = world.num_rows, COLS = world.num_cols;
     var CELLS = ROWS * COLS;
-    var ROBOTS = world.num_robots;
+    var FIREFIGHTERS = world.num_firefighters;
     var STEPS = payload.fires.length;
     var LAYOUT = world.state_layout;
     var STRENGTHS = world.num_wind_strengths || 2;
@@ -1001,25 +1001,25 @@
 
     /* ------------------------------------------------------- the episode
        Everything below is read off the trace. The fire maps are the recorded
-       discrete categories; the poses, tanks and healths are the recorded robot
-       block; the per-robot actions are the recorded joint action, decoded by
+       discrete categories; the poses, tanks and healths are the recorded firefighter
+       block; the per-firefighter actions are the recorded joint action, decoded by
        the exporter. Nothing is smoothed here. */
     var FIRE = payload.fires;
     var WINDS = payload.winds;
     function catAt(t, row, col) {
       return FIRE[clamp(t, 0, STEPS - 1)][row * COLS + col];
     }
-    function robotAt(t, r) { return payload.robots[clamp(t, 0, STEPS - 1)][r]; }
+    function firefighterAt(t, r) { return payload.firefighters[clamp(t, 0, STEPS - 1)][r]; }
     function actionAt(t, r) {
-      var acts = payload.robot_actions[clamp(t, 0, STEPS - 1)];
+      var acts = payload.firefighter_actions[clamp(t, 0, STEPS - 1)];
       return acts === null || acts === undefined ? null : acts[r];
     }
-    /* Whether this robot's spray actually happens, by the model's own rule: a
-       live robot, the SUPPRESS digit, and a non-empty tank. A robot choosing
+    /* Whether this firefighter's spray actually happens, by the model's own rule: a
+       live firefighter, the SUPPRESS digit, and a non-empty tank. A firefighter choosing
        SUPPRESS on an empty tank does nothing and pays nothing, and drawing
        water for it would be drawing an action the model refused. */
     function isSpraying(t, r) {
-      var fields = robotAt(t, r);
+      var fields = firefighterAt(t, r);
       return actionAt(t, r) === SUPPRESS && fields[2] > 0 && fields[3] > 0;
     }
 
@@ -1342,14 +1342,14 @@
       }
 
       // Trodden ground: the depot apron, both start cells and every cell a
-      // robot stood on. These are what make a cell legible without ruling a
+      // firefighter stood on. These are what make a cell legible without ruling a
       // lattice over the fuel, and they come from the episode rather than
       // from a decorator's guess about where the crew went.
       var scuffs = [DEPOT];
-      world.robot_start_cells.forEach(function (cell) { scuffs.push(cell); });
+      world.firefighter_start_cells.forEach(function (cell) { scuffs.push(cell); });
       for (var st = 0; st < STEPS; st++) {
-        for (var sr = 0; sr < ROBOTS; sr++) {
-          var fields = payload.robots[st][sr];
+        for (var sr = 0; sr < FIREFIGHTERS; sr++) {
+          var fields = payload.firefighters[st][sr];
           scuffs.push([fields[0], fields[1]]);
         }
       }
@@ -1446,7 +1446,7 @@
     /* Trees, tied to the cell they stand on so a canopy chars when that cell
        goes. Placed by rejection rather than by a hand-written list: they must
        keep off the obstacles, off the depot, off every cell the fire reaches
-       and off every cell a robot stands on, because a tree planted on the
+       and off every cell a firefighter stands on, because a tree planted on the
        crew's route would be a decoration contradicting the episode. */
     var swayers = [];
     var cellTrees = {};
@@ -1458,8 +1458,8 @@
         for (var c = 0; c < CELLS; c++) {
           if (FIRE[t][c] !== UNBURNT) busy[Math.floor(c / COLS) + ":" + (c % COLS)] = true;
         }
-        for (var r = 0; r < ROBOTS; r++) {
-          var f = payload.robots[t][r];
+        for (var r = 0; r < FIREFIGHTERS; r++) {
+          var f = payload.firefighters[t][r];
           busy[f[0] + ":" + f[1]] = true;
         }
       }
@@ -1632,7 +1632,7 @@
       });
     })();
 
-    /* The obstacle cells as broken rock. A robot cannot enter one and a fire
+    /* The obstacle cells as broken rock. A firefighter cannot enter one and a fire
        cannot cross one, so they are the only shelter on the grid, and drawing
        them as anything a fire could cross would misstate the world. */
     (function outcrop() {
@@ -1896,7 +1896,7 @@
     var shared = { steel: steelMat, pool: poolTex };
     var units = [];
     var unitLabels = [];
-    for (var u = 0; u < ROBOTS; u++) {
+    for (var u = 0; u < FIREFIGHTERS; u++) {
       var unit = buildFirefighter(CREW_COLORS[u % CREW_COLORS.length], shared);
       unit.userData.sootBase = unit.userData.soot.map(function (m) { return m.color.clone(); });
       scene.add(unit);
@@ -1904,7 +1904,7 @@
     }
 
     /* The sensing footprint: the Chebyshev square of radius rho around each
-       live robot, which is exactly the window the observation reports. Drawn
+       live firefighter, which is exactly the window the observation reports. Drawn
        as an outline on the ground rather than a lit tile, because it is a
        window on the world and not a thing in it. */
     var footprints = units.map(function (ignored, k) {
@@ -1979,8 +1979,8 @@
     });
 
     /* ------------------------------------------------------------ water */
-    var JET_PER_ROBOT = 210;
-    var JET_N = JET_PER_ROBOT * ROBOTS;
+    var JET_PER_FIREFIGHTER = 210;
+    var JET_N = JET_PER_FIREFIGHTER * FIREFIGHTERS;
     var jetPos = new Float32Array(JET_N * 3);
     var jetCol = new Float32Array(JET_N * 3);
     var jetState = [];
@@ -1989,7 +1989,7 @@
       var rnd = mulberry(7717);
       for (var i = 0; i < JET_N; i++) {
         jetState.push({
-          life: 9, span: 1, robot: Math.floor(i / JET_PER_ROBOT),
+          life: 9, span: 1, firefighter: Math.floor(i / JET_PER_FIREFIGHTER),
           vx: 0, vy: 0, vz: 0, x: 0, y: -50, z: 0,
           // A fifth of the drops break off the stream early and fall short,
           // which is what turns a solid arc into a jet with spray around it.
@@ -2059,7 +2059,7 @@
     var damps = [];
     (function buildDamp() {
       var rnd = mulberry(4242);
-      for (var i = 0; i < 6 * ROBOTS; i++) {
+      for (var i = 0; i < 6 * FIREFIGHTERS; i++) {
         var m = new THREE.Mesh(new THREE.PlaneGeometry(1.06, 1.06),
           new THREE.MeshStandardMaterial({
             color: 0x22262A, map: maskTex[i % 4], alphaMap: maskTex[(i + 1) % 4],
@@ -2147,7 +2147,7 @@
     });
 
     /* --------------------------------------------------------- playback */
-    var panel = buildPanel(world, ROBOTS);
+    var panel = buildPanel(world, FIREFIGHTERS);
     var showTrueWind = false, smokeOn = true, senseOn = true;
     panel.toggles.truewind.addEventListener("change", function () {
       showTrueWind = panel.toggles.truewind.checked;
@@ -2181,7 +2181,7 @@
       var i0 = Math.floor(clamp(t, 0, STEPS - 1));
       var i1 = Math.min(i0 + 1, STEPS - 1);
       var f = ease(clamp(t - i0, 0, 1));
-      var a = robotAt(i0, r), b = robotAt(i1, r);
+      var a = firefighterAt(i0, r), b = firefighterAt(i1, r);
       return { row: lerp(a[0], b[0], f), col: lerp(a[1], b[1], f) };
     }
 
@@ -2210,10 +2210,10 @@
     }
 
     var headings = [], travelHeading = [], lastCell = [];
-    for (var hi = 0; hi < ROBOTS; hi++) {
+    for (var hi = 0; hi < FIREFIGHTERS; hi++) {
       headings.push(Math.PI / 2);
       travelHeading.push(Math.PI / 2);
-      lastCell.push([robotAt(0, hi)[0], robotAt(0, hi)[1]]);
+      lastCell.push([firefighterAt(0, hi)[0], firefighterAt(0, hi)[1]]);
     }
 
     /* How much flame a category carries. The MODEL is binary -- a cell is
@@ -2229,7 +2229,7 @@
     }
 
     /* ---------------------------------------------------- the hose sweep
-       The model sprays a plus -- the robot's own cell and its four neighbours
+       The model sprays a plus -- the firefighter's own cell and its four neighbours
        -- and that coverage set is not negotiable. But water leaves a hose
        ALONG the hose, so emitting it towards all five cells at once puts water
        out of the firefighter's back and sides with no relation to where the
@@ -2240,14 +2240,14 @@
        and at any instant there is exactly one jet going exactly where the line
        is aimed. */
     var sweepCache = [];
-    for (var sc = 0; sc < ROBOTS; sc++) sweepCache.push({ step: -1, order: [], cum: [] });
+    for (var sc = 0; sc < FIREFIGHTERS; sc++) sweepCache.push({ step: -1, order: [], cum: [] });
 
     function buildSweep(r, step) {
       var cache = sweepCache[r];
       cache.step = step;
       cache.order = [];
       cache.cum = [];
-      var own = robotAt(step, r);
+      var own = firefighterAt(step, r);
       var ring = [];
       for (var d = 0; d < DIR.length; d++) {
         var rr = own[0] + DIR[d][0], cc = own[1] + DIR[d][1];
@@ -2551,12 +2551,12 @@
 
       // --- the crew
       var midX = 0, midZ = 0, live = 0;
-      for (var r = 0; r < ROBOTS; r++) {
+      for (var r = 0; r < FIREFIGHTERS; r++) {
         var unit = units[r];
         var cell = cellAt(r, t);
         var y = groundY(cell.row, cell.col);
         unit.position.set(wx(cell.col), y, wz(cell.row));
-        var fields = robotAt(step, r);
+        var fields = firefighterAt(step, r);
         var aim = isSpraying(step, r) ? sweepAim(r, step, frac) : null;
         sprayAim[r] = aim;
 
@@ -2577,7 +2577,7 @@
         applyHeading(unit, headings[r]);
         lastCell[r] = [cell.row, cell.col];
 
-        var here = robotAt(step, r), next = robotAt(Math.min(step + 1, STEPS - 1), r);
+        var here = firefighterAt(step, r), next = firefighterAt(Math.min(step + 1, STEPS - 1), r);
         var moving = (Math.abs(here[0] - next[0]) + Math.abs(here[1] - next[1])) > 0;
         var swing = moving && !reduceMotion ? Math.sin(t * Math.PI * 4) * 0.55 : 0;
         setGait(unit, swing);
@@ -2608,7 +2608,7 @@
         var lk = clamp(core.camera.position.distanceTo(tmpV) * 0.030, 0.26, 0.52);
         unitLabels[r].scale.set(lk * 3.34, lk * 1.0, 1);
 
-        // A disabled robot sees nothing, which is the model's own rule, so its
+        // A disabled firefighter sees nothing, which is the model's own rule, so its
         // window is not drawn.
         footprints[r].visible = senseOn && fields[3] > 0;
         // Its ring goes with it: the ring marks the crew still working.
@@ -2627,7 +2627,7 @@
         crewFollow.x = midX / live;
         crewFollow.z = midZ / live;
         var spread = 0;
-        for (var a1 = 0; a1 < ROBOTS; a1++) {
+        for (var a1 = 0; a1 < FIREFIGHTERS; a1++) {
           spread = Math.max(spread, Math.hypot(units[a1].position.x - crewFollow.x,
                                                units[a1].position.z - crewFollow.z));
         }
@@ -2641,7 +2641,7 @@
          that could send water in a direction the barrel is not pointing. The
          five cells of the model's footprint are covered by sweeping this one
          jet across them over the step, not by firing at all of them at once. */
-      for (var rb = 0; rb < ROBOTS; rb++) {
+      for (var rb = 0; rb < FIREFIGHTERS; rb++) {
         var launch = jetLaunch[rb];
         var aimR = sprayAim[rb];
         launch.on = !!aimR && !reduceMotion;
@@ -2663,7 +2663,7 @@
       var splashWanted = [];
       for (var j = 0; j < JET_N; j++) {
         var drop = jetState[j];
-        var source = jetLaunch[drop.robot];
+        var source = jetLaunch[drop.firefighter];
         drop.life += dt;
         if (drop.life > drop.span) {
           // It landed. Mark the aim cell for a splash, then re-launch.
@@ -2733,7 +2733,7 @@
          in the order the line visits them, so by the end of the step the whole
          plus is wet -- which is the coverage the model applies all at once. */
       var dampUsed = 0;
-      for (var rb2 = 0; rb2 < ROBOTS; rb2++) {
+      for (var rb2 = 0; rb2 < FIREFIGHTERS; rb2++) {
         if (!jetLaunch[rb2].on) continue;
         var order = sweepCache[rb2].order, cums = sweepCache[rb2].cum;
         for (var ti = 0; ti < order.length && dampUsed < damps.length; ti++) {
@@ -2783,8 +2783,8 @@
           clearRose(panel, marginal.why);
           beliefLabel = marginal.why;
         }
-        for (var cr = 0; cr < ROBOTS; cr++) {
-          var crewFields = robotAt(step, cr);
+        for (var cr = 0; cr < FIREFIGHTERS; cr++) {
+          var crewFields = firefighterAt(step, cr);
           var act = actionAt(step, cr);
           var actName = act === null || act === undefined ? "—" : world.action_names[act];
           if (act === SUPPRESS && crewFields[2] <= 0) actName = "suppress (dry tank)";
@@ -2797,7 +2797,7 @@
       void playing;
 
       var envelope = trace.steps[step] || {};
-      var lead = robotAt(step, 0);
+      var lead = firefighterAt(step, 0);
       return {
         follow: crewFollow,
         step: step,
@@ -2817,7 +2817,7 @@
        engines did, so both are shown rather than one standing in for the
        other. */
     function describeActions(step) {
-      var acts = payload.robot_actions[step];
+      var acts = payload.firefighter_actions[step];
       if (acts === null || acts === undefined) return "—";
       var names = acts.map(function (a) { return world.action_names[a] || String(a); });
       var joint = (trace.steps[step] || {}).action;

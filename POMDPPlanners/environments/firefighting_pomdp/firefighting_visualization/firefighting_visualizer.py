@@ -14,7 +14,7 @@ know whether what they are looking at is the run or a reconstruction.
   family of implementations, so
   :func:`~POMDPPlanners.core.simulation.belief_payloads.belief_to_payload`
   writes it for every environment. A firefighting particle *is* a whole state
-  vector -- robots, wind and the hundred cells -- so the viewer's wind rose is
+  vector -- firefighters, wind and the hundred cells -- so the viewer's wind rose is
   a projection the viewer computes from those particles, at the indices this
   payload names in ``world.state_layout``. It is the run's own belief, read a
   different way, not a second belief invented for drawing.
@@ -36,8 +36,8 @@ from POMDPPlanners.core.simulation.traces import to_jsonable
 from POMDPPlanners.environments.firefighting_pomdp.firefighting_world import (
     DIRECTION_OFFSETS,
     HEAT_DAMAGE,
-    ROBOT_FIELD_WIDTH,
-    ROBOT_OFFSET,
+    FIREFIGHTER_FIELD_WIDTH,
+    FIREFIGHTER_OFFSET,
     STEP_INDEX,
     FireCategory,
     FirefightingAction,
@@ -53,7 +53,7 @@ FIREFIGHTING_PAYLOAD_KIND = "firefighting.v1"
 #: its own that could drift from :class:`FireCategory`.
 CATEGORY_NAMES = [category.name.lower() for category in FireCategory]
 
-#: Per-robot action names in code order, for the same reason.
+#: Per-firefighter action names in code order, for the same reason.
 ACTION_NAMES = [action.name.lower() for action in FirefightingAction]
 
 #: The eight hidden wind values, indexed ``direction * len(WindStrength) +
@@ -82,10 +82,12 @@ def _world_block(environment: Any) -> Dict[str, Any]:
     return {
         "num_rows": int(environment.num_rows),
         "num_cols": int(environment.num_cols),
-        "num_robots": int(environment.num_robots),
+        "num_firefighters": int(environment.num_firefighters),
         "obstacle_cells": [[int(row), int(col)] for row, col in environment.obstacle_cells],
         "depot_cell": [int(environment.depot_cell[0]), int(environment.depot_cell[1])],
-        "robot_start_cells": [[int(row), int(col)] for row, col in environment.robot_start_cells],
+        "firefighter_start_cells": [
+            [int(row), int(col)] for row, col in environment.firefighter_start_cells
+        ],
         "sensing_radius": int(environment.sensing_radius),
         "max_tank": int(environment.max_tank),
         "max_health": int(environment.max_health),
@@ -105,8 +107,8 @@ def _world_block(environment: Any) -> Dict[str, Any]:
         # the viewer read the wind out of the run's own belief.
         "state_layout": {
             "step_index": int(STEP_INDEX),
-            "robot_offset": int(ROBOT_OFFSET),
-            "robot_field_width": int(ROBOT_FIELD_WIDTH),
+            "firefighter_offset": int(FIREFIGHTER_OFFSET),
+            "firefighter_field_width": int(FIREFIGHTER_FIELD_WIDTH),
             "wind_direction_index": int(environment.wind_direction_index),
             "wind_strength_index": int(environment.wind_strength_index),
             "fire_offset": int(environment.fire_offset),
@@ -152,10 +154,10 @@ class FirefightingVisualizer(TraceVisualizer):
         environment: Any = self.environment
 
         fires: List[List[int]] = []
-        robots: List[List[List[int]]] = []
+        firefighters: List[List[List[int]]] = []
         winds: List[List[int]] = []
         step_counts: List[int] = []
-        robot_actions: List[Optional[List[int]]] = []
+        firefighter_actions: List[Optional[List[int]]] = []
         observations: List[Any] = []
         beliefs: List[Dict[str, Any]] = []
 
@@ -164,13 +166,15 @@ class FirefightingVisualizer(TraceVisualizer):
             # Flat row-major, which is how the state stores it and how a viewer
             # indexes a grid; reshaping is the viewer's business.
             fires.append([int(value) for value in environment.fire_map(state).ravel()])
-            robots.append([[int(field) for field in row] for row in environment.robots(state)])
+            firefighters.append(
+                [[int(field) for field in row] for row in environment.firefighters(state)]
+            )
             winds.append([int(value) for value in environment.wind(state)])
             step_counts.append(int(environment.step_count(state)))
-            # The joint action is one integer; its per-robot digits are what a
+            # The joint action is one integer; its per-firefighter digits are what a
             # viewer draws. Decoded here rather than in the viewer, so the base-5
             # convention lives in exactly one language.
-            robot_actions.append(
+            firefighter_actions.append(
                 None
                 if step.action is None
                 else [int(value) for value in environment.decode_action(step.action)]
@@ -181,10 +185,10 @@ class FirefightingVisualizer(TraceVisualizer):
         payload: Dict[str, Any] = {
             "world": _world_block(environment),
             "fires": fires,
-            "robots": robots,
+            "firefighters": firefighters,
             "winds": winds,
             "step_counts": step_counts,
-            "robot_actions": robot_actions,
+            "firefighter_actions": firefighter_actions,
             "observations": observations,
             "beliefs": beliefs,
         }

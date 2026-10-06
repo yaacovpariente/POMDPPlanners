@@ -365,7 +365,7 @@ def discrete_maze_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
 def firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     """Pinned optional defaults for ``FirefightingPOMDP``.
 
-    ``obstacle_cells``, ``depot_cell`` and ``robot_start_cells`` default to
+    ``obstacle_cells``, ``depot_cell`` and ``firefighter_start_cells`` default to
     ``None`` in the constructor and are substituted with a concrete layout, so
     the substituted values are pinned here rather than ``None`` -- the
     convention this module documents. Each call returns fresh lists so two
@@ -374,10 +374,10 @@ def firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
     pinned: Dict[str, Any] = {
         "num_rows": 10,
         "num_cols": 10,
-        "num_robots": 2,
+        "num_firefighters": 2,
         "obstacle_cells": [(5, 5), (5, 6), (6, 5), (6, 6)],
         "depot_cell": (0, 0),
-        "robot_start_cells": [(2, 2), (2, 3)],
+        "firefighter_start_cells": [(2, 2), (2, 3)],
         "num_initial_fires": 1,
         "max_tank": 6,
         "max_health": 3,
@@ -401,7 +401,7 @@ def firefighting_pinned_kwargs(**overrides: Any) -> Dict[str, Any]:
         "burnt_cell_cost": 5.0,
         "damage_cost": 10.0,
         "water_cost": 0.1,
-        "is_all_robots_disabled_terminal": True,
+        "is_all_firefighters_disabled_terminal": True,
     }
     pinned.update(overrides)
     return pinned

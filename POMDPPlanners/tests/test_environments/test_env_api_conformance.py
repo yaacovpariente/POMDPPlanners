@@ -236,13 +236,15 @@ def _build_firefighting(**overrides: Any) -> FirefightingPOMDP:
     return FirefightingPOMDP(discount_factor=0.95, **firefighting_pinned_kwargs(**overrides))
 
 
-def _build_firefighting_three_robots() -> FirefightingPOMDP:
-    # A third robot is a different action space (125 joint actions, not 25) and
+def _build_firefighting_three_firefighters() -> FirefightingPOMDP:
+    # A third firefighter is a different action space (125 joint actions, not 25) and
     # a different state length, so the layout arithmetic and the base-5 action
     # decoding get covered at more than one width.
     return FirefightingPOMDP(
         discount_factor=0.95,
-        **firefighting_pinned_kwargs(num_robots=3, robot_start_cells=[(2, 2), (2, 3), (3, 2)]),
+        **firefighting_pinned_kwargs(
+            num_firefighters=3, firefighter_start_cells=[(2, 2), (2, 3), (3, 2)]
+        ),
     )
 
 
@@ -339,7 +341,7 @@ HAND_WRITTEN_ENV_BUILDERS: List[Tuple[str, Callable[..., Environment]]] = [
     ("DiscreteLightDarkPOMDP", _build_discrete_light_dark),
     ("DiscreteMazePOMDP", _build_discrete_maze),
     ("FirefightingPOMDP", _build_firefighting),
-    ("FirefightingPOMDP[3 robots]", _build_firefighting_three_robots),
+    ("FirefightingPOMDP[3 firefighters]", _build_firefighting_three_firefighters),
     ("LaserTagPOMDP", _build_laser_tag),
     ("MountainCarPOMDP", _build_mountain_car),
     ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),

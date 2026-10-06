@@ -40,11 +40,16 @@
     belief: document.getElementById("hud-belief")
   };
 
-  fetch(root.dataset.trace, { cache: "no-store" })
-    .then(function (response) {
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      return response.json();
-    })
+  /* A page may carry its trace inline, as a script that sets
+     POMDP_INLINE_TRACE. The docs do, because a browser will not let a
+     file:// page fetch a JSON file, and a script tag loads either way. */
+  var load = global.POMDP_INLINE_TRACE
+    ? Promise.resolve(global.POMDP_INLINE_TRACE)
+    : fetch(root.dataset.trace, { cache: "no-store" }).then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        return response.json();
+      });
+  load
     .then(start)
     .catch(function (error) {
       status("Could not load this episode's trace: " + error.message, true);

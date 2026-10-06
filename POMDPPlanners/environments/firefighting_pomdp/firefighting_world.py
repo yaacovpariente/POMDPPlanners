@@ -3,9 +3,9 @@
 """The world a firefighting episode is played on, and its prior.
 
 This module holds everything about the firefighting POMDP that is *not* the
-transition, observation or reward law: the cell categories, the per-robot
+transition, observation or reward law: the cell categories, the per-firefighter
 actions, the eight hidden wind values, the default obstacle blob / depot /
-robot start cells, and the initial state distribution.
+firefighter start cells, and the initial state distribution.
 
 Keeping it separate from the environment matters for one reason in particular.
 The hidden state of this environment is the wind *and* the fire, and where both
@@ -16,7 +16,7 @@ memorise the answer instead of inferring it.
 
 Classes:
     FireCategory: The five per-cell categories.
-    FirefightingAction: The five per-robot actions.
+    FirefightingAction: The five per-firefighter actions.
     WindDirection: The four wind directions.
     WindStrength: The two wind strengths.
     FirefightingInitialStateDistribution: The reset distribution.
@@ -24,7 +24,7 @@ Classes:
 Functions:
     default_obstacle_cells: The default obstacle blob for a grid.
     default_depot_cell: The default depot cell for a grid.
-    default_robot_start_cells: The default robot start cells for a grid.
+    default_firefighter_start_cells: The default firefighter start cells for a grid.
 """
 
 from enum import IntEnum
@@ -61,10 +61,10 @@ class FireCategory(IntEnum):
 
 #: Index of the step counter inside a state vector.
 STEP_INDEX = 0
-#: Index at which the per-robot block starts.
-ROBOT_OFFSET = 1
-#: Scalars per robot inside that block: row, column, tank, health.
-ROBOT_FIELD_WIDTH = 4
+#: Index at which the per-firefighter block starts.
+FIREFIGHTER_OFFSET = 1
+#: Scalars per firefighter inside that block: row, column, tank, health.
+FIREFIGHTER_FIELD_WIDTH = 4
 
 #: Number of cell categories. Used by the observation confusion matrix, which
 #: spreads its error mass over the ``NUM_CATEGORIES - 1`` wrong categories.
@@ -72,14 +72,14 @@ NUM_CATEGORIES = len(FireCategory)
 
 
 class FirefightingAction(IntEnum):
-    """One robot's action. The joint action is these in base 5.
+    """One firefighter's action. The joint action is these in base 5.
 
     Attributes:
         NORTH: Attempt to move one cell north (decreasing row).
         EAST: Attempt to move one cell east (increasing column).
         SOUTH: Attempt to move one cell south (increasing row).
         WEST: Attempt to move one cell west (decreasing column).
-        SUPPRESS: Spray this robot's own cell and its four neighbours.
+        SUPPRESS: Spray this firefighter's own cell and its four neighbours.
     """
 
     NORTH = 0
@@ -89,10 +89,10 @@ class FirefightingAction(IntEnum):
     SUPPRESS = 4
 
 
-#: Number of per-robot actions, and therefore the base the joint action is
-#: written in: the joint action space has ``NUM_ROBOT_ACTIONS ** num_robots``
+#: Number of per-firefighter actions, and therefore the base the joint action is
+#: written in: the joint action space has ``NUM_FIREFIGHTER_ACTIONS ** num_firefighters``
 #: members.
-NUM_ROBOT_ACTIONS = len(FirefightingAction)
+NUM_FIREFIGHTER_ACTIONS = len(FirefightingAction)
 
 
 class WindDirection(IntEnum):
@@ -142,12 +142,12 @@ NUM_WIND_VALUES = len(WindDirection) * len(WindStrength)
 DIRECTION_OFFSETS: Tuple[Tuple[int, int], ...] = ((-1, 0), (0, 1), (1, 0), (0, -1))
 
 #: Health lost per step standing on a cell of each category. With the default
-#: ``max_health`` of 3 a robot survives one burning step and is disabled by the
+#: ``max_health`` of 3 a firefighter survives one burning step and is disabled by the
 #: second, which is what makes fighting from an adjacent cell the intended play
 #: rather than a nicety.
 HEAT_DAMAGE: Tuple[int, ...] = (0, 1, 2, 0, 0)
 
-#: The most health one robot can lose in one step, i.e. the damage of standing
+#: The most health one firefighter can lose in one step, i.e. the damage of standing
 #: in a ``BURNING`` cell. Named because the declared reward range needs it.
 MAX_HEAT_DAMAGE_PER_STEP = max(HEAT_DAMAGE)
 
@@ -158,7 +158,7 @@ def default_obstacle_cells(num_rows: int, num_cols: int) -> List[Tuple[int, int]
     One small square block just past the middle of the grid, clipped at the
     edges. A blob rather than a scatter, and one rather than several, because
     the obstacles are here to stop the grid being trivially open -- to make a
-    robot's route to the far side of a fire cost something -- not to turn the
+    firefighter's route to the far side of a fire cost something -- not to turn the
     task into a maze.
 
     Args:
@@ -207,10 +207,10 @@ def default_depot_cell(
     raise ValueError("every cell is an obstacle, so there is nowhere to put the depot")
 
 
-def default_robot_start_cells(
+def default_firefighter_start_cells(
     num_rows: int,
     num_cols: int,
-    num_robots: int,
+    num_firefighters: int,
     obstacle_cells: Sequence[Tuple[int, int]],
     depot_cell: Tuple[int, int],
 ) -> List[Tuple[int, int]]:
@@ -218,11 +218,11 @@ def default_robot_start_cells(
 
     The scan begins at ``(num_rows // 4, num_cols // 4)``, wraps in row-major
     order, and skips obstacles and the depot. On the default 10x10 grid that
-    puts the robots at ``(2, 2)`` and ``(2, 3)``: a short trip from the
+    puts the firefighters at ``(2, 2)`` and ``(2, 3)``: a short trip from the
     north-west depot, so refilling is a real but affordable interruption, and
     not so central that they start on top of every fire.
 
-    The robots start adjacent to each other rather than spread out. Spreading
+    The firefighters start adjacent to each other rather than spread out. Spreading
     out buys information -- two footprints that do not overlap see twice as
     much -- and starting them apart would hand a planner that benefit for free
     instead of making it choose to take it.
@@ -230,15 +230,15 @@ def default_robot_start_cells(
     Args:
         num_rows: Grid rows.
         num_cols: Grid columns.
-        num_robots: How many start cells to return.
-        obstacle_cells: Cells a robot may not start on.
-        depot_cell: The depot, kept clear so no robot starts with a free refill.
+        num_firefighters: How many start cells to return.
+        obstacle_cells: Cells a firefighter may not start on.
+        depot_cell: The depot, kept clear so no firefighter starts with a free refill.
 
     Returns:
-        ``num_robots`` distinct start cells.
+        ``num_firefighters`` distinct start cells.
 
     Raises:
-        ValueError: If the grid has fewer free cells than robots.
+        ValueError: If the grid has fewer free cells than firefighters.
     """
     num_cells = int(num_rows) * int(num_cols)
     blocked = {(int(row), int(col)) for row, col in obstacle_cells}
@@ -250,20 +250,20 @@ def default_robot_start_cells(
         cell = (index // int(num_cols), index % int(num_cols))
         if cell not in blocked:
             cells.append(cell)
-            if len(cells) == int(num_robots):
+            if len(cells) == int(num_firefighters):
                 return cells
     raise ValueError(
         f"a {num_rows}x{num_cols} grid with {len(blocked)} blocked cells cannot "
-        f"seat {num_robots} robots"
+        f"seat {num_firefighters} firefighters"
     )
 
 
 class FirefightingInitialStateDistribution(Distribution):
     """The reset distribution: a uniform wind and a uniformly placed fire.
 
-    Everything else is fixed and known -- the step counter is 0, the robots are
+    Everything else is fixed and known -- the step counter is 0, the firefighters are
     at their configured start cells, and every tank and every health bar is
-    full. All the randomness is in the two things the robots cannot see at
+    full. All the randomness is in the two things the firefighters cannot see at
     reset: which of the eight winds is blowing, and which cells are already
     alight.
 
@@ -275,9 +275,9 @@ class FirefightingInitialStateDistribution(Distribution):
         fire_offset: Index at which the fire-map block starts.
         wind_direction_index: Index of the wind direction field.
         wind_strength_index: Index of the wind strength field.
-        robot_start_cells: The robots' fixed start cells.
-        max_tank: Tank capacity, which every robot starts at.
-        max_health: Health capacity, which every robot starts at.
+        firefighter_start_cells: The firefighters' fixed start cells.
+        max_tank: Tank capacity, which every firefighter starts at.
+        max_health: Health capacity, which every firefighter starts at.
         num_initial_fires: How many cells are alight at reset.
         ignitable_indices: Flat indices of the cells a fire may start in.
     """
@@ -289,7 +289,7 @@ class FirefightingInitialStateDistribution(Distribution):
         fire_offset: int,
         wind_direction_index: int,
         wind_strength_index: int,
-        robot_start_cells: Sequence[Tuple[int, int]],
+        firefighter_start_cells: Sequence[Tuple[int, int]],
         max_tank: int,
         max_health: int,
         num_initial_fires: int,
@@ -303,19 +303,19 @@ class FirefightingInitialStateDistribution(Distribution):
             fire_offset: Index at which the fire-map block starts.
             wind_direction_index: Index of the wind direction field.
             wind_strength_index: Index of the wind strength field.
-            robot_start_cells: The robots' fixed start cells.
-            max_tank: Tank capacity, which every robot starts at.
-            max_health: Health capacity, which every robot starts at.
+            firefighter_start_cells: The firefighters' fixed start cells.
+            max_tank: Tank capacity, which every firefighter starts at.
+            max_health: Health capacity, which every firefighter starts at.
             num_initial_fires: How many cells are alight at reset.
             ignitable_indices: Flat indices of the cells a fire may start in,
                 i.e. every non-obstacle cell.
-            num_cols: Grid columns, used to flatten the robot start cells.
+            num_cols: Grid columns, used to flatten the firefighter start cells.
         """
         self.state_size = int(state_size)
         self.fire_offset = int(fire_offset)
         self.wind_direction_index = int(wind_direction_index)
         self.wind_strength_index = int(wind_strength_index)
-        self.robot_start_cells = tuple((int(r), int(c)) for r, c in robot_start_cells)
+        self.firefighter_start_cells = tuple((int(r), int(c)) for r, c in firefighter_start_cells)
         self.max_tank = int(max_tank)
         self.max_health = int(max_health)
         self.num_initial_fires = int(num_initial_fires)
@@ -339,8 +339,8 @@ class FirefightingInitialStateDistribution(Distribution):
         states: List[Any] = []
         for _ in range(int(n_samples)):
             state = np.zeros(self.state_size, dtype=np.float64)
-            for robot, (row, col) in enumerate(self.robot_start_cells):
-                base = ROBOT_OFFSET + ROBOT_FIELD_WIDTH * robot
+            for firefighter, (row, col) in enumerate(self.firefighter_start_cells):
+                base = FIREFIGHTER_OFFSET + FIREFIGHTER_FIELD_WIDTH * firefighter
                 state[base] = float(row)
                 state[base + 1] = float(col)
                 state[base + 2] = float(self.max_tank)
@@ -381,15 +381,16 @@ class FirefightingInitialStateDistribution(Distribution):
                 continue
             if state[STEP_INDEX] != 0.0:
                 continue
-            expected_robots = []
-            for row, col in self.robot_start_cells:
-                expected_robots.extend(
+            expected_firefighters = []
+            for row, col in self.firefighter_start_cells:
+                expected_firefighters.extend(
                     [float(row), float(col), float(self.max_tank), float(self.max_health)]
                 )
-            robot_block = state[
-                ROBOT_OFFSET : ROBOT_OFFSET + ROBOT_FIELD_WIDTH * len(self.robot_start_cells)
+            firefighter_block = state[
+                FIREFIGHTER_OFFSET : FIREFIGHTER_OFFSET
+                + FIREFIGHTER_FIELD_WIDTH * len(self.firefighter_start_cells)
             ]
-            if not np.array_equal(robot_block, expected_robots):
+            if not np.array_equal(firefighter_block, expected_firefighters):
                 continue
             if not 0 <= state[self.wind_direction_index] < len(WindDirection):
                 continue

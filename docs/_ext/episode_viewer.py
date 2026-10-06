@@ -73,6 +73,19 @@ class episode_viewer(nodes.General, nodes.Element):  # pylint: disable=invalid-n
     """One embedded viewer; its children are the caption."""
 
 
+# Sizes each viewer frame to the height its page reports, so a scene with a
+# panel under its viewport is shown whole rather than behind a scrollbar.
+# Written once per figure but installs its listener once per page.
+_FIT_FRAMES_SCRIPT = (
+    "if(!window.__pomdpFitFrames){window.__pomdpFitFrames=1;"
+    "addEventListener('message',function(e){"
+    "var h=e.data&&e.data.pomdpViewerHeight;if(!h)return;"
+    "var fs=document.querySelectorAll('figure.episode-viewer iframe');"
+    "for(var i=0;i<fs.length;i++){if(fs[i].contentWindow===e.source){"
+    "fs[i].style.aspectRatio='auto';fs[i].style.height=Math.ceil(h)+'px';}}});}"
+)
+
+
 def _visit_html(self: Any, node: episode_viewer) -> None:
     page = self.builder.get_target_uri(self.builder.current_docname)
     src = relative_uri(page, f"{OUTPUT_DIR}/embed/{node['stem']}.html")
@@ -81,8 +94,10 @@ def _visit_html(self: Any, node: episode_viewer) -> None:
         '<figure class="episode-viewer">'
         f'<iframe src="{self.encode(src)}" title="{title}" loading="lazy" '
         'allow="fullscreen" '
+        'scrolling="no" '
         'style="display:block;width:100%;aspect-ratio:16/10;border:0;border-radius:8px;">'
         "</iframe>"
+        f"<script>{_FIT_FRAMES_SCRIPT}</script>"
     )
     if node.children:
         self.body.append("<figcaption>")
@@ -173,32 +188,34 @@ EMBED_PAGE = """<!DOCTYPE html>
 <title>{title}</title>
 <link rel="stylesheet" href="../site.css">
 <style>
-  /* The viewer fills the frame's viewport, less one line for the status.
-     Its height is fixed rather than flexed: a scene may add a panel of its
-     own under the viewport (firefighting draws its wind belief there), and
-     a flexed viewer is what that panel squeezes to zero height. The panel
-     scrolls below instead. */
-  html, body {{ margin: 0; background: transparent; }}
+  /* The viewer keeps site.css's 16:9 shape, so its height follows the
+     frame's width and never the frame's height. A scene may add a panel of
+     its own under the viewport (firefighting draws its wind belief there);
+     the frame grows to hold it, as the script below tells the docs page,
+     so the frame never scrolls. */
+  html, body {{ margin: 0; background: transparent; overflow: hidden; }}
   /* The docs theme is light. site.css allows dark too, and a frame whose
      colour scheme differs from its page is painted with an opaque canvas,
      which showed as a black band behind the status line. */
   :root {{ color-scheme: light; }}
-  .viewer {{ aspect-ratio: auto; height: calc(100vh - 30px); }}
   .viewer-status {{ margin: 6px 2px 0; font-size: 12px; line-height: 18px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
 </style>
 </head>
 <body>
+<script src="../traces/{stem}.js"></script>
 {viewer}
 <script>
-  /* A browser will not let a file:// page fetch its trace. Say how to fix
-     that instead of leaving the bare "Failed to fetch" the player reports. */
-  if (location.protocol === "file:") {{
-    var status = document.getElementById("viewer-status");
-    status.textContent = "The 3D replay needs the docs served over HTTP: "
-      + "python -m http.server -d docs/_build/html";
-    status.classList.add("failed");
-  }}
+  /* Tell the docs page how tall this frame's content is, so the page sizes
+     the frame to fit instead of giving it a scrollbar. */
+  (function () {{
+    function report() {{
+      parent.postMessage({{ pomdpViewerHeight: document.body.scrollHeight }}, "*");
+    }}
+    if (window.ResizeObserver) new ResizeObserver(report).observe(document.body);
+    window.addEventListener("load", report);
+    report();
+  }})();
 </script>
 </body>
 </html>
@@ -236,9 +253,19 @@ def _write_assets(app: Sphinx, exception: Exception | None) -> None:
     traces: Dict[str, Dict[str, str]] = getattr(app.env, "episode_viewer_traces", {})
     for stem, info in sorted(traces.items()):
         shutil.copy2(info["source"], out / "traces" / f"{stem}.json")
+        # The same trace as a script, which the embed page loads with a
+        # <script> tag. A browser refuses to let a file:// page fetch a JSON
+        # file but runs a local script, so this is what makes the replay play
+        # when the built docs are opened straight from disk.
+        trace_text = Path(info["source"]).read_text(encoding="utf-8")
+        (out / "traces" / f"{stem}.js").write_text(
+            "window.POMDP_INLINE_TRACE = " + trace_text.replace("</", "<\\/") + ";\n",
+            encoding="utf-8",
+        )
         title = f"{stem.replace('_', ' ')} episode replay"
         page = EMBED_PAGE.format(
             title=title,
+            stem=stem,
             viewer=trace_viewer_html(f"../traces/{stem}.json", info["kind"], static_root=".."),
         )
         (out / "embed" / f"{stem}.html").write_text(page, encoding="utf-8")
