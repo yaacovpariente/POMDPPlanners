@@ -36,9 +36,9 @@ Can I use?
      - ✔️
    * - Continuous actions
      - ❌
-   * - Action widening
-     - ❌
-   * - Observation widening
+   * - Discrete observations
+     - ✔️
+   * - Continuous observations
      - ❌
    * - Cost constraints
      - ❌
