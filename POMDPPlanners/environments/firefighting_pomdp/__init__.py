@@ -6,6 +6,7 @@ Exports:
     FirefightingPOMDP: The environment.
     FirefightingVisualizer: Writes episodes as traces for the 3D viewer.
     FirefightingVectorizedBelief: The environment's default belief.
+    FirefightingVectorizedModel: Torch generative model for VOPP.
     FirefightingInitialStateDistribution: The reset distribution.
     FireCategory: The five per-cell categories.
     FirefightingAction: The five per-firefighter actions.
@@ -49,6 +50,7 @@ __all__ = [
     "HEAT_DAMAGE",
     "MAX_HEAT_DAMAGE_PER_STEP",
     "FirefightingVectorizedBelief",
+    "FirefightingVectorizedModel",
     "FirefightingVectorizedUpdater",
     "FirefightingInitialStateDistribution",
     "FirefightingMetrics",
@@ -76,4 +78,5 @@ from .firefighting_vectorized_belief import (
     FirefightingVectorizedUpdater,
     create_firefighting_belief,
 )
+from .firefighting_vectorized_model import FirefightingVectorizedModel
 from .firefighting_visualization import FirefightingVisualizer

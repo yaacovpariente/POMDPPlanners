@@ -664,6 +664,21 @@ def _rock_sample_labels() -> Tuple[str, ...]:
     return ("none", "good", "bad")
 
 
+def _maze_observation_of_row(env: Any, row: np.ndarray) -> str:
+    # The maze and T-Maze torch models' observation code is an index into OBSERVATIONS.
+    del env
+    from POMDPPlanners.environments.maze_pomdp.maze_pomdp import OBSERVATIONS
+
+    return OBSERVATIONS[int(row[0])]
+
+
+def _maze_row_of_observation(env: Any, observation: str) -> np.ndarray:
+    del env
+    from POMDPPlanners.environments.maze_pomdp.maze_pomdp import OBSERVATIONS
+
+    return np.array([float(OBSERVATIONS.index(str(observation)))])
+
+
 def _build_racetrack() -> Tuple[Any, Any]:
     from POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model import (
         KnownTrackModel,
@@ -975,11 +990,74 @@ def _schema_row_of_observation(env: Any, observation: Dict[str, Any]) -> np.ndar
     )
 
 
+def _snake_probe_states(env: Any) -> List[np.ndarray]:
+    """Snake states from which GO_STRAIGHT eats, wins or starves.
+
+    Six random steps from the start seldom eat, so without these the respawn
+    draw, the win and the starvation rule would go unchecked. The win probe is
+    a ``target_length - 1`` snake laid along the grid's row-by-row serpentine,
+    with its head mid-row and the food on the next serpentine cell.
+    """
+    from POMDPPlanners.environments.snake_pomdp.snake_pomdp import create_snake_state
+
+    size, target = env.grid_size, env.target_length
+    centre = size // 2
+    start = [(centre, centre), (centre, centre - 1), (centre, centre - 2)]
+    serpentine = [
+        (row, col if row % 2 == 0 else size - 1 - col) for row in range(size) for col in range(size)
+    ]
+    head = next(
+        k
+        for k in range(target - 2, len(serpentine) - 1)
+        if serpentine[k - 1][0] == serpentine[k][0] == serpentine[k + 1][0]
+    )
+    long_body = serpentine[head - target + 2 : head + 1][::-1]
+    return [
+        create_snake_state(start, (centre, centre + 1), target_length=target),
+        create_snake_state(long_body, serpentine[head + 1], target_length=target),
+        create_snake_state(
+            start, (0, 0), steps_since_food=env.starvation_limit - 1, target_length=target
+        ),
+    ]
+
+
+def _capture_the_flag_probe_states(env: Any) -> List[np.ndarray]:
+    """Capture-the-flag states one step from a pick-up, both kinds of tag, and a capture.
+
+    Random steps from the spawn leave both teams on their own bases, so without
+    these the pick-up, tagging and scoring rules would go unchecked. The cells
+    are those of the pinned field; another field gets no probes.
+    """
+    teams = (env.n_blue, env.n_red, env.n_red_defenders)
+    if teams != (2, 2, 1) or env.red_flag_candidates[0] != (7, 1):
+        return []
+    layout = env.layout
+    contested = np.zeros(layout.size)
+    # Blue 0 steps south onto the red flag, beside the defender; blue 1 steps
+    # north onto its own flag, where the red attacker is heading.
+    layout.write_blue_cells(contested, [(7, 2), (1, 2)])
+    layout.write_red_cells(contested, [(8, 1), (1, 4)])
+    scoring = np.zeros(layout.size)
+    # Blue 0 carries the red flag one step north of its base.
+    layout.write_blue_cells(scoring, [(0, 2), (0, 3)])
+    layout.write_red_cells(scoring, [(8, 3), (8, 4)])
+    scoring[layout.carrier_red_flag] = 1.0
+    return [contested, scoring]
+
+
 _ENVS = "POMDPPlanners.environments"
 
 # One entry per vectorized model, on its environment's pinned configuration.
 # The swept configuration variants are added below, in MODEL_SPECS.
 _HAND_WRITTEN_MODEL_SPECS: List[ModelSpec] = [
+    _registry_model(
+        "BattleshipPOMDP",
+        f"{_ENVS}.battleship_pomdp.battleship_vectorized_model",
+        "BattleshipVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: int(row[0]),
+    ),
     ModelSpec(
         "CarlaKinematicVectorizedModel",
         "CarlaKinematicVectorizedModel",
@@ -994,9 +1072,35 @@ _HAND_WRITTEN_MODEL_SPECS: List[ModelSpec] = [
         probe_states=_carla_probe_states,
     ),
     _registry_model(
+        "CaptureTheFlagPOMDP",
+        f"{_ENVS}.capture_the_flag_pomdp.capture_the_flag_vectorized_model",
+        "CaptureTheFlagVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: tuple(float(v) for v in row),
+        probe_states=_capture_the_flag_probe_states,
+    ),
+    _registry_model(
         "CartPolePOMDP",
         f"{_ENVS}.cartpole_pomdp.cartpole_vectorized_model",
         "CartPoleVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        # The [fully_observable] variant is swept in from ENV_BUILDERS.
+        "ChicheckInvadersPOMDP",
+        f"{_ENVS}.chicheck_invaders_pomdp.chicheck_invaders_vectorized_model",
+        "ChicheckInvadersVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        # The continuous-action ContinuousLaserTagPOMDP has no finite action set,
+        # so only the discrete-action subclass has a model.
+        "ContinuousLaserTagPOMDPDiscreteActions",
+        f"{_ENVS}.laser_tag_pomdp.continuous_laser_tag_vectorized_model",
+        "ContinuousLaserTagVectorizedModel",
         action_of_index=_discrete_action,
         num_actions=_discrete_action_count,
     ),
@@ -1012,6 +1116,51 @@ _HAND_WRITTEN_MODEL_SPECS: List[ModelSpec] = [
         # the move vector itself.
         action_of_index=lambda env, model, i: model.action_vectors[i].cpu().numpy().copy(),
         num_actions=lambda env, model: int(model.action_vectors.shape[0]),
+    ),
+    replace(
+        # The same model serves the discrete-action subclass: its default action
+        # table is the subclass's up/down/right/left vectors, in the same order.
+        # Built on the variant with the hazard-terminal slot off, as above.
+        _registry_model(
+            "ContinuousLightDarkPOMDPDiscreteActions[is_obstacle_hit_terminal=False]",
+            f"{_ENVS}.light_dark_pomdp.continuous_light_dark_vectorized_model",
+            "ContinuousLightDarkVectorizedModel",
+            action_of_index=_discrete_action,
+            num_actions=_discrete_action_count,
+        ),
+        model_id="ContinuousLightDarkVectorizedModel(DiscreteActions)",
+    ),
+    _registry_model(
+        # The continuous-action ContinuousPushPOMDP has no finite action set, so
+        # only the discrete-action subclass has a model.
+        "ContinuousPushPOMDPDiscreteActions",
+        f"{_ENVS}.push_pomdp.continuous_push_vectorized_model",
+        "ContinuousPushVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        "DiscreteLightDarkPOMDP",
+        f"{_ENVS}.light_dark_pomdp.discrete_light_dark_vectorized_model",
+        "DiscreteLightDarkVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        "DiscreteMazePOMDP",
+        f"{_ENVS}.maze_pomdp.maze_vectorized_model",
+        "DiscreteMazeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_maze_observation_of_row,
+        row_of_observation=_maze_row_of_observation,
+    ),
+    _registry_model(
+        "FirefightingPOMDP",
+        f"{_ENVS}.firefighting_pomdp.firefighting_vectorized_model",
+        "FirefightingVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
     ),
     ModelSpec(
         "IsaacLabVectorizedModel",
@@ -1117,6 +1266,31 @@ _HAND_WRITTEN_MODEL_SPECS: List[ModelSpec] = [
         observation_of_row=lambda env, row: int(row[0]),
     ),
     _registry_model(
+        "SnakePOMDP",
+        f"{_ENVS}.snake_pomdp.snake_vectorized_model",
+        "SnakeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        # The scalar reading is a variable-length int tuple; the model pads it
+        # to 4 + 2 * target_length columns with -1.
+        observation_of_row=lambda env, row: importlib.import_module(
+            f"{_ENVS}.snake_pomdp.snake_vectorized_model"
+        ).snake_row_to_observation(env, row),
+        row_of_observation=lambda env, o: importlib.import_module(
+            f"{_ENVS}.snake_pomdp.snake_vectorized_model"
+        ).snake_observation_to_row(env, o),
+        probe_states=_snake_probe_states,
+    ),
+    _registry_model(
+        "TMazePOMDP",
+        f"{_ENVS}.maze_pomdp.t_maze_vectorized_model",
+        "TMazeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_maze_observation_of_row,
+        row_of_observation=_maze_row_of_observation,
+    ),
+    _registry_model(
         "TigerPOMDP",
         f"{_ENVS}.tiger_pomdp.tiger_pomdp_vectorized_model",
         "TigerVectorizedModel",
@@ -1155,6 +1329,27 @@ MODEL_VARIANT_DECLINES: Dict[str, str] = {
     ),
     "ContinuousLightDarkVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": (
         _CONSTANT_REWARD_ONLY
+    ),
+    # The discrete-action subclass declines the same five configurations as
+    # its parent above, through the same guards.
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)[pinned]": _NO_HAZARD_TERMINAL_SLOT,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)[observation_model_type=DISTANCE_BASED]": (
+        _NORMAL_NOISE_ONLY
+    ),
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": _NORMAL_NOISE_ONLY,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": _CONSTANT_REWARD_ONLY,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+    "DiscreteLightDarkVectorizedModel[is_obstacle_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
+    # NO_OBS_IN_DARK and DISTANCE_BASED emit the string "None" far from every
+    # beacon, and an [N, 2] observation tensor has no row for it.
+    "DiscreteLightDarkVectorizedModel[observation_model_type=DISTANCE_BASED]": (
+        "only the NORMAL observation model is vectorized"
+    ),
+    "DiscreteLightDarkVectorizedModel[observation_model_type=NO_OBS_IN_DARK]": (
+        "only the NORMAL observation model is vectorized"
     ),
     "LaserTagVectorizedModel[is_dangerous_area_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
     "LaserTagVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (

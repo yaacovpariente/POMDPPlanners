@@ -247,6 +247,18 @@ the discrete maze. ``stem_length`` sets the distance to the junction and
 ``arm_length`` sets the distance from the junction to each endpoint. The
 agent must remember the cue while walking up the stem, then choose an arm.
 
+Vectorized model
+~~~~~~~~~~~~~~~~
+
+VOPP plans on a batched torch copy of the environment.
+``DiscreteMazeVectorizedModel`` and ``TMazeVectorizedModel`` support every
+configuration of their environment. Their constructors step the scalar
+environment once from every ``(cell, goal side, cue phase)`` state under every
+action and store the results as lookup tables, so the scalar class decides
+every transition, terminal flag and observation probability.
+``ContinuousMazePOMDP`` has no torch model: its actions are real 2-vectors,
+VOPP needs a finite action set, and no discrete-action variant of it exists.
+
 Can I use?
 ----------
 
@@ -314,9 +326,9 @@ Can I use?
      - ❌
      - ❌
    * - Vectorized (torch) model
-     - ❌
-     - ❌
-     - ❌
+     - ✔️ ``DiscreteMazeVectorizedModel``
+     - ❌ (continuous actions; VOPP needs a finite action set)
+     - ✔️ ``TMazeVectorizedModel``
    * - In the ``get_environment`` registry
      - ✔️
      - ✔️
@@ -369,4 +381,8 @@ See also
 - :class:`POMDPPlanners.environments.maze_pomdp.DiscreteMazePOMDP`
 - :class:`POMDPPlanners.environments.maze_pomdp.ContinuousMazePOMDP`
 - :class:`POMDPPlanners.environments.maze_pomdp.TMazePOMDP`
+- Batched torch models:
+  ``POMDPPlanners.environments.maze_pomdp.maze_vectorized_model.DiscreteMazeVectorizedModel``
+  and
+  ``POMDPPlanners.environments.maze_pomdp.t_maze_vectorized_model.TMazeVectorizedModel``
 - :doc:`base` — the full catalog and the environment interface.

@@ -497,9 +497,9 @@ Can I use?
      - ✔️
      - ✔️
    * - Vectorized (torch) model
-     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
-     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
-     - ❌
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (``is_obstacle_hit_terminal=False``, ``NORMAL_NOISE``, ``CONSTANT_HAZARD_PENALTY`` only)
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (``is_obstacle_hit_terminal=False``, ``NORMAL_NOISE``, ``CONSTANT_HAZARD_PENALTY`` only)
+     - ✔️ ``DiscreteLightDarkVectorizedModel`` (``is_obstacle_hit_terminal=False``, ``NORMAL`` only)
    * - In the ``get_environment`` registry
      - ✔️
      - ✔️
@@ -546,8 +546,17 @@ Parameters
 See also
 --------
 
-- Batched torch model:
-  ``POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model.ContinuousLightDarkVectorizedModel``
-  (the two continuous classes only, with ``is_obstacle_hit_terminal=False`` —
-  ``DiscreteLightDarkPOMDP`` has none).
+- Batched torch models, which VOPP plans on. Each raises
+  ``NotImplementedError`` on a configuration it does not implement:
+
+  - ``POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model.ContinuousLightDarkVectorizedModel``
+    serves both continuous classes. It needs ``is_obstacle_hit_terminal=False``,
+    because it keeps 2-D states and has no terminal slot; that is not the
+    continuous default. It also needs the ``NORMAL_NOISE`` observation model
+    and the ``CONSTANT_HAZARD_PENALTY`` reward model.
+  - ``POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_vectorized_model.DiscreteLightDarkVectorizedModel``
+    serves ``DiscreteLightDarkPOMDP``. It needs ``is_obstacle_hit_terminal=False``
+    (the discrete default), for the same reason, and the ``NORMAL`` observation
+    model: ``NO_OBS_IN_DARK`` and ``DISTANCE_BASED`` emit the string ``"None"``
+    away from beacons, which its ``[N, 2]`` observation tensor cannot hold.
 - :doc:`base` — the full catalog and the environment interface.

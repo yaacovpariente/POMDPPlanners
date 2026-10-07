@@ -56,8 +56,8 @@ BATTLESHIP_QA_BELIEF_PARTICLES = 200
 def battleship_pft_dpw_config(time_out_in_seconds: float = 0.75) -> Dict[str, Any]:
     """PFT-DPW settings used for the Battleship QA pass.
 
-    Battleship has no torch vectorized model, so QA uses PFT-DPW on the scalar
-    Environment API rather than VOPP.
+    QA uses PFT-DPW on the scalar Environment API. This config predates
+    ``BattleshipVectorizedModel``, which now lets VOPP plan here too.
 
     The widening constants are deliberately set to *disable* widening on both
     axes. Progressive widening exists to keep a large or continuous branching

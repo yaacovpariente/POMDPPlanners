@@ -11,6 +11,7 @@ Exports:
     ChicheckInvadersBelief: Weighted particle filter with flock reinvigoration.
     ChicheckInvadersVectorizedBelief: Its batched twin, and the environment's
         default belief.
+    ChicheckInvadersVectorizedModel: Torch generative model for VOPP.
     ChicheckInvadersInitialStateDistribution: The per-episode flock prior.
     ChicheckInvadersVisualizer: Writes episodes as traces for the 3D viewer.
     create_chicheck_invaders_belief: Builds the scalar belief for an environment.
@@ -81,6 +82,7 @@ __all__ = [
     "ChicheckInvadersState",
     "ChicheckInvadersStepChannel",
     "ChicheckInvadersVectorizedBelief",
+    "ChicheckInvadersVectorizedModel",
     "ChicheckInvadersVectorizedUpdater",
     "ChicheckInvadersVisualizer",
     "MODE_DIVE",
@@ -118,6 +120,7 @@ from .chicheck_invaders_vectorized_belief import (
     ChicheckInvadersVectorizedUpdater,
     create_chicheck_invaders_vectorized_belief,
 )
+from .chicheck_invaders_vectorized_model import ChicheckInvadersVectorizedModel
 from .chicheck_invaders_visualization import (
     CHICHECK_INVADERS_PAYLOAD_KIND,
     ChicheckInvadersVisualizer,

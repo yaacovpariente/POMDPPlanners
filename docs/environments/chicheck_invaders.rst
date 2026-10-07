@@ -482,9 +482,19 @@ visualizer. The results site replays it in 3D, as the replay on this page does.
 Limits
 ~~~~~~
 
-There is no torch vectorized model and no C++ model, so VOPP cannot run on this
-environment. Scalar ``PFT_DPW`` runs on it directly, which is what the QA gate
-uses.
+There is no C++ model. ``ChicheckInvadersVectorizedModel`` is the torch model
+that VOPP plans on. It reads the grid, flock, sensor, reward and step-budget
+arguments from the environment and supports both observation modes, so it
+declines no configuration. Like the
+scalar environment, it keeps stepping a terminal state: the step counter
+advances and the flock moves.
+
+The model defaults to ``float32``. In ``float32`` a sensor reading whose
+rounded-Gaussian mass is below about ``1e-45`` (about 14 noise standard
+deviations off) scores the impossible floor ``-1e18``, where the scalar
+environment returns a finite log-probability below ``-103``. Build the model with ``dtype=torch.float64`` when the belief must
+rank such far-off readings. Scalar ``PFT_DPW`` also runs on the environment
+directly, and the QA gate uses it.
 
 Can I use?
 ----------
@@ -515,7 +525,7 @@ Can I use?
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model
-     - ❌
+     - ✔️ ``ChicheckInvadersVectorizedModel`` (both observation modes)
    * - In the ``get_environment`` registry
      - ✔️
    * - Optional dependencies

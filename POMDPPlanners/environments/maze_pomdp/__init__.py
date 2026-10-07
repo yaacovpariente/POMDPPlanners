@@ -9,6 +9,13 @@ Classes:
     MazeVisualizer: Writes Maze episodes, discrete or continuous, as traces.
     TMazeVisualizer: Writes T-Maze episodes as traces.
 
+The torch models VOPP plans on, ``DiscreteMazeVectorizedModel`` in
+``maze_vectorized_model`` and ``TMazeVectorizedModel`` in
+``t_maze_vectorized_model``, are not re-exported: they import torch, which
+this package must not load on every ``import POMDPPlanners.environments``.
+``ContinuousMazePOMDP`` has no torch model, because its actions are real
+2-vectors and VOPP needs a finite action set.
+
 The package was previously called ``t_maze_pomdp``. That name still imports, so
 saved configurations keep loading, but new code should import from here.
 """

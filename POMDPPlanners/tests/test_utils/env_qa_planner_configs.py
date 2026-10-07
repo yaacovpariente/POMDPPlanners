@@ -95,8 +95,8 @@ def maze_qa_belief_particles() -> int:
 def chicheck_invaders_qa_pft_dpw_kwargs(**overrides: Any) -> Dict[str, Any]:
     """PFT-DPW settings used for the Chicheck Invaders QA run.
 
-    The environment has no torch vectorized model, so QA runs PFT-DPW on the
-    scalar ``Environment`` API rather than VOPP.
+    QA runs PFT-DPW on the scalar ``Environment`` API. This config predates
+    ``ChicheckInvadersVectorizedModel``, which now lets VOPP plan here too.
 
     Both widening constants disable widening. The action side has four actions,
     so ``k_a = 4`` with ``alpha_a = 0`` admits every one of them and no action

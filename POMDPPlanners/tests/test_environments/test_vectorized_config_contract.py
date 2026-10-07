@@ -18,38 +18,60 @@ reviewed allowlist. See
 :mod:`POMDPPlanners.tests.test_environments._vectorized_config_contract` for the
 engine and the precise contract.
 
-Scope: this covers the five env-constructed, enum-parametrized models
-(LaserTag, continuous LightDark, Push, RockSample, PacMan). Environments whose
-scope guards gate on non-enum surfaces (CartPole's integrator string,
-MountainCar / Sanity / SafetyAnt action sets, PacMan's string ghost modes,
-CARLA's perception models) have no enum config axis to sweep, and IsaacLab's
-vectorized model is not env-constructed; those remain covered by their own
-per-model tests.
-
-Environments with no torch vectorized model at all -- Battleship and
-Snake -- have nothing for this contract to sweep and
-are absent on purpose rather than by oversight. The cost of that absence is
-that none of them can be planned on with VOPP; each is QA'd with PFT-DPW on the
-scalar ``Environment`` API instead. Writing one is a substantial piece of work
-and a known source of cross-implementation drift, so it is deferred rather than
-declined outright; adding one means adding a spec here.
+Scope: this covers the env-constructed models with at least one enum
+constructor argument: LaserTag, continuous LaserTag (discrete actions),
+continuous LightDark and its discrete-actions variant, discrete LightDark,
+Push, continuous Push (discrete actions), RockSample, PacMan and Chicheck
+Invaders. Environments whose scope guards gate on non-enum surfaces
+(CartPole's integrator string, MountainCar / Sanity / SafetyAnt action sets,
+PacMan's string ghost modes, CARLA's perception models) have no enum config
+axis to sweep, and IsaacLab's vectorized model is not env-constructed; those
+remain covered by their own per-model tests. Battleship, Capture the Flag,
+Firefighting, Snake, discrete Maze and T-Maze are absent for the same reason:
+their constructors have no enum argument, and each model builds on every
+configuration.
 """
 
 import pytest
 
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+)
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_vectorized_model import (
+    ChicheckInvadersVectorizedModel,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
+    ContinuousLaserTagPOMDPDiscreteActions,
+)
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_vectorized_model import (
+    ContinuousLaserTagVectorizedModel,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_vectorized_model import (
     LaserTagVectorizedModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_vectorized_model import (
     ContinuousLightDarkVectorizedModel,
 )
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_vectorized_model import (
+    DiscreteLightDarkVectorizedModel,
+)
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.pacman_pomdp.pacman_vectorized_model import (
     PacManVectorizedModel,
+)
+from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
+    ContinuousPushPOMDPDiscreteActions,
+)
+from POMDPPlanners.environments.push_pomdp.continuous_push_vectorized_model import (
+    ContinuousPushVectorizedModel,
 )
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.push_pomdp.push_vectorized_model import PushVectorizedModel
@@ -113,11 +135,54 @@ _SPECS = [
         },
     ),
     _make_spec(
+        "light_dark_discrete_actions",
+        ContinuousLightDarkPOMDPDiscreteActions,
+        ContinuousLightDarkVectorizedModel,
+        # Same model and guards as "light_dark"; is_obstacle_hit_terminal=False
+        # for the same reason.
+        {"discount_factor": 0.95, "is_obstacle_hit_terminal": False},
+        _REWARD_DECLINES
+        | {
+            ("observation_model_type", "NORMAL_NOISE_NO_OBS_IN_DARK"),
+            ("observation_model_type", "DISTANCE_BASED"),
+        },
+    ),
+    _make_spec(
+        "discrete_light_dark",
+        DiscreteLightDarkPOMDP,
+        DiscreteLightDarkVectorizedModel,
+        # The env default is_obstacle_hit_terminal=False is supported; True is
+        # a separate (non-enum) unsupported config.
+        {"discount_factor": 0.95},
+        # NO_OBS_IN_DARK and DISTANCE_BASED emit the string "None" far from
+        # every beacon, which an [N, 2] observation tensor cannot hold.
+        {
+            ("observation_model_type", "NO_OBS_IN_DARK"),
+            ("observation_model_type", "DISTANCE_BASED"),
+        },
+    ),
+    _make_spec(
         "push",
         PushPOMDP,
         PushVectorizedModel,
         {"discount_factor": 0.99},
         set(_REWARD_DECLINES),
+    ),
+    _make_spec(
+        "continuous_push_discrete_actions",
+        ContinuousPushPOMDPDiscreteActions,
+        ContinuousPushVectorizedModel,
+        {"discount_factor": 0.99},
+        # reward_model_type: all three reward models are supported.
+        set(),
+    ),
+    _make_spec(
+        "continuous_laser_tag_discrete_actions",
+        ContinuousLaserTagPOMDPDiscreteActions,
+        ContinuousLaserTagVectorizedModel,
+        {"discount_factor": 0.95},
+        # opponent_policy: EVADE, PURSUE and EVADE_WHEN_SPOTTED all supported.
+        set(),
     ),
     _make_spec(
         "rocksample",
@@ -132,6 +197,14 @@ _SPECS = [
         PacManVectorizedModel,
         {"discount_factor": 0.95},
         set(_REWARD_DECLINES),
+    ),
+    _make_spec(
+        "chicheck_invaders",
+        ChicheckInvadersPOMDP,
+        ChicheckInvadersVectorizedModel,
+        {"discount_factor": 0.95},
+        # observation_mode: PARTIAL and FULL both supported.
+        set(),
     ),
 ]
 

@@ -332,12 +332,24 @@ Visualization
 Runs write a trace of each episode through the environment's episode
 visualizer. The results site replays it in 3D, as the replay on this page does.
 
-No vectorized model
-~~~~~~~~~~~~~~~~~~~
+Vectorized model
+~~~~~~~~~~~~~~~~
 
-Snake has no torch vectorized generative model, so it cannot be run under VOPP.
-``PFT_DPW`` runs on the scalar ``Environment`` API and is what the environment's
-QA pass uses.
+``SnakeVectorizedModel`` is the torch generative model VOPP plans on. It
+supports every ``SnakePOMDP`` configuration, so it declines none.
+
+- **State rows** are the scalar state vectors unchanged. The body has
+  ``target_length`` slots with ``-1`` past the current length; a live snake is
+  shorter than ``target_length``, so the slots always suffice.
+- **Observation rows** are the scalar reading padded with ``-1`` to
+  ``4 + 2 * target_length`` columns. The terminal reading ``(0,)`` becomes
+  ``[0, -1, ..., -1]``.
+- **Conversions** between the two are ``snake_observation_to_row`` and
+  ``snake_row_to_observation``.
+- **Observation keys** pack the reading into one int64. The packing is one to
+  one while it fits in 63 bits (``target_length`` up to 22 on the default
+  12×12 grid). Past that the arithmetic wraps, and two readings can share a
+  search-tree node.
 
 Can I use?
 ----------
@@ -368,7 +380,7 @@ Can I use?
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model
-     - ❌
+     - ✔️ ``SnakeVectorizedModel`` (every configuration)
    * - In the ``get_environment`` registry
      - ❌ (import the class directly)
    * - Optional dependencies

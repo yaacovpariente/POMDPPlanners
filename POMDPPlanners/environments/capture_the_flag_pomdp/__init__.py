@@ -6,6 +6,11 @@ Team capture-the-flag on a grid field split by a midline. The planner drives
 the blue team jointly; the red team belongs to the transition model. Both the
 red players and the red flag's cell are hidden and inferred from noisy ranges
 and a per-player flag detector.
+
+``CaptureTheFlagVectorizedModel``, the torch model VOPP plans on, lives in
+``capture_the_flag_vectorized_model`` and is not re-exported: it imports torch
+at module load, and this package is imported by every
+``import POMDPPlanners.environments``.
 """
 
 from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_pomdp import (

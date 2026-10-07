@@ -301,6 +301,12 @@ Variants
   ``[dx, dy, tag_flag]`` action. ``ContinuousLaserTagPOMDPDiscreteActions``
   gives that world a five-action set.
 
+VOPP needs a finite action set, so only ``ContinuousLaserTagPOMDPDiscreteActions``
+of the two continuous classes has a torch model,
+``ContinuousLaserTagVectorizedModel``. It models every configuration of that
+class: all three opponent policies, any ``dangerous_area_hit_probability``, and
+``is_dangerous_area_hit_terminal``. It declines nothing.
+
 Can I use?
 ----------
 
@@ -369,8 +375,8 @@ Can I use?
      - ✔️
    * - Vectorized (torch) model
      - ✔️ ``LaserTagVectorizedModel`` (some configurations; others raise NotImplementedError)
-     - ❌
-     - ❌
+     - ❌ (no finite action set)
+     - ✔️ ``ContinuousLaserTagVectorizedModel`` (every configuration)
    * - In the ``get_environment`` registry
      - ✔️
      - ✔️
@@ -415,5 +421,7 @@ See also
 
 - Batched torch model:
   ``POMDPPlanners.environments.laser_tag_pomdp.laser_tag_vectorized_model.LaserTagVectorizedModel``
-  (grid variant only).
+  (grid variant) and
+  ``POMDPPlanners.environments.laser_tag_pomdp.ContinuousLaserTagVectorizedModel``
+  (``ContinuousLaserTagPOMDPDiscreteActions``).
 - :doc:`base` — the full catalog and the environment interface.

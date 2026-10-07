@@ -170,7 +170,7 @@ Can I use?
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model
-     - ❌
+     - ✔️ ``BattleshipVectorizedModel`` (all configurations)
    * - In the ``get_environment`` registry
      - ❌
    * - Optional dependencies

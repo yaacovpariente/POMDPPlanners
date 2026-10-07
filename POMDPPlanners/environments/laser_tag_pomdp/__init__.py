@@ -8,6 +8,8 @@ in both discrete-grid and continuous-space variants.
 Exports:
     LaserTagPOMDP, ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions: The environments.
+    ContinuousLaserTagVectorizedModel: Batched torch model of the
+        discrete-action continuous environment, for VOPP.
     OpponentPolicy: The opponent's transition behaviour.
     LaserTagVisualizer, ContinuousLaserTagVisualizer: Write episodes as traces
         for the 3D viewer.
@@ -22,6 +24,9 @@ from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp impor
     ContinuousLaserTagPOMDP,
     ContinuousLaserTagPOMDPDiscreteActions,
 )
+from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_vectorized_model import (
+    ContinuousLaserTagVectorizedModel,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
@@ -34,6 +39,7 @@ __all__ = [
     "LaserTagPOMDP",
     "ContinuousLaserTagPOMDP",
     "ContinuousLaserTagPOMDPDiscreteActions",
+    "ContinuousLaserTagVectorizedModel",
     "OpponentPolicy",
     "LaserTagVisualizer",
     "ContinuousLaserTagVisualizer",

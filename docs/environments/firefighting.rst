@@ -510,9 +510,17 @@ visualizer. The results site replays it in 3D, as the replay on this page does.
 Filtering and limits
 ~~~~~~~~~~~~~~~~~~~~
 
-There is **no torch vectorized model and no C++ native model**, so VOPP is
-unsupported and the environment is deliberately absent from the vectorized
-config contract. ``PFT_DPW`` takes the scalar API directly.
+VOPP plans on ``FirefightingVectorizedModel``, a torch copy of the
+transition, observation, reward and terminal rules that runs a whole batch of
+states in one call. It supports every configuration, including more than two
+firefighters, but the joint action space grows as ``5 ** num_firefighters``,
+and VOPP keeps one preference per action at every belief node. There is no
+C++ native model. ``PFT_DPW`` takes the scalar API directly.
+
+VOPP's tree branches on an integer key per reading. A reading has
+``4 * num_firefighters + num_rows * num_cols`` entries, too many for an exact
+key in 64 bits, so the model hashes it and two different readings can share a
+key.
 
 The belief is ``FirefightingVectorizedBelief``, which
 ``create_environment_belief`` returns. It runs every part of the transition
@@ -566,7 +574,7 @@ Can I use?
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model
-     - ❌
+     - ✔️ ``FirefightingVectorizedModel``
    * - In the ``get_environment`` registry
      - ✔️
    * - Optional dependencies

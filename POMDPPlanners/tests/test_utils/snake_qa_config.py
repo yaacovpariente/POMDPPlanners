@@ -70,8 +70,8 @@ SNAKE_QA_BELIEF_PARTICLES = 200
 def snake_pft_dpw_config(time_out_in_seconds: float = 0.75) -> Dict[str, Any]:
     """PFT-DPW settings used for the Snake QA pass.
 
-    Snake has no torch vectorized model, so QA uses PFT-DPW on the scalar
-    Environment API rather than VOPP.
+    QA uses PFT-DPW on the scalar Environment API. This config predates
+    ``SnakeVectorizedModel``, which now lets VOPP plan here too.
 
     Action widening is disabled on purpose: there are three actions, so
     ``alpha_a = 0`` with ``k_a = 3`` admits all of them at every node and no

@@ -514,8 +514,12 @@ visualizer. The results site replays it in 3D, as the replay on this page does.
 Limits
 ~~~~~~
 
-The environment has no torch vectorized model, so it cannot be run under VOPP.
-``PFT_DPW`` runs on the scalar ``Environment`` API.
+VOPP plans on ``CaptureTheFlagVectorizedModel``, the torch model in
+``capture_the_flag_vectorized_model``. The model reads every rule parameter
+from the environment and accepts every configuration the constructor accepts,
+so no configuration is declined. The model draws its random numbers in a
+different order from the scalar environment, so the two agree in distribution
+but not draw for draw: the same seed gives a different episode under each.
 
 Can I use?
 ----------
@@ -546,7 +550,7 @@ Can I use?
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model
-     - ❌
+     - ✔️ ``CaptureTheFlagVectorizedModel`` (every configuration)
    * - In the ``get_environment`` registry
      - ✔️
    * - Optional dependencies

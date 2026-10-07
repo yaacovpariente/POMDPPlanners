@@ -253,6 +253,13 @@ Variants
 - :class:`ContinuousPushPOMDP
   <POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP>`
   — a circular robot and free 2-D displacement actions, with square obstacles.
+  ``ContinuousPushPOMDPDiscreteActions`` gives that world four unit moves.
+
+VOPP needs a finite action set, so only ``ContinuousPushPOMDPDiscreteActions``
+of the two continuous classes has a torch model, ``ContinuousPushVectorizedModel``.
+It models every configuration of that class: all three reward models, the
+hazard probabilities, and both hazard-terminal flags, which add a seventh,
+terminal-flag column to the state. It declines nothing.
 
 .. note::
 
@@ -328,8 +335,8 @@ Can I use?
      - ✔️
    * - Vectorized (torch) model
      - ✔️ ``PushVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
-     - ❌
-     - ❌
+     - ❌ (no finite action set)
+     - ✔️ ``ContinuousPushVectorizedModel`` (every configuration)
    * - In the ``get_environment`` registry
      - ✔️
      - ❌
@@ -373,5 +380,7 @@ See also
 
 - Batched torch model:
   ``POMDPPlanners.environments.push_pomdp.push_vectorized_model.PushVectorizedModel``
-  (wraps the discrete variant).
+  (grid variant) and
+  ``POMDPPlanners.environments.push_pomdp.ContinuousPushVectorizedModel``
+  (``ContinuousPushPOMDPDiscreteActions``).
 - :doc:`base` — the full catalog and the environment interface.

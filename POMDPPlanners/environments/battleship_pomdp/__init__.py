@@ -9,6 +9,11 @@ Exports:
         environment's default belief.
     BattleshipVisualizer: Writes episodes as traces for the 3D viewer.
     FleetLayoutTable: The enumerated legal layouts.
+
+``BattleshipVectorizedModel``, the torch model VOPP plans on, lives in
+``battleship_vectorized_model`` and is not re-exported: it imports torch at
+module load, and this package is imported by every
+``import POMDPPlanners.environments``.
 """
 
 from POMDPPlanners.environments.battleship_pomdp.battleship_layouts import (

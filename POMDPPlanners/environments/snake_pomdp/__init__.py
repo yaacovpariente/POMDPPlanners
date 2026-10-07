@@ -8,6 +8,7 @@ Exports:
     SnakeVectorizedWeightedParticleBelief: Its batched twin, and the
         environment's default belief.
     SnakeVisualizer: Writes episodes as traces for the 3D viewer.
+    SnakeVectorizedModel: Torch generative model for VOPP.
 """
 
 from POMDPPlanners.environments.snake_pomdp.snake_pomdp import (
@@ -31,6 +32,11 @@ from POMDPPlanners.environments.snake_pomdp.snake_vectorized_belief import (
     SnakeVectorizedWeightedParticleBelief,
     create_snake_belief,
 )
+from POMDPPlanners.environments.snake_pomdp.snake_vectorized_model import (
+    SnakeVectorizedModel,
+    snake_observation_to_row,
+    snake_row_to_observation,
+)
 from POMDPPlanners.environments.snake_pomdp.snake_visualization import SnakeVisualizer
 
 __all__ = [
@@ -46,10 +52,13 @@ __all__ = [
     "SnakeState",
     "SnakeStepChannel",
     "SnakeTermination",
+    "SnakeVectorizedModel",
     "SnakeVectorizedUpdater",
     "SnakeVectorizedWeightedParticleBelief",
     "SnakeVisualizer",
     "create_snake_belief",
     "create_snake_state",
     "quadrants_for_offset",
+    "snake_observation_to_row",
+    "snake_row_to_observation",
 ]

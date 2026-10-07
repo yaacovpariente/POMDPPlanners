@@ -27,10 +27,12 @@ State layout, one ``float64`` vector of length ``3 + 4N + R*C``::
 
     [step, (row, col, tank, health) x N, wind_direction, wind_strength, cells]
 
-This environment has no torch vectorized model and no C++ native model, so it
-cannot be run under VOPP and is deliberately absent from the vectorized config
-contract. ``PFT_DPW`` takes the scalar API directly and is what it is validated
-with.
+VOPP plans on ``FirefightingVectorizedModel`` in
+``firefighting_vectorized_model.py``, a torch copy of the transition,
+observation, reward and terminal rules below. There is no C++ native model.
+The environment has no enum constructor argument, so it is absent from the
+vectorized config contract, which sweeps only enum arguments. ``PFT_DPW``
+takes the scalar API directly and is what it is validated with.
 
 Classes:
     FirefightingPOMDP: The environment.
