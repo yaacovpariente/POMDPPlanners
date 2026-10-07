@@ -44,25 +44,28 @@ Formal definition
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
-**State space.** The field is a grid of :math:`W \times H` cells
-(``grid_size``); a cell is written :math:`(x, y)` with :math:`x \in
-\{0..W-1\}` the column and :math:`y \in \{0..H-1\}` the row. Some cells hold
-trees (``trees``), which no player can enter; :math:`G` is the set of cells
-inside the field and not a tree. The red flag's home is one of :math:`K`
-candidate cells :math:`F = (f_1, \dots, f_K)` (``red_flag_candidates``).
-There are :math:`n_{\text{blue}}` blue
-players, numbered :math:`1..n_{\text{blue}}`, and :math:`n_{\text{red}}` red
-players, numbered :math:`1..n_{\text{red}}`.
+**State space.** The notation:
+
+- **Field.** The field is a grid of :math:`W \times H` cells
+  (``grid_size``). A cell is written :math:`(x, y)` with :math:`x \in
+  \{0..W-1\}` the column and :math:`y \in \{0..H-1\}` the row.
+- **Trees.** Some cells hold trees (``trees``), which no player can enter.
+  :math:`G` is the set of cells inside the field and not a tree.
+- **Flag candidates.** The red flag's home is one of :math:`K` candidate
+  cells :math:`F = (f_1, \dots, f_K)` (``red_flag_candidates``).
+- **Players.** There are :math:`n_{\text{blue}}` blue players, numbered
+  :math:`1..n_{\text{blue}}`, and :math:`n_{\text{red}}` red players,
+  numbered :math:`1..n_{\text{red}}`.
 
 A state is one vector:
 
 .. math::
 
-   s = \big(\underbrace{x^{\text{blue}}_{1:n_{\text{blue}}}}_{\text{blue cells}},\;
+   s = \big(&\underbrace{x^{\text{blue}}_{1:n_{\text{blue}}}}_{\text{blue cells}},\;
             \underbrace{x^{\text{red}}_{1:n_{\text{red}}}}_{\text{red cells}},\;
             k,\;
-            c^{\text{red}}, c^{\text{blue}},\;
-            \text{freeze}^{\text{blue}}_{1:n_{\text{blue}}}, \text{freeze}^{\text{red}}_{1:n_{\text{red}}},\;
+            c^{\text{red}}, c^{\text{blue}},\; \\
+            &\text{freeze}^{\text{blue}}_{1:n_{\text{blue}}}, \text{freeze}^{\text{red}}_{1:n_{\text{red}}},\;
             \text{cool}^{\text{blue}}_{1:n_{\text{blue}}}, \text{cool}^{\text{red}}_{1:n_{\text{red}}},\;
             \text{score}^{\text{blue}}, \text{score}^{\text{red}} \big)
 
@@ -138,20 +141,25 @@ components, in order:
 
 .. math::
 
-   Z = G^{n_{\text{blue}}} \times \{0..d_{\max}\}^{n_{\text{blue}} n_{\text{red}}} \times \{0,1\}^{n_{\text{blue}}}
-   \times \{0..n_{\text{blue}}\} \times \{0,1\} \times \mathbb{Z}_{\geq 0}^{n_{\text{blue}}}
+   Z = \;&G^{n_{\text{blue}}} \times \{0..d_{\max}\}^{n_{\text{blue}} n_{\text{red}}} \times \{0,1\}^{n_{\text{blue}}} \\
+   &\times \{0..n_{\text{blue}}\} \times \{0,1\} \times \mathbb{Z}_{\geq 0}^{n_{\text{blue}}}
    \times \mathbb{Z}_{\geq 0}^2 \;\cup\; \{(-1, \dots, -1)\}
 
 The red players' cells, :math:`k`, and the red counters are not observed. A
 terminal state emits the all :math:`-1` vector.
 
-**Transition model.** With :math:`p_s` = ``slip_probability``,
-:math:`p_r` = ``red_pursuit_probability``, :math:`r` = ``red_alert_radius``,
-:math:`n_d` = ``n_red_defenders``, :math:`F_{\max}` = ``freeze_steps``,
-:math:`C_{\max}` = ``tagger_cooldown_steps``, :math:`m` = ``midline``,
-:math:`b^{\text{blue}}, b^{\text{red}}` = ``blue_base``, ``red_base``,
-:math:`h^{\text{blue}}` = ``blue_flag_cell``, :math:`h^{\text{red}} = f_k`,
-and :math:`\mathrm{d}` the Manhattan distance:
+**Transition model.** The model uses:
+
+- :math:`p_s` = ``slip_probability``;
+- :math:`p_r` = ``red_pursuit_probability``;
+- :math:`r` = ``red_alert_radius``;
+- :math:`n_d` = ``n_red_defenders``;
+- :math:`F_{\max}` = ``freeze_steps``;
+- :math:`C_{\max}` = ``tagger_cooldown_steps``;
+- :math:`m` = ``midline``;
+- :math:`b^{\text{blue}}, b^{\text{red}}` = ``blue_base``, ``red_base``;
+- :math:`h^{\text{blue}}` = ``blue_flag_cell``, :math:`h^{\text{red}} = f_k`;
+- :math:`\mathrm{d}`, the Manhattan distance.
 
 The blue half is left of the midline, the red half right of it:
 
@@ -167,8 +175,8 @@ south:
 
 .. math::
 
-   \Delta_0 = (0, 1),\; \Delta_1 = (1, 0),\; \Delta_2 = (0, -1),\; \Delta_3 = (-1, 0),
-   \qquad \mathrm{side}(0) = \mathrm{side}(2) = \{1, 3\},\;
+   &\Delta_0 = (0, 1),\; \Delta_1 = (1, 0),\; \Delta_2 = (0, -1),\; \Delta_3 = (-1, 0), \\
+   &\mathrm{side}(0) = \mathrm{side}(2) = \{1, 3\},\;
    \mathrm{side}(1) = \mathrm{side}(3) = \{0, 2\}
 
 :math:`\mathrm{blk}_x(y)` keeps a player at :math:`x` when the target
@@ -197,32 +205,36 @@ With :math:`x = x^{\text{blue}}_i`:
        & \text{otherwise}
    \end{cases}
 
-*Red moves.* Each red player first picks a target :math:`q_j`: the red
-base if it carries the blue flag; the blue flag if it is an attacker
-(:math:`j > n_d`); otherwise, as a defender, the nearest blue player in the
-red half :math:`\iota_j` if one is within :math:`r`, else the free cell beside
-the red flag nearest the red base. With :math:`x = x^{\text{red}}_j`:
+*Red moves.* Each red player first picks a target :math:`q_j`:
+
+- the red base if it carries the blue flag;
+- the blue flag if it is an attacker (:math:`j > n_d`);
+- otherwise, as a defender, the nearest blue player in the red half
+  :math:`\iota_j` if one is within :math:`r`, else the free cell beside the
+  red flag nearest the red base.
+
+With :math:`x = x^{\text{red}}_j`:
 
 .. math::
 
-   q_j = \begin{cases}
+   q_j &= \begin{cases}
      b^{\text{red}} & c^{\text{blue}} = j \\
      h^{\text{blue}} & j > n_d \\
      \iota_j & j \le n_d,\; \mathrm{d}(x, \iota_j) \le r \\
      \operatorname{arg\,min}_{y \in N(h^{\text{red}}) \setminus \{h^{\text{red}}\}} \mathrm{d}(y, b^{\text{red}}) & \text{otherwise}
-   \end{cases},
-   \qquad \iota_j = \operatorname{arg\,min}_{x^{\text{blue}\prime}_i \in H^{\text{red}}} \mathrm{d}(x, x^{\text{blue}\prime}_i)
+   \end{cases}, \\
+   \iota_j &= \operatorname{arg\,min}_{x^{\text{blue}\prime}_i \in H^{\text{red}}} \mathrm{d}(x, x^{\text{blue}\prime}_i)
 
 It then steps toward :math:`q_j` with probability :math:`p_r` and to a random
 neighbour otherwise; a frozen red player stays:
 
 .. math::
 
-   x^{\text{red}\prime}_j \sim \begin{cases}
+   x^{\text{red}\prime}_j &\sim \begin{cases}
      \delta_x & \text{freeze}^{\text{red}}_j > 0 \\
      (1 - p_r)\,\mathcal{U}\big(N(x)\big) + p_r\,\mathcal{U}\big(N^\star_j\big) & \text{otherwise}
-   \end{cases},
-   \qquad N^\star_j = \operatorname{arg\,min}_{y \in N(x)} \mathrm{d}(y, q_j)
+   \end{cases}, \\
+   N^\star_j &= \operatorname{arg\,min}_{y \in N(x)} \mathrm{d}(y, q_j)
 
 *Pick-up.* An unfrozen player on the other team's flag takes it if no one
 carries it; the lowest index wins a tie:
@@ -262,9 +274,8 @@ own flag is home; the captured flag goes back home:
 
 .. math::
 
-   \sigma^{\text{blue}} = \mathbb{1}\big[c^{\text{red}} \ne 0 \wedge x^{\text{blue}\prime}_{c^{\text{red}}} = b^{\text{blue}} \wedge c^{\text{blue}} = 0\big],
-   \qquad
-   \sigma^{\text{red}} = \mathbb{1}\big[c^{\text{blue}} \ne 0 \wedge x^{\text{red}\prime}_{c^{\text{blue}}} = b^{\text{red}} \wedge c^{\text{red}} = 0\big]
+   \sigma^{\text{blue}} &= \mathbb{1}\big[c^{\text{red}} \ne 0 \wedge x^{\text{blue}\prime}_{c^{\text{red}}} = b^{\text{blue}} \wedge c^{\text{blue}} = 0\big], \\
+   \sigma^{\text{red}} &= \mathbb{1}\big[c^{\text{blue}} \ne 0 \wedge x^{\text{red}\prime}_{c^{\text{blue}}} = b^{\text{red}} \wedge c^{\text{red}} = 0\big]
 
 .. math::
 
@@ -351,11 +362,15 @@ needs :math:`s'` (``reward_requires_next_state`` is ``True``):
      \mathbb{1}[c^{\text{red}} = 0 \wedge c^{\text{red}\prime} \neq 0]
    \;-\; \sum_{i=1}^{n_{\text{blue}}} \mathrm{cost}(a_i)
 
-where :math:`\Delta\text{score}` is a team's score in :math:`s'` minus its
-score in :math:`s`; :math:`n_{\text{suffered}}` and :math:`n_{\text{inflicted}}`
-are the numbers of blue and red players tagged this step;
-:math:`a_i` is blue player :math:`i`'s action, and every blue player pays
-for its action, frozen or not:
+where:
+
+- :math:`\Delta\text{score}` is a team's score in :math:`s'` minus its
+  score in :math:`s`;
+- :math:`n_{\text{suffered}}` and :math:`n_{\text{inflicted}}` are the
+  numbers of blue and red players tagged this step;
+- :math:`a_i` is blue player :math:`i`'s action.
+
+Every blue player pays for its action, frozen or not:
 
 .. math::
 
@@ -377,9 +392,14 @@ holds the red flag:
 
    b_0\big(s(k)\big) = \tfrac{1}{K}, \qquad k \in \{1, \dots, K\}
 
-where :math:`s(k)` spawns every blue player on the blue base, every red
-player on the red base, no flag carried, and every freeze counter,
-cooldown and score at zero. The opening observation is drawn from the
+where :math:`s(k)` has:
+
+- every blue player on the blue base;
+- every red player on the red base;
+- no flag carried;
+- every freeze counter, cooldown and score at zero.
+
+The opening observation is drawn from the
 observation model averaged over the :math:`K` candidates, so a filter that
 weights it stays uniform over the candidates instead of favouring the nearer
 ones. When there are more than 8192 possible opening observations, the
@@ -400,8 +420,16 @@ with ``score_to_win`` = 1 by default.
 Step order
 ~~~~~~~~~~
 
-One step resolves in a fixed order: blue moves, red moves, flags are picked
-up, tags are resolved, scores are awarded, counters tick. Changing the order
+One step resolves in a fixed order:
+
+1. blue moves;
+2. red moves;
+3. flags are picked up;
+4. tags are resolved;
+5. scores are awarded;
+6. counters tick.
+
+Changing the order
 changes the outcome. Pick-up runs before tagging, so a player tagged
 while standing on the flag cell has already taken the flag and therefore drops
 it. Both scoring conditions are judged against the same carrier indices, which
@@ -421,10 +449,16 @@ tagging repeatedly.
 Rewards
 -------
 
-Scoring earns ``capture_reward``; conceding costs ``concede_penalty``. Each
-blue player tagged costs ``tagged_penalty``, each red player tagged earns
-``tag_reward``, first pick-up earns ``pickup_reward``, and every player pays
-its action's cost. None of these exclude each other, so the declared reward
+The reward terms:
+
+- scoring earns ``capture_reward``;
+- conceding costs ``concede_penalty``;
+- each blue player tagged costs ``tagged_penalty``;
+- each red player tagged earns ``tag_reward``;
+- first pick-up earns ``pickup_reward``;
+- every player pays its action's cost.
+
+None of these exclude each other, so the declared reward
 range is the joint worst case rather than the largest single term.
 
 Default values, from the constructor:
@@ -444,38 +478,20 @@ Scan (``scan_cost``)                      -2.0 per player
 Key settings
 ------------
 
-The defaults are a 9 by 7 field (``grid_size=(9, 7)``) split at column
-``midline=4``, with two players per team (``n_blue=2``, ``n_red=2``), one of
-them a red defender (``n_red_defenders=1``). Blue moves slip sideways with
-probability ``slip_probability=0.1``, and a range badge reads off by one with
-probability ``range_error_probability=0.2``. A red player steps toward its
-target with probability ``red_pursuit_probability=0.7``. ``score_to_win=1``
-capture ends the episode, and ``discount_factor`` defaults to ``0.98``. The
-reward arguments are listed under Rewards above.
+The defaults:
 
-Belief
-~~~~~~
+- a 9 by 7 field (``grid_size=(9, 7)``) split at column ``midline=4``;
+- two players per team (``n_blue=2``, ``n_red=2``), one of them a red
+  defender (``n_red_defenders=1``);
+- blue moves slip sideways with probability ``slip_probability=0.1``;
+- a range badge reads off by one with probability
+  ``range_error_probability=0.2``;
+- a red player steps toward its target with probability
+  ``red_pursuit_probability=0.7``;
+- ``score_to_win=1`` capture ends the episode;
+- ``discount_factor`` defaults to ``0.98``.
 
-``create_environment_belief`` returns ``CaptureTheFlagVectorizedBelief``, a
-particle filter whose transition and likelihood both run over the whole
-particle set at once through ``CaptureTheFlagVectorizedUpdater``.
-
-Two parts of a reading need different treatment:
-
-- Blue's own positions, the carrier ids, its freezes and both scores come back
-  without noise, so the posterior puts all its mass on them; the belief writes
-  them onto every particle rather than weighting by them, because weighting
-  floors every particle whose blue player slipped differently from the true
-  state's -- most of them, most steps.
-- The flag candidate is static: nothing in the transition moves a particle
-  from one candidate to another, so resampling across candidates deletes
-  hypotheses permanently. Resampling therefore happens inside a candidate.
-
-What remains is weighting by the range badges and flag detectors. A one-cell
-change in a red position moves the range likelihood by a factor of 64, so the
-filter converges on the true candidate in most episodes and over-commits to a wrong one in a few:
-over twelve 15-step episodes on the default field it held a mean weight near
-0.7 on the truth at 200 particles and near 0.8 at 400.
+The reward arguments are listed under Rewards above.
 
 Metrics
 ~~~~~~~

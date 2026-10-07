@@ -103,6 +103,7 @@ suppress_warnings = [
 # are served from the docs because GitHub's README attachment links do not
 # play outside github.com.
 html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
 # Ensure consistent navigation across all pages
 html_use_smartypants = True

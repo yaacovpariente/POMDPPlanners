@@ -59,8 +59,11 @@ positions and an absorbing flag:
    s = (\mathbf{u},\; \mathbf{v},\; \top), \qquad
    S = G \times G \times \{0, 1\}
 
-with :math:`\mathbf{u}` the robot's cell, :math:`\mathbf{v}` the opponent's
-cell, and :math:`\top = 1` once the episode has ended.
+Here:
+
+- :math:`\mathbf{u}` is the robot's cell.
+- :math:`\mathbf{v}` is the opponent's cell.
+- :math:`\top = 1` once the episode has ended.
 
 **Action space.**
 
@@ -69,10 +72,13 @@ cell, and :math:`\top = 1` once the episode has ended.
    A = \{0,1,2,3,4\} = \{\textsf{N}, \textsf{S}, \textsf{E}, \textsf{W},
    \textsf{tag}\}
 
-:math:`0` moves one row up (row :math:`-1`), :math:`1` one row down (row
-:math:`+1`), :math:`2` one column right (column :math:`+1`), :math:`3` one
-column left (column :math:`-1`); :math:`4` (tag) stays and tries to tag the
-opponent on the robot's cell.
+The actions are:
+
+- :math:`0` moves one row up (row :math:`-1`).
+- :math:`1` moves one row down (row :math:`+1`).
+- :math:`2` moves one column right (column :math:`+1`).
+- :math:`3` moves one column left (column :math:`-1`).
+- :math:`4` (tag) stays and tries to tag the opponent on the robot's cell.
 
 The continuous variant uses :math:`(\mathrm{d}x, \mathrm{d}y, \text{tag flag})
 \in \mathbb{R}^3` instead.
@@ -92,9 +98,14 @@ a length-8 array starting at E: its beam :math:`i` is grid beam
 **Transition model.** The robot's move first. With :math:`p` =
 ``transition_error_prob``, a movement action executes as commanded with
 probability :math:`1 - p` and as one of the other three otherwise, chosen
-uniformly. With :math:`a'` the executed move and :math:`\Delta_0 = (-1, 0)`,
-:math:`\Delta_1 = (1, 0)`, :math:`\Delta_2 = (0, 1)`, :math:`\Delta_3 = (0, -1)`
-its (row, column) offset:
+uniformly. Let :math:`a'` be the executed move. Its (row, column) offset is:
+
+- :math:`\Delta_0 = (-1, 0)`
+- :math:`\Delta_1 = (1, 0)`
+- :math:`\Delta_2 = (0, 1)`
+- :math:`\Delta_3 = (0, -1)`
+
+The robot's new cell is:
 
 .. math::
 
@@ -136,9 +147,12 @@ In short: the opponent moves with probability 0.4 along x, 0.4 along y and stays
 probability 0.2. Those are nominal weights: when the robot is aligned on an
 axis the 0.4 splits 0.2/0.2 across both directions, and a blocked neighbour
 folds its mass into "stay", so 0.2 is a floor rather than the actual stay
-probability. ``opponent_policy`` selects ``EVADE`` (default; away from the
-robot's pre-move position), ``PURSUE``, or ``EVADE_WHEN_SPOTTED``, which only
-runs from the robot once a laser has seen it.
+probability. ``opponent_policy`` selects one of:
+
+- ``EVADE`` (default; away from the robot's pre-move position).
+- ``PURSUE``.
+- ``EVADE_WHEN_SPOTTED``, which only runs from the robot once a laser has seen
+  it.
 
 **Observation model.** Eight laser ranges, one per compass direction
 :math:`\Delta_k` (N, NE, E, SE, S, SW, W, NW). The true range is the number of
@@ -183,8 +197,8 @@ for each:
 
 .. math::
 
-   H(\mathbf{u}') = -\texttt{dangerous\_area\_penalty} \cdot
-   \mathbb{1}\big[\mathbf{u}' \in \mathcal{W} \ \text{ or }\
+   H(\mathbf{u}') = \;&-\texttt{dangerous\_area\_penalty} \\
+   &\cdot \mathbb{1}\big[\mathbf{u}' \in \mathcal{W} \ \text{ or }\
    \exists c:\ \lVert \mathbf{u}' - c \rVert_2 \leq \texttt{dangerous\_area\_radius} \big]
 
 where :math:`c` ranges over the danger-zone centres ``dangerous_areas``.

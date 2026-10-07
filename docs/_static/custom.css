@@ -1,0 +1,26 @@
+/* sphinx_rtd_theme sets table cells to nowrap, so a long description runs
+   past the content column. Let cells wrap so every table fits the page. */
+.wy-table-responsive table td,
+.wy-table-responsive table th {
+  white-space: normal;
+}
+
+/* Long class and argument names in code font have no spaces to break at.
+   Let them break anywhere inside a table cell rather than widen the table. */
+.wy-table-responsive table td code,
+.wy-table-responsive table th code,
+.wy-table-responsive table td code span.pre,
+.wy-table-responsive table th code span.pre {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The theme pads cells 16px on each side. A seven-column table such as the
+   environment catalog cannot fit the column with that much padding. The
+   selector matches the theme's own `.rst-content table.docutils td` so this
+   rule, loaded later, wins. */
+.rst-content .wy-table-responsive table.docutils td,
+.rst-content .wy-table-responsive table.docutils th {
+  padding-left: 10px;
+  padding-right: 10px;
+}

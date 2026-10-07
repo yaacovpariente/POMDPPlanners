@@ -85,7 +85,12 @@ The damped point-mass dynamics are then integrated semi-implicitly:
    \mathbf{v}' &= \mathbf{v} + \mathbf{a}\,\Delta t \\
    \mathbf{p}' &= \mathbf{p} + \mathbf{v}'\,\Delta t
 
-with :math:`m` = ``mass``, :math:`c` = ``damping``, :math:`\Delta t` = ``dt``.
+The symbols map to constructor arguments:
+
+- :math:`m` = ``mass``;
+- :math:`c` = ``damping``;
+- :math:`\Delta t` = ``dt``.
+
 Position is updated with the *new* velocity, not the old one.
 
 .. note::
@@ -158,8 +163,13 @@ Rewards
    reward = speed * movement_reward_scale
             + safety_violation_penalty   if speed > safe_velocity_threshold
 
-Defaults: ``movement_reward_scale=1.0``, ``safety_violation_penalty=-100.0``,
-``safe_velocity_threshold=2.0``. ``reward_range`` is
+Defaults:
+
+- ``movement_reward_scale=1.0``;
+- ``safety_violation_penalty=-100.0``;
+- ``safe_velocity_threshold=2.0``.
+
+``reward_range`` is
 ``(safety_violation_penalty, safe_velocity_threshold * 1.5 * movement_reward_scale)``.
 
 The reward is a function of the **current state only** — ``action`` and

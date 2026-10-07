@@ -48,17 +48,22 @@ the whole episode, so the vector length never changes:
 
 .. math::
 
-   S = \mathbb{Z}_{\geq 0} \times \{0..W{-}1\} \times \mathbb{Z}_{\geq 0}
-   \times \{0,1\} \times
-   \big(\{0..W{-}1\} \times \{0..H{-}1\} \times \{-1, +1\}
+   S = \;&\mathbb{Z}_{\geq 0} \times \{0..W{-}1\} \times \mathbb{Z}_{\geq 0}
+   \times \{0,1\} \\
+   &\times \big(\{0..W{-}1\} \times \{0..H{-}1\} \times \{-1, +1\}
    \times \{\textsf{patrol}, \textsf{dive}\} \times \{0,1\}\big)^{N}
 
-with :math:`t` the step count, :math:`x` the ship column, :math:`\text{cool}`
-the steps left before the gun can fire again, :math:`\mathrm{hit} = 1` once
-the ship is destroyed, :math:`u_i, v_i` chicken :math:`i`'s column and row,
-:math:`d_i` its patrol direction (:math:`-1` toward lower columns,
-:math:`+1` toward higher), :math:`\text{mode}_i` whether it patrols or
-dives, and :math:`\text{alive}_i = 1` while it is alive.
+with:
+
+- :math:`t` the step count;
+- :math:`x` the ship column;
+- :math:`\text{cool}` the steps left before the gun can fire again;
+- :math:`\mathrm{hit} = 1` once the ship is destroyed;
+- :math:`u_i, v_i` chicken :math:`i`'s column and row;
+- :math:`d_i` its patrol direction (:math:`-1` toward lower columns,
+  :math:`+1` toward higher);
+- :math:`\text{mode}_i` whether it patrols or dives;
+- :math:`\text{alive}_i = 1` while it is alive.
 
 **Action space**
 
@@ -149,9 +154,13 @@ Finally :math:`t' = t + 1`.
    o = \big(\hat{x},\;
    (\,c_i,\, \hat{e}_i,\; r_i,\, \hat{n}_i,\, \hat{f}_i\,)_{i=1}^{N}\big)
 
-with :math:`c_i, r_i \in \{0,1\}` the camera and radar report flags. Write
-:math:`e_i = u_i - x'` for the column offset and :math:`n_i = v_i` for the row
-distance. Every numeric channel is a **rounded** Gaussian,
+with:
+
+- :math:`c_i, r_i \in \{0,1\}` the camera and radar report flags;
+- :math:`e_i = u_i - x'` the column offset;
+- :math:`n_i = v_i` the row distance.
+
+Every numeric channel is a **rounded** Gaussian,
 
 .. math::
 
@@ -177,10 +186,14 @@ silence has likelihood 1 rather than a sensor's miss chance:
      e_i^2 + n_i^2 \leq \texttt{radar\_radius}^2
 
 Inside reach, each sensor fires independently with its detection probability,
-:math:`p_{\text{cam}}` = ``camera_detection_probability`` or
-:math:`p_{\text{rad}}` = ``radar_detection_probability``, and its reading
-has noise :math:`\sigma_e` = ``camera_offset_noise_std`` or
-:math:`\sigma_n` = ``radar_range_noise_std``:
+and its reading has noise:
+
+- **Camera.** Detection probability :math:`p_{\text{cam}}` =
+  ``camera_detection_probability``, noise :math:`\sigma_e` =
+  ``camera_offset_noise_std``.
+- **Radar.** Detection probability :math:`p_{\text{rad}}` =
+  ``radar_detection_probability``, noise :math:`\sigma_n` =
+  ``radar_range_noise_std``.
 
 .. math::
 
@@ -254,9 +267,11 @@ has run, and the belief never weights particles with it.
 
 **Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
 
-**Terminal set.** The ship is hit, every chicken is dead
-(:math:`n_{\text{live}}(s) = \sum_i \text{alive}_i = 0`), or the step count
-reaches ``max_steps``:
+**Terminal set.** An episode ends when:
+
+- the ship is hit;
+- every chicken is dead (:math:`n_{\text{live}}(s) = \sum_i \text{alive}_i = 0`);
+- or the step count reaches ``max_steps``:
 
 .. math::
 
@@ -351,10 +366,15 @@ reported ones:
    O(o \mid s') = G_{\sigma_c}(\hat c; c')
                   \prod_{i=1}^{N} q_i^{\text{cam}} \, q_i^{\text{rad}},
 
-where a chicken in reach and reported contributes its detection probability
-times the noise mass, one in reach and silent contributes the miss chance, one
-out of reach and silent contributes 1, and one out of reach but reported
-contributes 0. Silence is therefore evidence: a chicken that a particle places
+where a chicken:
+
+- in reach and reported contributes its detection probability times the
+  noise mass;
+- in reach and silent contributes the miss chance;
+- out of reach and silent contributes 1;
+- out of reach but reported contributes 0.
+
+Silence is therefore evidence: a chicken that a particle places
 well inside both sensors, on a step where neither reported it, costs that
 particle a factor of ``0.1 * 0.1``. Everything is computed in log space, with an
 impossible reading floored rather than set to negative infinity, because
@@ -363,9 +383,15 @@ impossible reading floored rather than set to negative infinity, because
 Rewards
 -------
 
-+10 per chicken killed, -1 per shot fired (a ``FIRE`` the cooldown blocks is
-free), -0.1 every step, -50 when a
-chicken reaches the ship, +50 when the last chicken dies. A shot that connects
+The reward terms:
+
+- +10 per chicken killed;
+- -1 per shot fired (a ``FIRE`` the cooldown blocks is free);
+- -0.1 every step;
+- -50 when a chicken reaches the ship;
+- +50 when the last chicken dies.
+
+A shot that connects
 therefore pays ``-0.1 - 1 + 10`` on the step it was fired.
 
 The declared reward range is enumerated rather than estimated. A step kills at
@@ -391,8 +417,11 @@ missing term is deliberately not replaced by its expectation: a planner
 comparing actions at a belief node sees the exact value of a shot that connects,
 and the risk it took is charged on the step the flock gets through.
 
-An episode ends when the flock is cleared, when a chicken reaches the ship, or
-at ``max_steps``.
+An episode ends:
+
+- when the flock is cleared;
+- when a chicken reaches the ship;
+- or at ``max_steps``.
 
 Key settings
 ------------
@@ -417,32 +446,6 @@ certainty is the reading.
 
    deterministic_sensors = ChicheckInvadersPOMDP(**noiseless_preset())
    fully_observable = ChicheckInvadersPOMDP(observation_mode="full")
-
-Belief
-~~~~~~
-
-``ChicheckInvadersVectorizedBelief`` is a weighted particle filter with
-reinvigoration, and it is what ``create_environment_belief`` returns. It updates
-the whole particle array at once -- particles down, chicken slots across --
-through ``ChicheckInvadersVectorizedUpdater``. ``ChicheckInvadersBelief`` is the
-scalar filter it was ported from, still available as
-``create_environment_belief(env, belief_type=BeliefType.PARTICLE)``; the two
-carry the same model.
-
-Most of the filtering is done by the likelihood above: particles that put
-chickens where the sensors would have seen them get low weight and are dropped
-at resampling.
-
-What a weight-only filter cannot do is invent a hypothesis it never held, and
-two things here need that -- the opening placement is drawn from a large set of
-cells that a few hundred particles only partly cover, and a chicken outside both
-sensors for several steps drifts away from whichever patrol phase the particles
-guessed. After each reweight and resample, a fraction of the particles therefore
-have their *unreported* chickens re-drawn: a direction drawn uniformly from
-``-1``/``+1``, a mode drawn as dive with probability ``dive_probability``, and a
-position moved by up to one cell along each axis. Chickens the sensors just reported are left
-exactly as the weights found them, because perturbing one would throw away the
-only hard information the step produced.
 
 Metrics
 ~~~~~~~

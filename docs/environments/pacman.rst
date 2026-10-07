@@ -35,10 +35,15 @@ Formal definition
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 
-**State space.** The maze is :math:`M \times N` cells, a cell written
-(row, column), with wall set :math:`\mathcal{W}` and free cells :math:`G`;
-there are :math:`P` initial pellet cells :math:`c_1, \dots, c_P` and
-:math:`g` = ``num_ghosts`` ghosts.
+**State space.** The state space uses:
+
+- **Maze.** The maze is :math:`M \times N` cells, a cell written
+  (row, column).
+- **Walls.** The wall set is :math:`\mathcal{W}`; the free cells are
+  :math:`G`.
+- **Pellets.** There are :math:`P` initial pellet cells
+  :math:`c_1, \dots, c_P`.
+- **Ghosts.** There are :math:`g` = ``num_ghosts`` ghosts.
 
 .. math::
 
@@ -46,10 +51,15 @@ there are :math:`P` initial pellet cells :math:`c_1, \dots, c_P` and
    \qquad
    S = G \times G^{g} \times \{0,1\}^{P} \times \mathbb{R} \times \{0,1\}
 
-with :math:`x` PacMan's cell, :math:`y_k` ghost :math:`k`'s cell,
-:math:`\mathbf{m}` the pellet mask (:math:`m_p = 1` still there),
-:math:`\text{score}` the running score and :math:`\top` an absorbing terminal
-flag. The state space is the package's largest discrete one:
+The components of the state are:
+
+- :math:`x` — PacMan's cell;
+- :math:`y_k` — ghost :math:`k`'s cell;
+- :math:`\mathbf{m}` — the pellet mask (:math:`m_p = 1` still there);
+- :math:`\text{score}` — the running score;
+- :math:`\top` — an absorbing terminal flag.
+
+The state space is the package's largest discrete one:
 :math:`|G|^{g+1} 2^{P}`.
 
 **Action space**
@@ -60,9 +70,13 @@ flag. The state space is the package's largest discrete one:
      = \{0,1,2,3,4\}
 
 Action :math:`a` moves PacMan one cell by :math:`\Delta_a` (row change,
-column change): :math:`0` north :math:`(-1, 0)`, :math:`1` east
-:math:`(0, 1)`, :math:`2` south :math:`(1, 0)`, :math:`3` west
-:math:`(0, -1)`, :math:`4` stay :math:`(0, 0)`.
+column change):
+
+- :math:`0` north :math:`(-1, 0)`;
+- :math:`1` east :math:`(0, 1)`;
+- :math:`2` south :math:`(1, 0)`;
+- :math:`3` west :math:`(0, -1)`;
+- :math:`4` stay :math:`(0, 0)`.
 
 **Observation space.** One cell per ghost; PacMan's own cell is not part of
 it. A terminal state reports :math:`(-1, -1)` for every ghost.
@@ -165,13 +179,12 @@ where the hazard term :math:`D` depends on ``reward_model_type``, with
 :math:`p_D` = ``dangerous_area_penalty`` and :math:`\rho(x')` the Euclidean
 distance from :math:`x'` to the nearest hazard centre:
 
-.. math::
-
-   D(x') = \begin{cases}
-     p_D \cdot \mathbb{1}[x' \text{ in a hazard zone}] & \texttt{CONSTANT\_HAZARD\_PENALTY} \\
-     \pm p_D \text{ with probability } \tfrac12 \text{ each, if } x' \text{ in a hazard zone, else } 0 & \texttt{ZERO\_MEAN\_HAZARD\_SHOCK} \\
-     p_D \text{ with probability } e^{-\rho(x')/\lambda}, \text{ else } 0 & \texttt{DISTANCE\_DECAYED\_HAZARD\_PENALTY}
-   \end{cases}
+- ``CONSTANT_HAZARD_PENALTY``: :math:`D(x') = p_D \cdot \mathbb{1}[x' \text{ in a hazard zone}]`.
+- ``ZERO_MEAN_HAZARD_SHOCK``: if :math:`x'` is in a hazard zone,
+  :math:`D(x') = \pm p_D` with probability :math:`\tfrac12` each; else
+  :math:`D(x') = 0`.
+- ``DISTANCE_DECAYED_HAZARD_PENALTY``: :math:`D(x') = p_D` with probability
+  :math:`e^{-\rho(x')/\lambda}`, else :math:`0`.
 
 with :math:`\lambda` = ``penalty_decay``. With no ``dangerous_areas``,
 :math:`D = 0`.
@@ -191,9 +204,13 @@ with :math:`\lambda` = ``penalty_decay``. With no ``dangerous_areas``,
    b_0(s) = \mathbb{1}[s = s_0], \qquad
    s_0 = \big(x_0,\, (y_k^0),\, \mathbf{1},\, 0,\, 0\big)
 
-with :math:`x_0` = ``initial_pacman_pos``, :math:`y_k^0` the ghosts' start
-cells (``initial_ghost_positions``), every pellet present, score 0 and not
-terminal.
+with:
+
+- :math:`x_0` = ``initial_pacman_pos``;
+- :math:`y_k^0` the ghosts' start cells (``initial_ghost_positions``);
+- every pellet present;
+- score 0;
+- not terminal.
 
 Uncertainty does not come from the prior here — it accumulates from the
 observation noise as the ghosts move. The initial observation distribution is

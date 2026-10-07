@@ -51,16 +51,26 @@ What this page does state is :math:`S`, :math:`A`, :math:`Z` and, for
 CARLA and nuPlan, :math:`R`.
 
 **Driving reward (CARLA and nuPlan).** Both use the same gym-carla-style
-score. Let :math:`\mathrm{yaw}` be the ego yaw, :math:`e_{\mathrm{yaw}}` the heading error,
-:math:`(v_x, v_y)` the velocity and :math:`d` the lateral offset from the
-route. The along-route speed is
+score. Let:
+
+- :math:`\mathrm{yaw}` be the ego yaw;
+- :math:`e_{\mathrm{yaw}}` the heading error;
+- :math:`(v_x, v_y)` the velocity;
+- :math:`d` the lateral offset from the route.
+
+The along-route speed is
 
 .. math::
 
    v_\parallel = v_x \cos(\mathrm{yaw} - e_{\mathrm{yaw}}) + v_y \sin(\mathrm{yaw} - e_{\mathrm{yaw}})
 
-and, with steering command :math:`u`, desired speed :math:`v_{\text{des}}` =
-``desired_speed`` and lane-offset limit :math:`d_{\max}` = ``out_lane_thresh``:
+The reward also uses:
+
+- steering command :math:`u`;
+- desired speed :math:`v_{\text{des}}` = ``desired_speed``;
+- lane-offset limit :math:`d_{\max}` = ``out_lane_thresh``.
+
+Then:
 
 .. math::
 
@@ -137,10 +147,12 @@ Requires the ``carla`` Python API (imported lazily, and not declared in
 ``CarlaServerPool`` manages several headless servers for parallel episodes.
 
 Planner-side models, all pure NumPy with no CARLA import:
-``KinematicCarlaModelPOMDP`` (kinematic-bicycle ego transition — prefer this
-one), ``FactoredCarlaModelPOMDP`` (**its transition is a documented identity
-placeholder**, so every action looks motionless to the planner) and
-``DreamerCarlaModelPOMDP`` (a trained Dreamer RSSM behind a protocol).
+
+- ``KinematicCarlaModelPOMDP`` — kinematic-bicycle ego transition. Prefer this
+  one.
+- ``FactoredCarlaModelPOMDP`` — **its transition is a documented identity
+  placeholder**, so every action looks motionless to the planner.
+- ``DreamerCarlaModelPOMDP`` — a trained Dreamer RSSM behind a protocol.
 
 Isaac Lab
 ---------

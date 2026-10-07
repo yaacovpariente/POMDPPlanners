@@ -54,10 +54,15 @@ Discrete variant
 Formal definition
 -----------------
 
-Both variants share one geometry: beacons :math:`\mathcal{Q}`, obstacles
-:math:`\mathcal{O}`, goal :math:`\mathbf{g}`, start :math:`\mathbf{x}_0`, and
-a grid of side :math:`\mathcal{G}` = ``grid_size``. Each variant is its own
-tuple.
+Both variants share one geometry:
+
+- beacons :math:`\mathcal{Q}`;
+- obstacles :math:`\mathcal{O}`;
+- goal :math:`\mathbf{g}`;
+- start :math:`\mathbf{x}_0`;
+- a grid of side :math:`\mathcal{G}` = ``grid_size``.
+
+Each variant is its own tuple.
 
 Continuous variant
 ~~~~~~~~~~~~~~~~~~
@@ -106,16 +111,20 @@ A terminal state is absorbing and draws nothing. When
 with probability ``obstacle_hit_probability`` when :math:`\mathbf{p}'` lies
 within ``obstacle_radius`` of an obstacle in :math:`\mathcal{O}`.
 
-**Observation model.** This is the environment's whole point. Let
+**Observation model.** This is the environment's whole point. It uses:
 
-.. math::
+- the distance to the nearest beacon,
 
-   d(\mathbf{p}) = \min_{\mathbf{q} \in \mathcal{Q}}
-   \lVert \mathbf{p} - \mathbf{q} \rVert_2
+  .. math::
 
-be the distance to the nearest beacon, :math:`r_\mathcal{Q}` =
-``beacon_radius`` and :math:`\Sigma_O` = ``observation_cov_matrix``. Under ``NORMAL_NOISE`` (the default) the agent always sees
-its position, but the covariance is **halved** inside a beacon:
+     d(\mathbf{p}) = \min_{\mathbf{q} \in \mathcal{Q}}
+     \lVert \mathbf{p} - \mathbf{q} \rVert_2
+
+- :math:`r_\mathcal{Q}` = ``beacon_radius``;
+- :math:`\Sigma_O` = ``observation_cov_matrix``.
+
+Under ``NORMAL_NOISE`` (the default) the agent always sees its position, but
+the covariance is **halved** inside a beacon:
 
 .. math::
 
@@ -223,8 +232,12 @@ episode) when ``is_obstacle_hit_terminal=True``:
 
    A = \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\}
 
-each a one-cell move: up :math:`y + 1`, down :math:`y - 1`, right
-:math:`x + 1`, left :math:`x - 1`.
+each a one-cell move:
+
+- up: :math:`y + 1`
+- down: :math:`y - 1`
+- right: :math:`x + 1`
+- left: :math:`x - 1`
 
 **Observation space.** A grid cell, plus the null symbol under
 ``NO_OBS_IN_DARK`` and ``DISTANCE_BASED``:
@@ -244,11 +257,16 @@ each a one-cell move: up :math:`y + 1`, down :math:`y - 1`, right
      e_T / 3 & \mathbf{p}' = \mathbf{p} + \Delta_{a'},\; a' \neq a
    \end{cases}
 
-with :math:`e_T` = ``transition_error_prob`` and :math:`\Delta_a` the offset
-of move :math:`a`: :math:`\Delta_{\textsf{up}} = (0, 1)`,
-:math:`\Delta_{\textsf{down}} = (0, -1)`, :math:`\Delta_{\textsf{right}} =
-(1, 0)`, :math:`\Delta_{\textsf{left}} = (-1, 0)`. There are no walls: the
-agent can step outside the grid, and pays for it through the reward.
+with :math:`e_T` = ``transition_error_prob``. :math:`\Delta_a` is the offset
+of move :math:`a`:
+
+- :math:`\Delta_{\textsf{up}} = (0, 1)`
+- :math:`\Delta_{\textsf{down}} = (0, -1)`
+- :math:`\Delta_{\textsf{right}} = (1, 0)`
+- :math:`\Delta_{\textsf{left}} = (-1, 0)`
+
+There are no walls: the agent can step outside the grid, and pays for it
+through the reward.
 
 **Observation model.** Five outcomes — the true cell, or one of the four
 neighbours:
@@ -271,9 +289,12 @@ the continuous variant's halved covariance:
      e_O & \text{otherwise}
    \end{cases}
 
-with :math:`e_O` = ``observation_error_prob``, :math:`d(\mathbf{p}')` the
-Euclidean distance from :math:`\mathbf{p}'` to the nearest beacon in
-:math:`\mathcal{Q}`, and :math:`r_\mathcal{Q}` = ``beacon_radius``.
+where:
+
+- :math:`e_O` = ``observation_error_prob``;
+- :math:`d(\mathbf{p}')` is the Euclidean distance from :math:`\mathbf{p}'`
+  to the nearest beacon in :math:`\mathcal{Q}`;
+- :math:`r_\mathcal{Q}` = ``beacon_radius``.
 
 **Reward function.** The same shape, with the goal and obstacle tests by
 exact cell equality rather than by radius, and the obstacle penalty gated by
@@ -281,8 +302,8 @@ a Bernoulli:
 
 .. math::
 
-   R = -\texttt{fuel\_cost} - \lVert \mathbf{p}' - \mathbf{g} \rVert_2
-   + \begin{cases}
+   R = \;&-\texttt{fuel\_cost} - \lVert \mathbf{p}' - \mathbf{g} \rVert_2 \\
+   &+ \begin{cases}
      +\texttt{goal\_reward} & \mathbf{p}' = \mathbf{g} \\
      \texttt{obstacle\_reward} \cdot
        \mathrm{Bern}(\texttt{obstacle\_hit\_probability})
@@ -336,8 +357,12 @@ stack:
    else outside the grid    ->  base + obstacle_reward
    otherwise                ->  base
 
-Defaults: ``fuel_cost=2.0``, ``goal_reward=10.0``, ``obstacle_reward=-10.0``,
-``obstacle_hit_probability=0.2``.
+Defaults:
+
+- ``fuel_cost=2.0``
+- ``goal_reward=10.0``
+- ``obstacle_reward=-10.0``
+- ``obstacle_hit_probability=0.2``
 
 .. note::
 

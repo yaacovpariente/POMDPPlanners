@@ -52,10 +52,15 @@ Formal definition
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
-**State space.** Let :math:`n` = ``grid_size``, :math:`G = \{0..n{-}1\}^2` the
-playable cells, each written (row, column), :math:`L` = ``target_length`` and
-:math:`K` = ``starvation_limit`` (default :math:`2n^2`). A state is a body
-(head first), a food cell, a starvation counter and a status tag:
+**State space.** Let:
+
+- :math:`n` = ``grid_size``;
+- :math:`G = \{0..n{-}1\}^2` the playable cells, each written (row, column);
+- :math:`L` = ``target_length``;
+- :math:`K` = ``starvation_limit`` (default :math:`2n^2`).
+
+A state is a body (head first), a food cell, a starvation counter and a
+status tag:
 
 .. math::
 
@@ -63,11 +68,14 @@ playable cells, each written (row, column), :math:`L` = ``target_length`` and
    S = \mathcal{T} \times G^{\leq L} \times (G \cup \{\varnothing\})
    \times \{0..K\}
 
-with :math:`\mathbf{z} = (z_1, \dots, z_\ell)` the occupied cells,
-:math:`f` the food (:math:`\varnothing` if none), :math:`m` steps since food,
-and the status :math:`\textsf{RUNNING}` while alive, or why the episode
-ended — head off the grid, head into the body, target length reached, or
-:math:`K` steps without food:
+with:
+
+- :math:`\mathbf{z} = (z_1, \dots, z_\ell)` the occupied cells;
+- :math:`f` the food (:math:`\varnothing` if none);
+- :math:`m` steps since food;
+- the status :math:`\textsf{RUNNING}` while alive, or why the episode
+  ended — head off the grid, head into the body, target length reached, or
+  :math:`K` steps without food:
 
 .. math::
 
@@ -84,9 +92,11 @@ alone determines where the snake can go next.
    A = \{\textsf{turn\_left},\; \textsf{straight},\; \textsf{turn\_right}\}
      = \{0, 1, 2\}
 
-:math:`0` turns the heading 90° counter-clockwise, :math:`1` keeps it,
-:math:`2` turns it 90° clockwise; then the head moves one cell along the
-new heading.
+- :math:`0` turns the heading 90° counter-clockwise;
+- :math:`1` keeps it;
+- :math:`2` turns it 90° clockwise.
+
+Then the head moves one cell along the new heading.
 
 **Observation space.** The sentinel :math:`\textsf{TERM}` from a terminal
 state, or a :math:`\textsf{LIVE}` reading with three components:
@@ -103,10 +113,13 @@ state, or a :math:`\textsf{LIVE}` reading with three components:
    \times (G \cup \{\varnothing\}) \times G^{\leq L}
 
 **Transition model.** Deterministic except for where the food respawns.
-The heading is :math:`h = z_1 - z_2`, one of north :math:`(-1, 0)`, east
-:math:`(0, 1)`, south :math:`(1, 0)`, west :math:`(0, -1)`, and
-:math:`\mathcal{R}_a` rotates it as action :math:`a` says. Rotate the heading,
-step, then resolve:
+The model uses:
+
+- **Heading.** :math:`h = z_1 - z_2`, one of north :math:`(-1, 0)`, east
+  :math:`(0, 1)`, south :math:`(1, 0)`, west :math:`(0, -1)`.
+- **Rotation.** :math:`\mathcal{R}_a` rotates it as action :math:`a` says.
+
+Rotate the heading, step, then resolve:
 
 .. math::
 
@@ -166,8 +179,13 @@ only with probability :math:`p_{\text{det}}` =
 With :math:`p_{\text{det}} < 1` a silent window is not proof the food is
 elsewhere — absence of evidence stays weak evidence rather than a certainty.
 
-*Scent.* A noisy quadrant reading, with quadrants :math:`0` north-east,
-:math:`1` north-west, :math:`2` south-east, :math:`3` south-west of the head.
+*Scent.* A noisy quadrant reading, with these quadrants of the head:
+
+- :math:`0` north-east;
+- :math:`1` north-west;
+- :math:`2` south-east;
+- :math:`3` south-west.
+
 Let :math:`Q(f' - z'_1) \subseteq \{0,1,2,3\}` be the quadrants compatible
 with the offset — two of them when the
 food shares the head's row or column, one otherwise. With :math:`p_{\text{scent}}` =
@@ -292,30 +310,6 @@ Key settings
    * - ``discount_factor``
      - ``0.98``
      -
-
-Belief
-~~~~~~
-
-The body is known and the food is one cell, so the belief is a categorical
-distribution over the grid. ``SnakeBelief`` carries it exactly. When the
-observed length grows, the tracked food was eaten and the prior restarts as
-uniform over the new body's free cells; otherwise the previous distribution
-carries over with the new head cell ruled out — not eating proves the food is
-not where the head has just arrived. Either prior is then multiplied by the
-likelihood of the sighting and the scent, and normalised.
-
-``SnakeVectorizedWeightedParticleBelief`` is the batched alternative, and it is
-what ``create_environment_belief`` returns. It carries particles rather than the
-exact categorical, and updates them through ``SnakeVectorizedUpdater``: one
-array step for the whole set, and the likelihood of the body, the sighting and
-the scent added across it. Where a sighting rules out every particle it holds,
-it redraws the food from the cells the reading allows rather than resampling
-from particles the sensor has already excluded -- a sighting names one cell
-exactly, so that redraw is the posterior.
-
-A generic particle filter runs on this environment too, but it is lossy here for
-that same reason: it would floor every weight and resample cells the sensor has
-already ruled out.
 
 Metrics
 ~~~~~~~

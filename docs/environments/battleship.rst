@@ -30,12 +30,16 @@ Formal definition
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`.
 
-**State space.** Let :math:`n` be ``board_size``, :math:`C = \{0, \dots, n^2 - 1\}`
-the cells in row-major order, and :math:`\mathcal{L} \subseteq \{0,1\}^{C}` the
-set of legal fleet layouts — the occupancy vectors reachable by placing every
-ship in ``ship_lengths`` straight, within the board, without overlap (and
-without touching when ``allow_adjacent_ships=False``). A state is a layout
-paired with the set of cells probed so far:
+**State space.** The state space uses:
+
+- :math:`n` — ``board_size``.
+- :math:`C = \{0, \dots, n^2 - 1\}` — the cells in row-major order.
+- :math:`\mathcal{L} \subseteq \{0,1\}^{C}` — the set of legal fleet layouts:
+  the occupancy vectors reachable by placing every ship in ``ship_lengths``
+  straight, within the board, without overlap (and without touching when
+  ``allow_adjacent_ships=False``).
+
+A state is a layout paired with the set of cells probed so far:
 
 .. math::
 
@@ -130,19 +134,6 @@ Key settings
 
 The default board is 5 by 5, with straight ships of lengths 3, 2 and 2. Ships
 may touch, including diagonally, unless ``allow_adjacent_ships=False``.
-
-Belief
-~~~~~~
-
-``BattleshipBelief`` tracks legal fleet layouts consistent with observed hits
-and misses; its occupancy probabilities describe uncertainty about each cell.
-These probabilities are not extra sensor readings.
-
-``BattleshipVectorizedWeightedParticleBelief`` is the batched version, and it is
-what ``create_environment_belief`` returns. It carries the same posterior --
-its particles are redrawn from the consistent layouts on every probe, so the
-two agree cell for cell -- through the vectorized updater interface, which is
-what a vectorized planner needs to hold a belief at all.
 
 Visualization
 ~~~~~~~~~~~~~

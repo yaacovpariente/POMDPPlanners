@@ -64,9 +64,14 @@ moves.
        & \texttt{ContinuousPushPOMDP}
    \end{cases}
 
-A discrete action moves the robot one unit: up :math:`\mathbf{d} = (0, 1)`,
-down :math:`(0, -1)`, right :math:`(1, 0)`, left :math:`(-1, 0)`. A continuous
-action is the displacement :math:`\mathbf{d}` itself.
+A discrete action moves the robot one unit:
+
+- up :math:`\mathbf{d} = (0, 1)`;
+- down :math:`(0, -1)`;
+- right :math:`(1, 0)`;
+- left :math:`(-1, 0)`.
+
+A continuous action is the displacement :math:`\mathbf{d}` itself.
 
 **Observation space.** The same layout as the state: exact robot and target
 positions and a noisy object position clamped to the grid (plus the terminal
@@ -78,9 +83,13 @@ slot when the continuous state carries one):
    \subseteq \mathbb{R}^6
 
 **Transition model.** The robot moves, and *then* drags the object if it is
-close enough. With displacement :math:`\mathbf{d}`, friction
-:math:`f` = ``friction_coefficient`` and push radius :math:`h` =
-``push_threshold``:
+close enough. The model uses:
+
+- displacement :math:`\mathbf{d}`;
+- friction :math:`f` = ``friction_coefficient``;
+- push radius :math:`h` = ``push_threshold``.
+
+Then:
 
 .. math::
 
@@ -146,11 +155,11 @@ with
 .. math::
 
    C(\mathbf{r}') &= \texttt{obstacle\_penalty} \cdot
-     \mathbb{1}[\mathbf{r}' \in \mathcal{O}] \cdot
-     \mathrm{Bern}(\texttt{obstacle\_hit\_probability}) \\
+     \mathbb{1}[\mathbf{r}' \in \mathcal{O}] \\
+     &\quad \cdot \mathrm{Bern}(\texttt{obstacle\_hit\_probability}) \\
    D(\mathbf{r}') &= \texttt{dangerous\_area\_penalty} \cdot
-     \mathbb{1}[\mathbf{r}' \in \text{hazard}] \cdot
-     \mathrm{Bern}(\texttt{dangerous\_area\_hit\_probability})
+     \mathbb{1}[\mathbf{r}' \in \text{hazard}] \\
+     &\quad \cdot \mathrm{Bern}(\texttt{dangerous\_area\_hit\_probability})
 
 where :math:`\mathcal{O}` is the union of the obstacle discs (radius
 ``obstacle_radius`` around each point of ``obstacles``) and *hazard* the

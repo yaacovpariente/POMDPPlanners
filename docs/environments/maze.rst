@@ -60,13 +60,17 @@ goal side, and the cue's delivery phase:
    S = \mathcal{P} \times \{\textsf{L}, \textsf{R}\} \times
    \{\textsf{UNSEEN}, \textsf{EMITTING}, \textsf{CONSUMED}\}
 
-with :math:`(x, y)` the agent's position, :math:`\mathcal{P} = G` for the
-discrete variants and :math:`\mathcal{P} \subseteq \mathbb{R}^2` the walkable
-region for the continuous one (a point belongs to the cell it rounds to);
-:math:`\mathrm{side}` the goal that pays, left (:math:`\textsf{L}`) or right
-(:math:`\textsf{R}`); and :math:`\mathrm{phase}` whether the cue is not yet
-seen (:math:`\textsf{UNSEEN}`), being read this step
-(:math:`\textsf{EMITTING}`), or used up (:math:`\textsf{CONSUMED}`).
+The symbols are:
+
+- :math:`(x, y)` — the agent's position.
+- :math:`\mathcal{P} = G` for the discrete variants, and
+  :math:`\mathcal{P} \subseteq \mathbb{R}^2` the walkable region for the
+  continuous one (a point belongs to the cell it rounds to).
+- :math:`\mathrm{side}` — the goal that pays, left (:math:`\textsf{L}`) or
+  right (:math:`\textsf{R}`).
+- :math:`\mathrm{phase}` — whether the cue is not yet seen
+  (:math:`\textsf{UNSEEN}`), being read this step (:math:`\textsf{EMITTING}`),
+  or used up (:math:`\textsf{CONSUMED}`).
 
 **Action space.**
 
@@ -79,10 +83,15 @@ seen (:math:`\textsf{UNSEEN}`), being read this step
        & \texttt{ContinuousMazePOMDP}
    \end{cases}
 
-A discrete action moves one cell: up :math:`y + 1`, down :math:`y - 1`,
-left :math:`x - 1`, right :math:`x + 1`. A continuous action is the
-displacement :math:`d` itself; a longer one is rescaled to the cap rather
-than rejected.
+A discrete action moves one cell:
+
+- up: :math:`y + 1`
+- down: :math:`y - 1`
+- left: :math:`x - 1`
+- right: :math:`x + 1`
+
+A continuous action is the displacement :math:`d` itself; a longer one is
+rescaled to the cap rather than rejected.
 
 **Observation space**
 
@@ -97,11 +106,15 @@ than rejected.
    T(s' \mid s, a) = \mathbb{1}[s' = f(s, a)], \qquad
    f(s, a) = s \ \text{ for } s \in S_T
 
-The position update refuses illegal moves without moving the agent, with
-:math:`\Delta_{\textsf{up}} = (0, 1)`, :math:`\Delta_{\textsf{down}} = (0, -1)`,
-:math:`\Delta_{\textsf{left}} = (-1, 0)`, :math:`\Delta_{\textsf{right}} =
-(1, 0)` for the discrete variants and :math:`\Delta_d = d` for the continuous
-one:
+The position update refuses illegal moves without moving the agent. The
+offsets for the discrete variants are:
+
+- :math:`\Delta_{\textsf{up}} = (0, 1)`
+- :math:`\Delta_{\textsf{down}} = (0, -1)`
+- :math:`\Delta_{\textsf{left}} = (-1, 0)`
+- :math:`\Delta_{\textsf{right}} = (1, 0)`
+
+For the continuous one, :math:`\Delta_d = d`. The update is:
 
 .. math::
 
@@ -112,8 +125,8 @@ one:
 
 A discrete step is legal when the target cell is walkable. A continuous step
 is legal only when the **whole swept segment** stays inside the walkable
-region. The goal side never changes. With :math:`c \in G` the cue cell: The cue phase advances on every action, including one a
-wall refused:
+region. The goal side never changes. Let :math:`c \in G` be the cue cell.
+The cue phase advances on every action, including one a wall refused:
 
 .. math::
 
@@ -191,10 +204,15 @@ built from them, ``(-10.0, 10.0)`` by default.
 Key settings
 ------------
 
-All three classes take ``discount_factor`` (default ``0.95``), ``cue_accuracy``
-(default ``0.9``), ``goal_reward`` (default ``10.0``), ``wrong_goal_penalty``
-(default ``10.0``) and ``step_penalty`` (default ``1.0``). Every argument has a
-default, so each class builds with no arguments. The two penalties are passed
+All three classes take:
+
+- ``discount_factor`` (default ``0.95``)
+- ``cue_accuracy`` (default ``0.9``)
+- ``goal_reward`` (default ``10.0``)
+- ``wrong_goal_penalty`` (default ``10.0``)
+- ``step_penalty`` (default ``1.0``)
+
+Every argument has a default, so each class builds with no arguments. The two penalties are passed
 as positive numbers and subtracted.
 
 The layout arguments differ by class:
@@ -228,23 +246,6 @@ TMazePOMDP
 the discrete maze. ``stem_length`` sets the distance to the junction and
 ``arm_length`` sets the distance from the junction to each endpoint. The
 agent must remember the cue while walking up the stem, then choose an arm.
-
-Belief
-~~~~~~
-
-``create_environment_belief`` returns a
-``MazeVectorizedWeightedParticleBelief`` for either maze. The hidden state is
-one bit -- which goal pays -- so the update is cheap per particle and the Python
-loop around it is the whole cost; ``DiscreteMazeVectorizedUpdater`` and
-``ContinuousMazeVectorizedUpdater`` do that loop's work in NumPy instead.
-
-Both reproduce the environment's event rule rather than approximating it: the
-discrete one by the same lookup table the environment builds, the continuous one
-by the segment test written as array algebra. A belief that walked through walls
-the world refuses would be searching a different maze. The continuous updater's
-positions agree with the environment's to within its cell tolerance rather than
-bit for bit, because it stops a step at the tolerance-widened cell boundary the
-same code uses to decide membership.
 
 Can I use?
 ----------

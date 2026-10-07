@@ -37,9 +37,12 @@ The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangl
 
    S = \mathbb{R}^4, \qquad s = (x, \dot{x}, q, \dot{q})
 
-with :math:`x` the cart position, :math:`\dot{x}` the cart velocity,
-:math:`q` the pole angle from upright in radians, and :math:`\dot{q}` the
-pole's angular velocity.
+The four components are:
+
+- :math:`x` — the cart position;
+- :math:`\dot{x}` — the cart velocity;
+- :math:`q` — the pole angle from upright in radians;
+- :math:`\dot{q}` — the pole's angular velocity.
 
 **Action space**
 
@@ -56,9 +59,16 @@ pole's angular velocity.
 A noisy reading of the four state components :math:`(x, \dot{x}, q,
 \dot{q})`, in that order.
 
-**Transition model.** The Gym CartPole physics, with :math:`m_c = 1.0`,
-:math:`m_p = 0.1`, half-length :math:`\ell = 0.5`, :math:`g = 9.8`,
-:math:`F = 10` and :math:`\Delta t = 0.02`. Let :math:`F_a = +F` for
+**Transition model.** The Gym CartPole physics, with these constants:
+
+- :math:`m_c = 1.0`;
+- :math:`m_p = 0.1`;
+- half-length :math:`\ell = 0.5`;
+- :math:`g = 9.8`;
+- :math:`F = 10`;
+- :math:`\Delta t = 0.02`.
+
+Let :math:`F_a = +F` for
 :math:`a = 1` and :math:`-F` for :math:`a = 0`. The accelerations are
 
 .. math::
@@ -163,8 +173,14 @@ Key settings
      - Process noise.
 
 The physics constants are fixed in the class, not constructor arguments:
-gravity 9.8, cart mass 1.0, pole mass 0.1, half-pole length 0.5, force
-magnitude 10.0, timestep 0.02 s, Euler integration.
+
+- gravity 9.8;
+- cart mass 1.0;
+- pole mass 0.1;
+- half-pole length 0.5;
+- force magnitude 10.0;
+- timestep 0.02 s;
+- Euler integration.
 
 An episode ends when ``|cart_position| > 2.4`` or ``|pole_angle| > 0.2094`` rad
 (12°).

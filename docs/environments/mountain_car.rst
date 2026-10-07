@@ -46,7 +46,11 @@ velocity.
 
    A = \{-1, 0, 1\}
 
-:math:`-1` pushes left, :math:`0` does not push, :math:`1` pushes right.
+The actions mean:
+
+- :math:`-1` pushes left;
+- :math:`0` does not push;
+- :math:`1` pushes right.
 
 **Observation space**
 

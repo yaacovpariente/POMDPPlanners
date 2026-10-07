@@ -34,12 +34,18 @@ Formal definition
 
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
 
-**State space.** Fix a grid of :math:`M \times N` cells and rock positions
-:math:`y_1, \dots, y_R`. A state is :math:`s = (x, c)` with the robot's
-position :math:`x = (r, k)`, row :math:`r` and column :math:`k`, and rock
-qualities :math:`c \in \{0, 1\}^R` (:math:`c_i = 1`: rock :math:`i` is good).
-One more absorbing exit state :math:`\top` is stored as the sentinel position
-:math:`(-1, -1)`:
+**State space.** The state space uses:
+
+- **Grid.** A grid of :math:`M \times N` cells.
+- **Rocks.** Rock positions :math:`y_1, \dots, y_R`.
+- **Robot.** The robot's position :math:`x = (r, k)`, row :math:`r` and
+  column :math:`k`.
+- **Qualities.** Rock qualities :math:`c \in \{0, 1\}^R` (:math:`c_i = 1`:
+  rock :math:`i` is good).
+- **Exit.** One more absorbing exit state :math:`\top`, stored as the
+  sentinel position :math:`(-1, -1)`.
+
+A state is :math:`s = (x, c)`, or the exit state:
 
 .. math::
 
@@ -120,9 +126,15 @@ rather than misleading. Then
 
 **Reward function.** Terms are **added**, evaluated on the pre-transition
 state :math:`s = (x, c)`, :math:`x = (r, k)`, except the hazard term, which
-uses the realised :math:`x'`. Write :math:`t` for ``step_penalty``, :math:`g` for
-``good_rock_reward``, :math:`\ell` for ``bad_rock_penalty``, :math:`u`
-for ``sensor_use_penalty`` and :math:`e` for ``exit_reward``:
+uses the realised :math:`x'`. Write:
+
+- :math:`t` for ``step_penalty``;
+- :math:`g` for ``good_rock_reward``;
+- :math:`\ell` for ``bad_rock_penalty``;
+- :math:`u` for ``sensor_use_penalty``;
+- :math:`e` for ``exit_reward``.
+
+Then:
 
 .. math::
 
@@ -135,10 +147,15 @@ for ``sensor_use_penalty`` and :math:`e` for ``exit_reward``:
 
 The exit term short-circuits: an exiting step pays :math:`t + e` and no
 hazard term. The hazard term :math:`D` is where the three
-``reward_model_type`` variants differ. Let :math:`\mathrm{dist}(x')` be the distance
-from :math:`x'` to the nearest hazard centre, :math:`\mathrm{rad}` the
-``dangerous_area_radius``, :math:`P` the ``dangerous_area_penalty`` and
-:math:`q` the ``dangerous_area_hit_probability``:
+``reward_model_type`` variants differ. Let:
+
+- :math:`\mathrm{dist}(x')` be the distance from :math:`x'` to the nearest
+  hazard centre;
+- :math:`\mathrm{rad}` the ``dangerous_area_radius``;
+- :math:`P` the ``dangerous_area_penalty``;
+- :math:`q` the ``dangerous_area_hit_probability``.
+
+Then:
 
 .. math::
 
