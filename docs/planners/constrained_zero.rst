@@ -1,12 +1,16 @@
 ConstrainedZero
 ===============
 
-BetaZero for chance-constrained POMDPs. Three things change: the network grows
-a third head that predicts failure probability, action selection becomes SPUCT
-and masks actions whose predicted failure exceeds a threshold, and that
-threshold is calibrated at run time by conformal inference rather than fixed by
-hand. Training targets are constrained in the same way, so the policy the
-network learns respects the same limit the search does.
+BetaZero for chance-constrained POMDPs. Three things change:
+
+- The network grows a third head that predicts failure probability.
+- Action selection becomes SPUCT and masks actions whose predicted failure
+  exceeds a threshold.
+- That threshold is calibrated at run time by conformal inference rather than
+  fixed by hand.
+
+Training targets are constrained in the same way, so the policy the network
+learns respects the same limit the search does.
 
 Notes
 -----

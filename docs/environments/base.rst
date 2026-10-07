@@ -25,14 +25,14 @@ as a string.
 
 .. note::
 
-   ``get_environment`` covers only the classes in ``ENVIRONMENT_REGISTRY``, which
-   include
-   ``OccupancyGridMappingPOMDP``, ``ChicheckInvadersPOMDP`` and
-   ``FirefightingPOMDP``. Import ``BattleshipPOMDP`` and
-   ``SnakePOMDP`` directly. ``ContinuousPushPOMDP``,
-   ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
-   Isaac Lab, nuPlan, Racetrack) are not in the registry — import those classes
-   directly.
+   ``get_environment`` covers only the classes in ``ENVIRONMENT_REGISTRY``:
+
+   - In the registry: ``ChicheckInvadersPOMDP`` and ``FirefightingPOMDP``,
+     among others.
+   - Import directly: ``BattleshipPOMDP`` and ``SnakePOMDP``.
+   - Not in the registry, import directly: ``ContinuousPushPOMDP``,
+     ``ContinuousPushPOMDPDiscreteActions`` and the realistic worlds (CARLA,
+     Isaac Lab, nuPlan, Racetrack).
 
 Environment catalog
 -------------------
@@ -42,11 +42,14 @@ Environment catalog
 observation space types. The state column below describes what the code
 stores.
 
-A world and its variants share one page. :doc:`maze` covers the discrete,
-continuous and T-maze versions; :doc:`light_dark`, :doc:`push` and
-:doc:`laser_tag` each cover their continuous and discrete-action forms; and
-:doc:`realistic` covers Racetrack, CARLA, Isaac Lab and nuPlan together. The
-Guide column says which page to open for a given class.
+A world and its variants share one page:
+
+- :doc:`maze` covers the discrete, continuous and T-maze versions.
+- :doc:`light_dark`, :doc:`push` and :doc:`laser_tag` each cover their
+  continuous and discrete-action forms.
+- :doc:`realistic` covers Racetrack, CARLA, Isaac Lab and nuPlan together.
+
+The Guide column says which page to open for a given class.
 
 .. list-table::
    :header-rows: 1

@@ -173,15 +173,17 @@ Two constraints shape how you can use it:
 Needs Isaac Sim, Isaac Lab and a GPU; ``isaaclab`` and ``isaaclab_tasks`` are
 imported lazily.
 
-Planner-side models come in two stacks. The **factored** one —
-``FactoredIsaacModelPOMDP`` with the task-specific ``UnicycleIsaacModel``,
-``ManipulatorIsaacModel``, ``NavigationIsaacModel`` and ``LearnedIsaacModel`` —
-splits the state into named channels, each observed through its own model, so
-a channel with no observation model stays hidden. Prefer it.
-The **one-space** ``IsaacLabModelPOMDP`` shares one space between state and
-observation with ``observation = state + N(0, Σ)``; it is generic but cannot
-express a hidden state variable, and its default reward model is ``None``,
-meaning flat zero reward and undirected planning.
+Planner-side models come in two stacks:
+
+- The **factored** one — ``FactoredIsaacModelPOMDP`` with the task-specific
+  ``UnicycleIsaacModel``, ``ManipulatorIsaacModel``, ``NavigationIsaacModel``
+  and ``LearnedIsaacModel`` — splits the state into named channels, each
+  observed through its own model, so a channel with no observation model stays
+  hidden. Prefer it.
+- The **one-space** ``IsaacLabModelPOMDP`` shares one space between state and
+  observation with ``observation = state + N(0, Σ)``; it is generic but cannot
+  express a hidden state variable, and its default reward model is ``None``,
+  meaning flat zero reward and undirected planning.
 
 nuPlan
 ------

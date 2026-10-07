@@ -438,11 +438,12 @@ completion rate reports what the planner did.
 Metrics
 ~~~~~~~
 
-``task_completion_rate`` reports a fire-free map, reduced with ``ANY``: wet and
-burnt are absorbing, so a fire-free map cannot be undone and ``ANY`` and
-``LAST`` agree. ``ended_by_goal_rate``, ``ended_by_failure_rate`` and ``ended_by_timeout_rate``
-report how each episode ended and sum to one. ``average_episode_length`` is a
-constant channel summed.
+- ``task_completion_rate`` reports a fire-free map, reduced with ``ANY``: wet
+  and burnt are absorbing, so a fire-free map cannot be undone and ``ANY`` and
+  ``LAST`` agree.
+- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
+  ``ended_by_timeout_rate`` report how each episode ended and sum to one.
+- ``average_episode_length`` is a constant channel summed.
 
 The danger is reported both as a count -- ``average_firefighter_steps_in_fire``,
 ``average_firefighter_health_lost`` -- and as a severity --
@@ -468,12 +469,15 @@ The belief is ``FirefightingVectorizedBelief``, which
 ``create_environment_belief`` returns. It runs every part of the transition
 over the particle axis and the grid at once, and it does two things a
 bootstrap filter does not, both because a bootstrap filter over whole 100-cell
-maps is degenerate here. The poses, tanks and healths come back from the sensor
-exactly but depend on hidden state, so weighting by them puts every weight on
-the floor and both belief panels render as noise; this belief writes the
-reported values onto the particles instead. And the wind never changes, so
-resampling across wind values deletes hypotheses no later evidence can restore;
-resampling therefore happens inside a wind value.
+maps is degenerate here:
+
+- The poses, tanks and healths come back from the sensor exactly but depend on
+  hidden state, so weighting by them puts every weight on the floor and both
+  belief panels render as noise; this belief writes the reported values onto
+  the particles instead.
+- The wind never changes, so resampling across wind values deletes hypotheses
+  no later evidence can restore; resampling therefore happens inside a wind
+  value.
 
 That does not make the filter free of the usual cautions. Use enough particles
 and inspect effective sample size rather than trusting the wind histogram on

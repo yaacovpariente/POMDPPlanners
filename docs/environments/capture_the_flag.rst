@@ -460,15 +460,16 @@ Belief
 particle filter whose transition and likelihood both run over the whole
 particle set at once through ``CaptureTheFlagVectorizedUpdater``.
 
-Two parts of a reading need different treatment. Blue's own positions, the
-carrier ids, its freezes and both scores come back without noise, so the
-posterior puts all its mass on them; the belief writes them onto every particle
-rather than weighting by them, because weighting floors every particle whose
-blue player slipped differently from the true state's -- most of them, most
-steps.
-And the flag candidate is static: nothing in the transition moves a particle
-from one candidate to another, so resampling across candidates deletes
-hypotheses permanently. Resampling therefore happens inside a candidate.
+Two parts of a reading need different treatment:
+
+- Blue's own positions, the carrier ids, its freezes and both scores come back
+  without noise, so the posterior puts all its mass on them; the belief writes
+  them onto every particle rather than weighting by them, because weighting
+  floors every particle whose blue player slipped differently from the true
+  state's -- most of them, most steps.
+- The flag candidate is static: nothing in the transition moves a particle
+  from one candidate to another, so resampling across candidates deletes
+  hypotheses permanently. Resampling therefore happens inside a candidate.
 
 What remains is weighting by the range badges and flag detectors. A one-cell
 change in a red position moves the range likelihood by a factor of 64, so the
@@ -479,13 +480,14 @@ over twelve 15-step episodes on the default field it held a mean weight near
 Metrics
 ~~~~~~~
 
-The completion metric is ``task_completion_rate``. Episodes are also split by
-why they ended -- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
-``ended_by_timeout_rate`` -- because a completion rate alone cannot tell a
-planner taking bad risks from one given too small a step budget. Alongside
-episode length, the environment reports tags suffered and inflicted, steps
-spent holding the enemy flag, and exposure in the enemy half as both a count
-and a per-episode maximum.
+- The completion metric is ``task_completion_rate``.
+- Episodes are also split by why they ended -- ``ended_by_goal_rate``,
+  ``ended_by_failure_rate`` and ``ended_by_timeout_rate`` -- because a
+  completion rate alone cannot tell a planner taking bad risks from one given
+  too small a step budget.
+- Alongside episode length, the environment reports tags suffered and
+  inflicted, steps spent holding the enemy flag, and exposure in the enemy half
+  as both a count and a per-episode maximum.
 
 Visualization
 ~~~~~~~~~~~~~

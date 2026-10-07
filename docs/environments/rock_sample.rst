@@ -57,9 +57,9 @@ further binary slot :math:`h` is appended and :math:`S_T` grows accordingly.
    \underbrace{\{1,2,3,4\}}_{\textsf{N,E,S,W}} \cup
    \underbrace{\{5, \dots, 4+R\}}_{\textsf{check rock } i}
 
-Action :math:`0` samples the rock under the robot. Actions :math:`1, 2, 3, 4`
-move one cell north, east, south or west. Action :math:`4 + i` reads the
-noisy sensor on rock :math:`i` without moving.
+- Action :math:`0` samples the rock under the robot.
+- Actions :math:`1, 2, 3, 4` move one cell north, east, south or west.
+- Action :math:`4 + i` reads the noisy sensor on rock :math:`i` without moving.
 
 **Observation space**
 

@@ -197,11 +197,13 @@ All three classes take ``discount_factor`` (default ``0.95``), ``cue_accuracy``
 default, so each class builds with no arguments. The two penalties are passed
 as positive numbers and subtracted.
 
-The layout arguments differ by class. ``DiscreteMazePOMDP`` and
-``ContinuousMazePOMDP`` take ``maze_width`` (``7``), ``maze_height`` (``9``),
-``maze_seed`` (``0``) and ``loop_fraction`` (``0.15``).
-``ContinuousMazePOMDP`` also takes ``max_step_size`` (``1.0``). ``TMazePOMDP``
-takes ``stem_length`` (``4``) and ``arm_length`` (``1``).
+The layout arguments differ by class:
+
+- ``DiscreteMazePOMDP`` and ``ContinuousMazePOMDP`` take ``maze_width``
+  (``7``), ``maze_height`` (``9``), ``maze_seed`` (``0``) and
+  ``loop_fraction`` (``0.15``).
+- ``ContinuousMazePOMDP`` also takes ``max_step_size`` (``1.0``).
+- ``TMazePOMDP`` takes ``stem_length`` (``4``) and ``arm_length`` (``1``).
 
 DiscreteMazePOMDP
 ~~~~~~~~~~~~~~~~~

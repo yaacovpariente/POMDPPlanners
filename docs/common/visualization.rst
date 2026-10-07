@@ -2,11 +2,14 @@ Visualization and Reporting
 ===========================
 
 There are three ways to look at results, and each answers a different
-question. An episode replay shows what one planner did in one episode, which
-is how you catch a planner that scores well for the wrong reason. The results
-site shows a whole run in the browser: metric tables, return histograms, and
-every episode's replay. The tuning plots show whether a hyperparameter study
-converged and what it traded away.
+question:
+
+- An episode replay shows what one planner did in one episode, which is how
+  you catch a planner that scores well for the wrong reason.
+- The results site shows a whole run in the browser: metric tables, return
+  histograms, and every episode's replay.
+- The tuning plots show whether a hyperparameter study converged and what it
+  traded away.
 
 Episode replays
 ---------------

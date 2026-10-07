@@ -447,11 +447,12 @@ only hard information the step produced.
 Metrics
 ~~~~~~~
 
-``task_completion_rate`` is the fraction of episodes that cleared the flock,
-reduced with ``ANY`` -- clearing happens once and ends the episode.
-``ended_by_goal_rate``, ``ended_by_failure_rate`` and ``ended_by_timeout_rate`` reduce with
-``LAST`` and sum to one per episode. ``average_episode_length``,
-``average_chickens_killed`` and ``average_shots_fired`` are per-episode sums.
+- ``task_completion_rate`` is the fraction of episodes that cleared the flock,
+  reduced with ``ANY`` -- clearing happens once and ends the episode.
+- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
+  ``ended_by_timeout_rate`` reduce with ``LAST`` and sum to one per episode.
+- ``average_episode_length``, ``average_chickens_killed`` and
+  ``average_shots_fired`` are per-episode sums.
 
 The danger is a chicken getting close, reported both ways:
 ``average_hits_taken`` counts the times the flock got through, and
