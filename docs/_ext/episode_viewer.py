@@ -73,8 +73,9 @@ class episode_viewer(nodes.General, nodes.Element):  # pylint: disable=invalid-n
     """One embedded viewer; its children are the caption."""
 
 
-# Sizes each viewer frame to the height its page reports, so a scene with a
-# panel under its viewport is shown whole rather than behind a scrollbar.
+# Sizes each viewer frame to the height its page reports (the viewer, its
+# control bar and its status line), so it is shown whole rather than behind a
+# scrollbar.
 # Written once per figure but installs its listener once per page.
 _FIT_FRAMES_SCRIPT = (
     "if(!window.__pomdpFitFrames){window.__pomdpFitFrames=1;"
@@ -181,7 +182,7 @@ def _merge(app: Sphinx, env: Any, docnames: List[str], other: Any) -> None:
 
 
 EMBED_PAGE = """<!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" data-scene-panel="off">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -189,11 +190,14 @@ EMBED_PAGE = """<!DOCTYPE html>
 <link rel="stylesheet" href="../site.css">
 <style>
   /* The viewer keeps site.css's 16:9 shape, so its height follows the
-     frame's width and never the frame's height. A scene may add a panel of
-     its own under the viewport (firefighting draws its wind belief there);
-     the frame grows to hold it, as the script below tells the docs page,
-     so the frame never scrolls. */
+     frame's width and never the frame's height; the frame grows to fit, as
+     the script below tells the docs page, so it never scrolls.
+     data-scene-panel="off" on <html> keeps a scene's own panel (firefighting
+     puts one under the viewport) out of the docs, and the rule below hides
+     the HUD's belief readout; the results site still shows both. */
   html, body {{ margin: 0; background: transparent; overflow: hidden; }}
+  /* No belief in the docs, so the HUD's belief readout goes too. */
+  #hud-belief {{ display: none; }}
   /* The docs theme is light. site.css allows dark too, and a frame whose
      colour scheme differs from its page is painted with an opaque canvas,
      which showed as a black band behind the status line. */

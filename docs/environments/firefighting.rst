@@ -39,39 +39,37 @@ Formal definition
 The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
 \rangle`. Names in typewriter font are constructor arguments of
 ``FirefightingPOMDP``; :math:`\{0..n\}` is the integers :math:`0` to
-:math:`n`. Notation:
+:math:`n`.
 
-- **Grid.** :math:`H` = ``num_rows``, :math:`W` = ``num_cols``. A cell is
-  :math:`k = (y, z)`, row :math:`y` (0 at the top) and column :math:`z` (0 at
-  the left); :math:`K = \{0..H{-}1\} \times \{0..W{-}1\}`, in row-major
-  order.
-- **Obstacles.** :math:`\mathcal{B} \subseteq K` = ``obstacle_cells``, and
-  :math:`\overline{\mathcal{B}} = K \setminus \mathcal{B}`.
-- **Directions.** :math:`D = \{\textsf{N}, \textsf{E}, \textsf{S},
-  \textsf{W}\}`, coded :math:`0..3`, with offsets :math:`\Delta_{\textsf{N}} =
-  (-1, 0)`, :math:`\Delta_{\textsf{E}} = (0, 1)`, :math:`\Delta_{\textsf{S}} =
-  (1, 0)`, :math:`\Delta_{\textsf{W}} = (0, -1)`.
-  :math:`\mathcal{N}(k) = \{k + \Delta_d : d \in D\} \cap K` are the
-  neighbours of :math:`k`.
+**State space.** The notation:
+
+- **Grid.** :math:`H` = ``num_rows`` rows and :math:`W` = ``num_cols``
+  columns. A cell is :math:`k = (y, z)`, row :math:`y` (0 at the top) and
+  column :math:`z` (0 at the left). The cells are :math:`K = \{0..H{-}1\}
+  \times \{0..W{-}1\}`, in row-major order.
+- **Obstacles.** :math:`\mathcal{B} \subseteq K` = ``obstacle_cells``; the
+  free cells are :math:`\overline{\mathcal{B}} = K \setminus \mathcal{B}`.
+- **Firefighters.** :math:`M` = ``num_firefighters``, indexed :math:`j =
+  1..M`.
 - **Categories.** :math:`\mathcal{C} = \{\textsf{UNBURNT},
   \textsf{SMOLDERING}, \textsf{BURNING}, \textsf{BURNT}, \textsf{WET}\}`,
-  coded :math:`0..4`. A cell is *alight* if its category is in
-  :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}`.
-- **Firefighters.** :math:`M` = ``num_firefighters``, indexed :math:`j = 1..M`.
-  :math:`k_{\text{dep}}` = ``depot_cell`` refills a tank.
-- **State variables.** :math:`t` is the step count; :math:`p_j \in
-  \overline{\mathcal{B}}` firefighter :math:`j`'s cell; :math:`\text{tank}_j` its
-  sprays left; :math:`\text{hp}_j` its health, the firefighter being *live* while
-  :math:`\text{hp}_j > 0`; :math:`w_{\text{dir}} \in D` the direction the
-  hidden wind blows toward; :math:`w_{\text{str}} \in \{\textsf{LOW},
-  \textsf{HIGH}\}` its strength, so the wind lies in :math:`\Theta = D \times
-  \{\textsf{LOW}, \textsf{HIGH}\}`; :math:`f_k \in \mathcal{C}` the category
-  of cell :math:`k`. A prime marks the successor state :math:`s'`.
-- **Actions.** Firefighter :math:`j`'s action is :math:`a_j = \lfloor a / 5^{j-1}
-  \rfloor \bmod 5` of the joint action :math:`a`: codes :math:`0..3` move in
-  that direction, :math:`4` is :math:`\textsf{SUPPRESS}`.
+  coded :math:`0..4` in that order.
+- **Directions.** :math:`D = \{\textsf{N}, \textsf{E}, \textsf{S},
+  \textsf{W}\}`, coded :math:`0..3` in that order: :math:`\textsf{N}` is
+  toward row 0, :math:`\textsf{E}` toward higher columns, :math:`\textsf{S}`
+  toward higher rows, :math:`\textsf{W}` toward column 0.
 
-**State space.**
+A state holds:
+
+- :math:`t`, the step count.
+- For each firefighter :math:`j`: its cell :math:`p_j \in
+  \overline{\mathcal{B}}`, its sprays left :math:`\text{tank}_j`, and its
+  health :math:`\text{hp}_j`.
+- The hidden wind: its direction :math:`w_{\text{dir}} \in D`, the way it
+  blows toward, and its strength :math:`w_{\text{str}} \in \{\textsf{LOW},
+  \textsf{HIGH}\}`. The wind lies in :math:`\Theta = D \times \{\textsf{LOW},
+  \textsf{HIGH}\}`.
+- :math:`f_k \in \mathcal{C}`, the category of each cell :math:`k`.
 
 .. math::
 
@@ -85,19 +83,34 @@ The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
    \times \{0..\texttt{max\_health}\}\big)^{M}
    \times \Theta \times \mathcal{C}^{K}
 
-**Action space.**
+**Action space.** There are :math:`M` = ``num_firefighters`` firefighters.
+A joint action :math:`a` packs one digit :math:`a_j \in \{0..4\}` per
+firefighter :math:`j`, least significant first:
 
 .. math::
 
-   A = \{0..5^{M}{-}1\}, \qquad a = \textstyle\sum_{j=1}^{M} a_j\, 5^{j-1}
+   A = \{0..5^{M}{-}1\}, \qquad a = \textstyle\sum_{j=1}^{M} a_j\, 5^{j-1},
+   \qquad a_j = \lfloor a / 5^{j-1} \rfloor \bmod 5
 
-For a live firefighter :math:`j` at :math:`(y, z)`: :math:`a_j = 0` moves to
-:math:`(y{-}1, z)`, :math:`1` to :math:`(y, z{+}1)`, :math:`2` to
-:math:`(y{+}1, z)`, :math:`3` to :math:`(y, z{-}1)`; :math:`4` stays and, if
-:math:`\text{tank}_j > 0`, sprays :math:`\{(y, z)\} \cup \mathcal{N}(y, z)`.
-A disabled firefighter's digit is ignored.
+Firefighter :math:`j` is *live* while its health :math:`\text{hp}_j > 0`, and
+*disabled* once :math:`\text{hp}_j = 0`. For
+a live firefighter at cell :math:`(y, z)` (row :math:`y` from the top, column
+:math:`z` from the left): :math:`a_j = 0` (north) moves to :math:`(y{-}1, z)`,
+:math:`1` (east) to :math:`(y, z{+}1)`, :math:`2` (south) to :math:`(y{+}1,
+z)`, :math:`3` (west) to :math:`(y, z{-}1)`; :math:`4`
+(:math:`\textsf{SUPPRESS}`) stays and, if it has sprays left
+(:math:`\text{tank}_j > 0`), sprays its own cell and the up to four
+neighbouring cells one step north, east, south and west of it that lie on the
+grid of ``num_rows`` by ``num_cols`` cells. A disabled firefighter's digit is ignored.
 
-**Observation space.**
+**Observation space.** An observation lists, for each of the :math:`M` =
+``num_firefighters`` firefighters :math:`j`, its cell :math:`p_j`, its sprays
+left :math:`\text{tank}_j` and its health :math:`\text{hp}_j`, where a cell is
+a pair :math:`(y, z)`, row :math:`y` from the top and column :math:`z` from the
+left; then, for every
+cell :math:`k` of the grid :math:`K = \{0..H{-}1\} \times \{0..W{-}1\}`
+(:math:`H` = ``num_rows``, :math:`W` = ``num_cols``), a reported category
+:math:`\hat f_k`:
 
 .. math::
 
@@ -110,12 +123,41 @@ A disabled firefighter's digit is ignored.
    \times \{0..\texttt{max\_health}\}\big)^{M}
    \times \big(\mathcal{C} \cup \{\textsf{UNKNOWN}\}\big)^{K}
 
-The firefighter fields are exact. :math:`\hat f_k` is a reported, possibly wrong,
-category for a cell within Chebyshev distance ``sensing_radius`` of a live
-firefighter, and :math:`\textsf{UNKNOWN}` (coded :math:`-1`) for every other cell.
-The step count and the wind are not observed.
+Here :math:`\overline{\mathcal{B}}` is the cells of :math:`K` not in
+``obstacle_cells`` and :math:`\mathcal{C} = \{\textsf{UNBURNT}, \textsf{SMOLDERING},
+\textsf{BURNING}, \textsf{BURNT}, \textsf{WET}\}`, coded :math:`0..4`. The
+firefighter fields are exact for every firefighter, including one whose health
+is zero.
+:math:`\hat f_k` is a reported category, possibly
+different from the cell's true category, for a cell within Chebyshev distance ``sensing_radius`` of the
+cell :math:`p_j` of a firefighter with health above zero, and :math:`\textsf{UNKNOWN}` (coded
+:math:`-1`) for every other cell; :math:`\textsf{UNKNOWN}` is not in
+:math:`\mathcal{C}`. The step count and the wind are not observed.
 
-**Transition model.** One step, in this order; all draws are independent.
+**Transition model.** :math:`T` maps the state :math:`s` and the joint action
+:math:`a` to the successor :math:`s'`; a prime marks a component of
+:math:`s'`. The components of :math:`s` are the step count :math:`t`; for
+each of the :math:`M` = ``num_firefighters`` firefighters :math:`j = 1..M`,
+its cell :math:`p_j`, sprays left :math:`\text{tank}_j` and health
+:math:`\text{hp}_j`; the hidden wind's direction :math:`w_{\text{dir}} \in D`
+and strength :math:`w_{\text{str}} \in \{\textsf{LOW}, \textsf{HIGH}\}`; and
+each cell :math:`k`'s category :math:`f_k \in \mathcal{C} =
+\{\textsf{UNBURNT}, \textsf{SMOLDERING}, \textsf{BURNING}, \textsf{BURNT},
+\textsf{WET}\}`. Firefighter :math:`j`'s action is the digit
+:math:`a_j = \lfloor a / 5^{j-1} \rfloor \bmod 5` of the joint action :math:`a
+\in A = \{0..5^M{-}1\}`, and the firefighter is
+*live* while :math:`\text{hp}_j > 0`. A cell is :math:`k = (y, z)`, row
+:math:`y` from the top and column :math:`z` from the left, in the grid
+:math:`K = \{0..H{-}1\} \times \{0..W{-}1\}` (:math:`H` = ``num_rows``,
+:math:`W` = ``num_cols``); :math:`\mathcal{B}` = ``obstacle_cells`` and
+:math:`\overline{\mathcal{B}} = K \setminus \mathcal{B}`. The directions
+:math:`D = \{\textsf{N}, \textsf{E}, \textsf{S}, \textsf{W}\}`, coded
+:math:`0..3` in that order, have offsets :math:`\Delta_{\textsf{N}} = (-1, 0)`,
+:math:`\Delta_{\textsf{E}} = (0, 1)`, :math:`\Delta_{\textsf{S}} = (1, 0)`,
+:math:`\Delta_{\textsf{W}} = (0, -1)`, added to or subtracted from a cell
+:math:`(y, z)` componentwise, and :math:`\mathcal{N}(k) = \{k +
+\Delta_d : d \in D\} \cap K` are the neighbours of :math:`k`. One step, in
+this order; all draws are independent.
 
 1. **Motion.** For :math:`a_j \in \{0..3\}` let :math:`u_j = p_j +
    \Delta_{a_j}`. If firefighter :math:`j` is live, :math:`u_j \in
@@ -124,9 +166,10 @@ The step count and the wind are not observed.
    :math:`\sigma`, with :math:`\sigma` = ``slip_probability``. Otherwise
    :math:`p'_j = p_j`.
 
-2. **Suppression.** The sprayers are :math:`J = \{j : \text{hp}_j > 0,\; a_j
-   = 4,\; \text{tank}_j > 0\}`, and :math:`c_k` is the number of sprayers
-   with :math:`k \in \{p'_j\} \cup \mathcal{N}(p'_j)`. Cell :math:`k` turns
+2. **Suppression.** Action digit :math:`4` is :math:`\textsf{SUPPRESS}`. The
+   sprayers are :math:`J = \{j : \text{hp}_j > 0,\; a_j = 4,\; \text{tank}_j
+   > 0\}`, and :math:`c_k` is the number of sprayers with :math:`k \in
+   \{p'_j\} \cup \mathcal{N}(p'_j)`. Cell :math:`k` turns
    :math:`\textsf{WET}`, giving the map :math:`\mathbf{f}^{\text{sup}}`, w.p.
 
    .. math::
@@ -136,26 +179,28 @@ The step count and the wind are not observed.
    with :math:`q(\textsf{UNBURNT})`, :math:`q(\textsf{SMOLDERING})`,
    :math:`q(\textsf{BURNING})` = ``suppression_probability_unburnt``,
    ``_smoldering``, ``_burning``, and :math:`q(\textsf{BURNT}) =
-   q(\textsf{WET}) = 0`. Then :math:`\text{tank}'_j = \texttt{max\_tank}` if
-   :math:`p'_j = k_{\text{dep}}`, else :math:`\text{tank}_j -
-   \mathbb{1}[j \in J]`.
+   q(\textsf{WET}) = 0`. Then, with :math:`k_{\text{dep}}` = ``depot_cell``,
+   :math:`\text{tank}'_j = \texttt{max\_tank}` if :math:`p'_j =
+   k_{\text{dep}}`, else :math:`\text{tank}_j - \mathbb{1}[j \in J]`.
 
-3. **Spread.** A cell :math:`k \notin \mathcal{B}` with
-   :math:`f^{\text{sup}}_k = \textsf{UNBURNT}` becomes
-   :math:`\textsf{SMOLDERING}` w.p.
+3. **Spread.** A cell is *alight* if its category is in
+   :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING}, \textsf{BURNING}\}`. A
+   cell :math:`k \notin \mathcal{B}` with :math:`f^{\text{sup}}_k =
+   \textsf{UNBURNT}` becomes :math:`\textsf{SMOLDERING}` w.p.
 
    .. math::
 
-      1 - \prod_{n \in \mathcal{N}(k),\; f^{\text{sup}}_n \in \mathcal{A}\ell}
-      \big(1 - p_{\text{ign}}(n, k)\big), \qquad
-      p_{\text{ign}}(n, k) = \begin{cases}
-        \min\!\big(1,\; \lambda\, g(w_{\text{str}})\big) & k - n = \Delta_{w_{\text{dir}}} \\
+      1 - \prod_{\nu \in \mathcal{N}(k),\; f^{\text{sup}}_\nu \in \mathcal{A}\ell}
+      \big(1 - p_{\text{ign}}(\nu, k)\big), \qquad
+      p_{\text{ign}}(\nu, k) = \begin{cases}
+        \min\!\big(1,\; \lambda\, g(w_{\text{str}})\big) & k - \nu = \Delta_{w_{\text{dir}}} \\
         \lambda\, (1 - \texttt{crosswind\_attenuation}) & \text{otherwise}
       \end{cases}
 
    with :math:`\lambda` = ``spread_probability``, :math:`g(\textsf{LOW})` =
    ``wind_gain_low``, :math:`g(\textsf{HIGH})` = ``wind_gain_high``. The case
-   :math:`k - n = \Delta_{w_{\text{dir}}}` is the neighbour directly upwind.
+   :math:`k - \nu = \Delta_{w_{\text{dir}}}` is the neighbour :math:`\nu`
+   directly upwind of :math:`k`.
 
 4. **Growth and burnout.** A cell with :math:`f^{\text{sup}}_k =
    \textsf{SMOLDERING}` becomes :math:`\textsf{BURNING}` w.p.
@@ -170,17 +215,28 @@ The step count and the wind are not observed.
 
 6. **Clock and wind.** :math:`t' = t + 1`; the wind is unchanged.
 
-**Observation model.** With :math:`\rho` = ``sensing_radius`` and
-:math:`p_{\text{err}}` = ``observation_error_probability``, the visible cells
-are
+**Observation model.** :math:`O` gives the observation from the successor
+state :math:`s'`. In :math:`s'`, firefighter :math:`j \in \{1..M\}`, of the
+:math:`M` = ``num_firefighters``, is at cell :math:`p'_j = (y'_j, z'_j)` with
+sprays left :math:`\text{tank}'_j` and health :math:`\text{hp}'_j`, and cell
+:math:`k = (y, z)` of the grid :math:`K` (row :math:`y`, column :math:`z`)
+has category :math:`f'_k \in \mathcal{C} = \{\textsf{UNBURNT},
+\textsf{SMOLDERING}, \textsf{BURNING}, \textsf{BURNT}, \textsf{WET}\}`. With
+:math:`\rho` = ``sensing_radius`` and :math:`p_{\text{err}}` =
+``observation_error_probability``, the visible cells are those within
+Chebyshev distance :math:`\rho` of a firefighter whose health is above zero:
 
 .. math::
 
    V(s') = \bigcup_{j :\, \text{hp}'_j > 0}
    \big\{k \in K : \max(|y - y'_j|,\, |z - z'_j|) \leq \rho\big\}
 
-for :math:`k = (y, z)` and :math:`p'_j = (y'_j, z'_j)`. The firefighter fields of
-:math:`o` equal those of :math:`s'`, and each cell is reported independently:
+The observation is :math:`o = \big((p'_j, \text{tank}'_j,
+\text{hp}'_j)_{j=1}^{M},\, (\hat f_k)_{k \in K}\big)`: the firefighter fields
+are copied from :math:`s'`, and each cell is reported independently, a wrong
+report being one of the four categories of :math:`\mathcal{C}` other than the
+true one. :math:`\textsf{UNKNOWN}` (coded :math:`-1`) is not in
+:math:`\mathcal{C}`:
 
 .. math::
 
@@ -190,8 +246,22 @@ for :math:`k = (y, z)` and :math:`p'_j = (y'_j, z'_j)`. The firefighter fields o
      c \in \mathcal{C} \setminus \{f'_k\} & \text{w.p. } p_{\text{err}}/4 \text{ each}, \quad k \in V(s')
    \end{cases}
 
-**Reward function.** With :math:`J` the sprayers, :math:`J = \{j :
-\text{hp}_j > 0,\; a_j = 4,\; \text{tank}_j > 0\}`:
+**Reward function.** The reward reads the successor :math:`s'`
+(``reward_requires_next_state`` is ``True``). :math:`k` ranges over the grid
+cells :math:`K = \{0..H{-}1\} \times \{0..W{-}1\}` (:math:`H` = ``num_rows``,
+:math:`W` = ``num_cols``), and :math:`f_k`, :math:`f'_k` are cell :math:`k`'s category
+in :math:`s` and :math:`s'`, from :math:`\mathcal{C} = \{\textsf{UNBURNT},
+\textsf{SMOLDERING}, \textsf{BURNING}, \textsf{BURNT}, \textsf{WET}\}`.
+:math:`j` ranges over the :math:`M` = ``num_firefighters`` firefighters,
+:math:`j = 1..M`, and :math:`\text{hp}_j`, :math:`\text{hp}'_j` are
+firefighter :math:`j`'s health in :math:`s` and :math:`s'`.
+Firefighter :math:`j`'s action is the digit :math:`a_j = \lfloor a / 5^{j-1}
+\rfloor \bmod 5` of the joint action, with :math:`4` meaning
+:math:`\textsf{SUPPRESS}`, and :math:`\text{tank}_j` is its sprays left in
+:math:`s`; the
+sprayers are :math:`J = \{j : \text{hp}_j > 0,\; a_j = 4,\; \text{tank}_j >
+0\}`. The alight categories are :math:`\mathcal{A}\ell =
+\{\textsf{SMOLDERING}, \textsf{BURNING}\}`.
 
 .. math::
 
@@ -205,12 +275,23 @@ for :math:`k = (y, z)` and :math:`p'_j = (y'_j, z'_j)`. The firefighter fields o
    &+\; \texttt{success\_reward} \cdot
      \mathbb{1}\big[f'_k \notin \mathcal{A}\ell \;\; \forall k\big]
 
-**Initial belief.** :math:`t = 0`; firefighter :math:`j` at :math:`p^0_j` =
-``firefighter_start_cells[j-1]`` with :math:`\text{tank}_j = \texttt{max\_tank}`
-and :math:`\text{hp}_j = \texttt{max\_health}`; the wind uniform over
-:math:`\Theta`; and :math:`n_0` = ``num_initial_fires`` distinct cells of
-:math:`\overline{\mathcal{B}}`, chosen uniformly, set to
-:math:`\textsf{BURNING}`, every other cell :math:`\textsf{UNBURNT}`:
+**Initial belief.** A state :math:`s` holds the step count :math:`t`; for
+each of the :math:`M` = ``num_firefighters`` firefighters :math:`j = 1..M`,
+its cell :math:`p_j`, sprays left :math:`\text{tank}_j` and health
+:math:`\text{hp}_j`; the hidden wind :math:`(w_{\text{dir}},
+w_{\text{str}})`; and the category :math:`f_k \in \{\textsf{UNBURNT}, \textsf{SMOLDERING},
+\textsf{BURNING}, \textsf{BURNT}, \textsf{WET}\}` of every cell :math:`k` of the
+grid :math:`K = \{0..H{-}1\} \times \{0..W{-}1\}` (:math:`H` = ``num_rows``,
+:math:`W` = ``num_cols``).
+The step count is :math:`t = 0`. Each firefighter :math:`j` starts at cell :math:`p^0_j` = ``firefighter_start_cells[j-1]``
+with a full tank, :math:`\text{tank}_j = \texttt{max\_tank}`, and full health,
+:math:`\text{hp}_j = \texttt{max\_health}`. The wind :math:`(w_{\text{dir}},
+w_{\text{str}})` is uniform over its eight values :math:`\Theta = \{\textsf{N}, \textsf{E}, \textsf{S},
+\textsf{W}\} \times \{\textsf{LOW}, \textsf{HIGH}\}` (the direction it blows
+toward, and its strength). :math:`n_0` = ``num_initial_fires`` distinct cells,
+chosen uniformly from the free cells :math:`\overline{\mathcal{B}}` (the grid
+cells not in ``obstacle_cells``), have category :math:`f_k =
+\textsf{BURNING}`, and every other cell :math:`k` is :math:`\textsf{UNBURNT}`:
 
 .. math::
 
@@ -224,7 +305,18 @@ and :math:`\text{hp}_j = \texttt{max\_health}`; the wind uniform over
 
 **Discount.** :math:`\gamma` = ``discount_factor``.
 
-**Terminal set.**
+**Terminal set.** A state :math:`s` holds the step count :math:`t`, the
+health :math:`\text{hp}_j` of each of the :math:`M` = ``num_firefighters``
+firefighters :math:`j = 1..M`, and the category :math:`f_k \in
+\{\textsf{UNBURNT}, \textsf{SMOLDERING}, \textsf{BURNING}, \textsf{BURNT},
+\textsf{WET}\}` of every cell :math:`k` of the grid :math:`K = \{0..H{-}1\} \times \{0..W{-}1\}` (:math:`H` = ``num_rows``,
+:math:`W` = ``num_cols``), among
+other fields. An episode
+ends when no cell :math:`k` has a category
+:math:`f_k` in the alight set :math:`\mathcal{A}\ell = \{\textsf{SMOLDERING},
+\textsf{BURNING}\}`; when ``is_all_firefighters_disabled_terminal`` is set and
+every firefighter :math:`j` has health :math:`\text{hp}_j = 0`; or when the
+step count :math:`t` reaches ``max_steps``:
 
 .. math::
 

@@ -342,7 +342,9 @@
   }
 
   /**
-   * Build the wind panel and put it under the viewer.
+   * Build the wind panel and put it under the viewer, unless the page's <html>
+   * sets data-scene-panel="off" (the docs do). The panel is built either way,
+   * so the per-step updates and the toggles' defaults need no second path.
    *
    * @param {Object} world   The trace's world block, for the labels.
    * @param {number} firefighters  How many engines to give a crew line to.
@@ -473,7 +475,8 @@
     panel.appendChild(foot);
 
     var anchor = document.getElementById("viewer-status") || document.getElementById("viewer");
-    if (anchor && anchor.parentNode) {
+    var panelOff = document.documentElement.getAttribute("data-scene-panel") === "off";
+    if (!panelOff && anchor && anchor.parentNode) {
       anchor.parentNode.insertBefore(panel, anchor.nextSibling);
     }
 
