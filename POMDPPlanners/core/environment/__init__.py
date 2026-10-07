@@ -18,7 +18,6 @@ from POMDPPlanners.core.environment.environment import (
 )
 from POMDPPlanners.core.environment.constrained_environment import ConstrainedEnvironment
 from POMDPPlanners.core.environment.transition_model import RewardModel, TransitionModel
-from POMDPPlanners.core.environment.hyp_despot_cuda_model import HypDESPOTCUDAmodel
 
 
 __all__ = [
@@ -30,5 +29,4 @@ __all__ = [
     "SpaceInfo",
     "SpaceType",
     "TransitionModel",
-    "HypDESPOTCUDAmodel",
 ]

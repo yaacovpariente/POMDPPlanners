@@ -3170,8 +3170,7 @@ def test_compatible_planner_docstring_matches_the_live_registry():
 
     Purpose: The docstring's example is executed as a doctest in CI, but only
         inside Docker. Every new planner that is Tiger-compatible silently
-        invalidates it -- that is how ``AdaOPS`` and ``HypDESPOT`` were left
-        out. This test fails in the plain local suite the moment the two drift.
+        invalidates it. This test fails in the plain local suite the moment the two drift.
 
     Test type: unit
     """

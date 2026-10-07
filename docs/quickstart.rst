@@ -470,6 +470,3 @@ Next Steps
 Each planner and environment page ends with its parameters. The shared APIs are
 under *Common* in the sidebar: :doc:`common/beliefs`,
 :doc:`common/simulation_api` and the rest.
-
-HyP-DESPOT is available only for environments that expose a deterministic
-``hyp_despot_cuda_model`` on ``cuda:0``. It never falls back to CPU DESPOT.

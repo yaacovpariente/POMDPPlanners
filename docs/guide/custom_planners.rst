@@ -131,8 +131,7 @@ picks the final action from the root, and reports the standard tree metrics
 ``_simulate_path(tree, belief_id, depth)``, one simulation from the root, plus
 ``get_space_info``. The tree is a column store addressed by integer node ids.
 Built-in planners such as :doc:`../planners/pomcp`,
-:doc:`../planners/pft_dpw`, :doc:`../planners/sparse_pft` and
-:doc:`../planners/despot` subclass it or its progressive-widening variant
+:doc:`../planners/pft_dpw` and :doc:`../planners/sparse_pft` subclass it or its progressive-widening variant
 ``ArenaDoubleProgressiveWideningMCTSPolicy``. Read one of them before you
 start: their code shows how nodes are expanded and values are backed up.
 

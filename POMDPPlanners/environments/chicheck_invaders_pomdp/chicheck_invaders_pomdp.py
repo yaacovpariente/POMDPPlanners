@@ -420,10 +420,9 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         # constructor only requires the five amounts to be non-negative, so a
         # configuration with ``shot_cost > kill_reward + clear_reward`` is legal
         # and under it the best step is a plain ``STAY``, which scores
-        # ``-step_cost``. DESPOT consumes ``reward_range`` as a hard
-        # branch-and-bound bound and its own comment says an unusable range
-        # voids the paper's guarantee, so this end has to hold for every
-        # configuration the constructor admits rather than only the sane ones.
+        # ``-step_cost``. A planner may use ``reward_range`` as a hard
+        # bound, so this end has to hold for every configuration the
+        # constructor admits rather than only the sane ones.
         max_reward = max(
             float(kill_reward) + float(clear_reward) - float(step_cost) - float(shot_cost),
             -float(step_cost),

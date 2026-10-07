@@ -106,10 +106,6 @@ What is in the package
    planners/pft_dpw
    planners/sparse_pft
    planners/sparse_sampling
-   planners/despot
-   planners/ardespot
-   planners/hyp_despot/index
-   planners/adaops/index
    planners/vopp
    planners/beta_zero
    planners/constrained_zero

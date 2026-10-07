@@ -631,8 +631,8 @@ def test_the_declared_maximum_covers_a_configuration_where_firing_never_pays():
         constructor only requires the five amounts to be non-negative. With
         ``shot_cost`` above ``kill_reward + clear_reward`` the best step is a
         plain ``STAY``, which scores ``-step_cost`` -- above a maximum computed
-        from the firing branch alone. DESPOT consumes ``reward_range`` as a hard
-        branch-and-bound bound, so a range the environment can escape voids its
+        from the firing branch alone. A planner may use ``reward_range`` as a
+        hard bound, so a range the environment can escape voids its
         guarantee somewhere far from here.
 
     Test type: unit

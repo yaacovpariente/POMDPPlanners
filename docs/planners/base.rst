@@ -86,9 +86,7 @@ one of two budgets, and you must set exactly one of them:
 
 ``n_simulations``
    A fixed amount of search per decision. For the MCTS planners this is the
-   number of simulations; for :doc:`despot`, :doc:`ardespot` and AdaOPS it is
-   the maximum number of trials, since they can stop early once the root's
-   bounds meet. Use it when you need the same search on every run, for
+   number of simulations. Use it when you need the same search on every run, for
    example in tests.
 
 ``time_out_in_seconds``
@@ -108,8 +106,6 @@ their own budget:
      - ``depth`` and ``branching_factor`` fix the tree. There is no time limit.
    * - :doc:`open_loop`
      - ``depth`` and ``n_return_samples`` per sequence.
-   * - :doc:`hyp_despot/index`
-     - ``n_traversals``, a fixed number of tree traversals.
    * - :doc:`vopp`
      - ``num_planning_iterations``, each running ``num_particles`` episodes
        in parallel.
@@ -208,34 +204,6 @@ Which planner supports what
      - ✔️
      - ✔️
      - ❌
-   * - :doc:`DESPOT <despot>`
-     - ✔️
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-   * - :doc:`ARDESPOT <ardespot>`
-     - ✔️
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-   * - :doc:`AdaOPS <adaops/index>`
-     - ✔️
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-   * - :doc:`HypDESPOT <hyp_despot/index>`
-     - ✔️
-     - ❌
-     - ❌
-     - ❌
-     - ❌
-     - ✔️
    * - :doc:`SparseSamplingDiscreteActionsPlanner <sparse_sampling>`
      - ✔️
      - ❌
@@ -288,9 +256,8 @@ What the columns mean
    (CVaR) measure of the cost, where the cost is the negative reward.
 
 **GPU**
-   The planner has a CUDA or PyTorch path. All of them except HyP-DESPOT run on
-   CPU; these are the ones where a GPU changes what budget is reachable.
-   HyP-DESPOT needs an NVIDIA GPU.
+   The planner has a CUDA or PyTorch path. All of them run on CPU; these are
+   the ones where a GPU changes what budget is reachable.
 
 Where the code lives
 --------------------
@@ -312,13 +279,6 @@ Where the code lives
    │   │   └── :class:`~POMDPPlanners.planners.mcts_planners.beta_zero.beta_zero.BetaZero`
    │   └── constrained_zero/
    │       └── :class:`~POMDPPlanners.planners.mcts_planners.constrained_zero.constrained_zero.ConstrainedZero`
-   ├── scenario_tree_planners/
-   │   ├── :class:`~POMDPPlanners.planners.scenario_tree_planners.despot.DESPOT`
-   │   ├── :class:`~POMDPPlanners.planners.scenario_tree_planners.ardespot.ARDESPOT`
-   │   ├── adaops/
-   │   │   └── :class:`~POMDPPlanners.planners.scenario_tree_planners.adaops.adaops.AdaOPS`
-   │   └── hyp_despot/
-   │       └── :class:`~POMDPPlanners.planners.scenario_tree_planners.hyp_despot.hyp_despot.HypDESPOT`
    ├── sparse_sampling_planners/
    │   ├── :class:`~POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling.SparseSamplingDiscreteActionsPlanner`
    │   └── :class:`~POMDPPlanners.planners.sparse_sampling_planners.icvar_sparse_sampling.ICVaRSparseSampling`
