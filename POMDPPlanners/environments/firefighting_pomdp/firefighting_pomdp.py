@@ -29,10 +29,13 @@ State layout, one ``float64`` vector of length ``3 + 4N + R*C``::
 
 VOPP plans on ``FirefightingVectorizedModel`` in
 ``firefighting_vectorized_model.py``, a torch copy of the transition,
-observation, reward and terminal rules below. There is no C++ native model.
-The environment has no enum constructor argument, so it is absent from the
-vectorized config contract, which sweeps only enum arguments. ``PFT_DPW``
-takes the scalar API directly and is what it is validated with.
+observation, reward and terminal rules below. The scalar sampling, density,
+reward and termination methods run in the C++ module ``_native``
+(``_cpp/firefighting.cpp``). The Python versions stay in this class as the
+``_*_reference`` methods, so the native kernels have a reference to be tested
+against. The environment has no enum constructor argument, so it is absent
+from the vectorized config contract, which sweeps only enum arguments.
+``PFT_DPW`` takes the scalar API directly and is what it is validated with.
 
 Classes:
     FirefightingPOMDP: The environment.
@@ -42,6 +45,7 @@ Classes:
 
 # pylint: disable=too-many-lines  # one environment, its dynamics and its metrics
 
+import random
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
@@ -50,6 +54,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 from POMDPPlanners.core.simulation.metrics import CommonMetricName
+from POMDPPlanners.environments.firefighting_pomdp import _native
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -488,6 +493,66 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         )
         self._heat_damage = np.asarray(HEAT_DAMAGE, dtype=np.int64)
         self._ignitable_indices = np.flatnonzero(~self._obstacle_mask.ravel())
+        self._native_model = self._build_native_model()
+
+    def _build_native_model(self) -> Any:
+        """Build the C++ model that the public sampling and scoring methods call.
+
+        Every number it holds is a setting already on ``self``, so it is built
+        once here and rebuilt after unpickling rather than kept in sync.
+
+        Returns:
+            A ``_native.FirefightingModelCpp``.
+        """
+        return _native.FirefightingModelCpp(
+            num_rows=self.num_rows,
+            num_cols=self.num_cols,
+            num_firefighters=self.num_firefighters,
+            obstacle_mask=self._obstacle_mask.ravel().astype(np.uint8),
+            depot_row=self.depot_cell[0],
+            depot_col=self.depot_cell[1],
+            max_tank=self.max_tank,
+            sensing_radius=self.sensing_radius,
+            observation_error_probability=self.observation_error_probability,
+            slip_probability=self.slip_probability,
+            spread_probability=self.spread_probability,
+            wind_gain_low=self.wind_gain_low,
+            wind_gain_high=self.wind_gain_high,
+            crosswind_attenuation=self.crosswind_attenuation,
+            growth_probability=self.growth_probability,
+            burnout_probability=self.burnout_probability,
+            suppression_probability_unburnt=self.suppression_probability_unburnt,
+            suppression_probability_smoldering=self.suppression_probability_smoldering,
+            suppression_probability_burning=self.suppression_probability_burning,
+            max_steps=self.max_steps,
+            success_reward=self.success_reward,
+            step_cost=self.step_cost,
+            smoldering_cell_cost=self.smoldering_cell_cost,
+            burning_cell_cost=self.burning_cell_cost,
+            burnt_cell_cost=self.burnt_cell_cost,
+            damage_cost=self.damage_cost,
+            water_cost=self.water_cost,
+            is_all_firefighters_disabled_terminal=self.is_all_firefighters_disabled_terminal,
+        )
+
+    def __getstate__(self) -> Dict[str, Any]:
+        """Drop the C++ model, which pybind11 cannot pickle.
+
+        Returns:
+            The instance dictionary without ``_native_model``.
+        """
+        state = self.__dict__.copy()
+        state.pop("_native_model", None)
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Restore the instance dictionary and rebuild the C++ model from it.
+
+        Args:
+            state: The dictionary :meth:`__getstate__` returned.
+        """
+        vars(self).update(state)
+        self._native_model = self._build_native_model()
 
     # -- construction helpers -------------------------------------------
 
@@ -775,8 +840,11 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         return 1.0 - survive
 
     # pylint: disable-next=too-many-locals
-    def _transition(self, state: FirefightingState, action: Any) -> np.ndarray:
-        """Draw one successor of ``state`` under ``action``.
+    def _transition_reference(self, state: FirefightingState, action: Any) -> np.ndarray:
+        """Draw one successor of ``state`` under ``action``, in Python.
+
+        The reference for ``FirefightingModelCpp.sample_next_state``, which
+        :meth:`sample_next_state` calls. Draws from ``np.random``.
 
         The six stages resolve in the order the formal definition fixes:
         motion, suppression, spread, growth and burnout, heat damage,
@@ -883,19 +951,41 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             One ``float64`` state vector when ``n_samples`` is 1, otherwise an
             ``(n_samples, state_size)`` array.
         """
+        values = np.ascontiguousarray(state, dtype=np.float64)
         if int(n_samples) == 1:
-            return self._transition(state, action)
-        return np.asarray([self._transition(state, action) for _ in range(int(n_samples))])
+            return self._native_model.sample_next_state(values, int(action))
+        if int(n_samples) < 1:
+            return np.empty((0, self.state_size), dtype=np.float64)
+        return self._native_model.sample_next_states(values, int(action), int(n_samples))
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
+        """Draw one successor per input state, all under the same action.
+
+        Args:
+            states: ``(N, state_size)`` states, or a sequence of state vectors.
+            action: The joint action.
+
+        Returns:
+            ``(N, state_size)`` ``float64`` successors.
+        """
+        values = np.ascontiguousarray(states, dtype=np.float64)
+        if values.size == 0:
+            return np.empty((0, self.state_size), dtype=np.float64)
+        if values.ndim == 1:
+            values = values.reshape(1, -1)
+        return self._native_model.sample_next_state_batch(values, int(action))
 
     # The density mirrors the six stages of ``_transition`` in one place on
     # purpose: splitting it would put the sampler's law and the density's law
     # in two files that can drift, which is the failure this method exists to
     # make impossible.
     # pylint: disable-next=too-many-locals,too-many-return-statements,too-many-branches,too-many-statements
-    def _successor_log_probability(
+    def _successor_log_probability_reference(
         self, state: FirefightingState, action: Any, candidate: np.ndarray
     ) -> float:
-        """Exact log-probability of one candidate successor.
+        """Exact log-probability of one candidate successor, in Python.
+
+        The reference for ``FirefightingModelCpp.transition_log_probability``.
 
         The six stages are conditionally independent given what precedes them,
         and -- crucially -- the intermediate map is recoverable from the pair
@@ -1057,9 +1147,9 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         Returns:
             One log-probability per candidate; ``-inf`` for unreachable ones.
         """
-        candidates = np.atleast_2d(np.asarray(next_states, dtype=np.float64))
-        return np.asarray(
-            [self._successor_log_probability(state, action, candidate) for candidate in candidates]
+        candidates = np.ascontiguousarray(np.atleast_2d(np.asarray(next_states, dtype=np.float64)))
+        return self._native_model.transition_log_probability(
+            np.ascontiguousarray(state, dtype=np.float64), int(action), candidates
         )
 
     # -- observations ---------------------------------------------------
@@ -1104,8 +1194,11 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             + FIREFIGHTER_FIELD_WIDTH * self.num_firefighters
         ].copy()
 
-    def _draw_observation(self, next_state: FirefightingState) -> np.ndarray:
-        """Draw one noisy reading of ``next_state``.
+    def _draw_observation_reference(self, next_state: FirefightingState) -> np.ndarray:
+        """Draw one noisy reading of ``next_state``, in Python.
+
+        The reference for ``FirefightingModelCpp.sample_observation``. Draws
+        from ``np.random``.
 
         Args:
             next_state: The state being observed.
@@ -1144,9 +1237,12 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             otherwise an ``(n_samples, observation_size)`` array.
         """
         del action
+        values = np.ascontiguousarray(next_state, dtype=np.float64)
         if int(n_samples) == 1:
-            return self._draw_observation(next_state)
-        return np.asarray([self._draw_observation(next_state) for _ in range(int(n_samples))])
+            return self._native_model.sample_observation(values)
+        if int(n_samples) < 1:
+            return np.empty((0, self.observation_size), dtype=np.float64)
+        return self._native_model.sample_observations(values, int(n_samples))
 
     def observation_log_probability(
         self, next_state: FirefightingState, action: Any, observations: Any
@@ -1168,6 +1264,25 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
             One log-likelihood per candidate.
         """
         del action
+        candidates = np.ascontiguousarray(np.atleast_2d(np.asarray(observations, dtype=np.float64)))
+        return self._native_model.observation_log_probability(
+            np.ascontiguousarray(next_state, dtype=np.float64), candidates
+        )
+
+    def _observation_log_probability_reference(
+        self, next_state: FirefightingState, observations: Any
+    ) -> np.ndarray:
+        """Log-likelihood of each reading under ``next_state``, in Python.
+
+        The reference for ``FirefightingModelCpp.observation_log_probability``.
+
+        Args:
+            next_state: The state being observed.
+            observations: Candidate readings.
+
+        Returns:
+            One log-likelihood per candidate.
+        """
         expected = self._firefighter_fields(next_state)
         visible = self.visible_mask(next_state).ravel()
         truth = self.fire_map(next_state).ravel()
@@ -1276,6 +1391,60 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         """
         if next_state is None:
             next_state = self.sample_next_state(state=state, action=action)
+        return float(
+            self._native_model.reward(
+                np.ascontiguousarray(state, dtype=np.float64),
+                int(action),
+                np.ascontiguousarray(next_state, dtype=np.float64),
+            )
+        )
+
+    def reward_batch(
+        self,
+        states: Any,
+        action: Any,
+        next_states: Any = None,
+    ) -> np.ndarray:
+        """Score one transition per row, all under the same action.
+
+        Args:
+            states: ``(N, state_size)`` states.
+            action: The joint action.
+            next_states: ``(N, state_size)`` realised successors. Defaults to
+                ``None``, in which case one successor per state is drawn, for
+                the reason :meth:`reward` gives.
+
+        Returns:
+            ``(N,)`` ``float64`` rewards.
+        """
+        values = np.ascontiguousarray(states, dtype=np.float64)
+        if values.size == 0:
+            return np.empty(0, dtype=np.float64)
+        if values.ndim == 1:
+            values = values.reshape(1, -1)
+        if next_states is None:
+            successors = self.sample_next_state_batch(values, action)
+        else:
+            successors = np.ascontiguousarray(next_states, dtype=np.float64)
+            if successors.ndim == 1:
+                successors = successors.reshape(1, -1)
+        return self._native_model.reward_batch(values, int(action), successors)
+
+    def _reward_reference(
+        self, state: FirefightingState, action: Any, next_state: FirefightingState
+    ) -> float:
+        """Score one transition, in Python.
+
+        The reference for ``FirefightingModelCpp.reward``.
+
+        Args:
+            state: The state the step was taken from.
+            action: The joint action.
+            next_state: The realised successor.
+
+        Returns:
+            The immediate reward.
+        """
         values = np.asarray(state, dtype=np.float64)
         successor = np.asarray(next_state, dtype=np.float64)
         fire = self.fire_map(values)
@@ -1314,6 +1483,19 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         Returns:
             ``True`` for a terminal state.
         """
+        return bool(self._native_model.is_terminal(np.ascontiguousarray(state, dtype=np.float64)))
+
+    def _is_terminal_reference(self, state: FirefightingState) -> bool:
+        """Whether ``state`` is terminal, in Python.
+
+        The reference for ``FirefightingModelCpp.is_terminal``.
+
+        Args:
+            state: A state vector.
+
+        Returns:
+            ``True`` for a terminal state.
+        """
         if not np.any(self.alight_mask(self.fire_map(state))):
             return True
         if self.is_all_firefighters_disabled_terminal and not np.any(
@@ -1321,6 +1503,81 @@ class FirefightingPOMDP(DiscreteActionsEnvironment):
         ):
             return True
         return self.step_count(state) >= self.max_steps
+
+    # -- native whole-step paths -----------------------------------------
+
+    def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
+        """Draw a successor, its reading and the reward in one native call.
+
+        Args:
+            state: The state to step from.
+            action: The joint action.
+
+        Returns:
+            ``(next_state, observation, reward)``.
+        """
+        next_state, observation, reward = self._native_model.sample_next_step(
+            np.ascontiguousarray(state, dtype=np.float64), int(action)
+        )
+        return next_state, observation, float(reward)
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout, run in C++ when the action law is a uniform list.
+
+        A ``DiscreteActionSampler`` draws uniformly from its ``actions`` list,
+        so the joint actions are drawn here with ``random.choices`` from that list
+        and the whole rollout runs in one native call. Any other sampler may
+        follow another law, so it gets the Python rollout, which calls
+        ``action_sampler.sample()`` at every step.
+
+        Args:
+            state: The state to roll out from.
+            action_sampler: The planner's rollout action sampler.
+            max_depth: The depth the rollout stops at.
+            discount_factor: Per-step discount.
+            depth: Depth already used by the search tree. Defaults to 0.
+
+        Returns:
+            The discounted sum of rewards until ``max_depth`` or a terminal
+            state.
+        """
+        # pylint: disable=import-outside-toplevel  # planners import environments
+        from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
+        from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+
+        if (
+            type(action_sampler) is not DiscreteActionSampler
+        ):  # pylint: disable=unidiomatic-typecheck
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+        steps_left = int(max_depth) - int(depth)
+        if steps_left <= 0:
+            return 0.0
+        # ``random.choices`` is the stdlib RNG ``DiscreteActionSampler.sample``
+        # draws from, so a run seeded through ``random.seed`` stays reproducible.
+        actions = np.asarray(random.choices(action_sampler.actions, k=steps_left), dtype=np.int64)
+        return float(
+            self._native_model.simulate_rollout(
+                np.ascontiguousarray(state, dtype=np.float64),
+                actions,
+                int(max_depth),
+                int(depth),
+                float(discount_factor),
+            )
+        )
 
     # -- distributions --------------------------------------------------
 

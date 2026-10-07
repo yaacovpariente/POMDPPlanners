@@ -61,6 +61,7 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
 )
+from POMDPPlanners.environments.snake_pomdp import _native
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.snake_pomdp.snake_visualization.snake_visualizer import (
@@ -539,6 +540,58 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         self.num_cells = self.grid_size**2
         self.state_size = BODY_OFFSET + 2 * self.target_length
 
+        # Native kernels, built on first use. The underscore keeps them out of
+        # ``config_id``, and ``__getstate__`` drops them because pybind11
+        # objects do not pickle.
+        self._trans_kernel_cache: Dict[int, Any] = {}
+        self._obs_kernel_cache: Dict[int, Any] = {}
+
+    def __getstate__(self) -> Dict[str, Any]:
+        state = self.__dict__.copy()
+        state["_trans_kernel_cache"] = {}
+        state["_obs_kernel_cache"] = {}
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        vars(self).update(state)
+        self._trans_kernel_cache = {}
+        self._obs_kernel_cache = {}
+
+    def _get_trans_kernel(self, action: int) -> Any:
+        """Return the native transition kernel for ``action``, building it once."""
+        kernel = self._trans_kernel_cache.get(action)
+        if kernel is None:
+            kernel = _native.SnakeTransitionCpp(
+                state=np.full(self.state_size, EMPTY, dtype=np.float64),
+                action=action,
+                grid_size=self.grid_size,
+                target_length=self.target_length,
+                starvation_limit=self.starvation_limit,
+            )
+            self._trans_kernel_cache[action] = kernel
+        return kernel
+
+    def _get_obs_kernel(self) -> Any:
+        """Return the native observation kernel, building it once.
+
+        One kernel serves every action, because the reading depends on the
+        next state alone. It is stored under key 0 so the cache has the same
+        shape as the transition one.
+        """
+        kernel = self._obs_kernel_cache.get(0)
+        if kernel is None:
+            kernel = _native.SnakeObservationCpp(
+                next_state=np.full(self.state_size, EMPTY, dtype=np.float64),
+                action=0,
+                grid_size=self.grid_size,
+                target_length=self.target_length,
+                window_radius=self.window_radius,
+                detection_probability=self.detection_probability,
+                scent_accuracy=self.scent_accuracy,
+            )
+            self._obs_kernel_cache[0] = kernel
+        return kernel
+
     # -- state accessors ------------------------------------------------
 
     def snake_length(self, state: SnakeState) -> int:
@@ -767,6 +820,10 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
     def sample_next_state(self, state: SnakeState, action: int, n_samples: int = 1) -> Any:
         """Move the snake, and respawn the food when it was eaten.
 
+        Runs in the C++ ``_native`` module. The respawn cell is drawn from that
+        module's RNG, which ``_native.set_seed`` seeds and ``np.random.seed``
+        does not.
+
         Args:
             state: Current state.
             action: A :class:`SnakeAction` value.
@@ -781,26 +838,9 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
                 cannot happen while ``target_length`` fits in the grid.
         """
         count = int(n_samples)
-        if self.is_terminal(state):
-            absorbing = np.array(state, dtype=np.float64, copy=True)
-            return absorbing if count == 1 else np.tile(absorbing, (count, 1))
-
-        new_body, eat, counter, termination = self.transition_outcome(state, int(action))
-        previous_food = self.food(state)
-
-        respawns = eat and termination is SnakeTermination.RUNNING
-        if not respawns:
-            successor = self._successor(new_body, eat, counter, termination, previous_food)
-            return successor if count == 1 else np.tile(successor, (count, 1))
-
-        free = self.free_cells(new_body)
-        if free.size == 0:
-            raise ValueError("the body fills the grid, so the food has nowhere to respawn")
-        drawn = free[np.random.randint(0, free.size, size=count)]
-        samples = [
-            self._successor(new_body, eat, counter, termination, previous_food, int(cell))
-            for cell in drawn
-        ]
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
+        samples = kernel.sample(count)
         return samples[0] if count == 1 else np.asarray(samples, dtype=np.float64)
 
     def sample_next_state_batch(self, states: Any, action: int) -> np.ndarray:
@@ -818,9 +858,7 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         rows = np.asarray(states, dtype=np.float64)
         if rows.ndim == 1:
             rows = rows.reshape(1, -1)
-        return np.asarray(
-            [self.sample_next_state(state=row, action=action) for row in rows], dtype=np.float64
-        )
+        return self._get_trans_kernel(int(action)).batch_sample(rows)
 
     def transition_log_probability(
         self, state: SnakeState, action: int, next_states: Any
@@ -843,26 +881,9 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         candidates = np.asarray(next_states, dtype=np.float64)
         if candidates.ndim == 1:
             candidates = candidates.reshape(1, -1)
-        scores = np.full(len(candidates), -np.inf, dtype=np.float64)
-
-        if self.is_terminal(state):
-            expected = np.asarray(state, dtype=np.float64)
-            return np.where(np.all(candidates == expected, axis=1), 0.0, -np.inf)
-
-        new_body, eat, counter, termination = self.transition_outcome(state, int(action))
-        previous_food = self.food(state)
-        if not (eat and termination is SnakeTermination.RUNNING):
-            expected = self._successor(new_body, eat, counter, termination, previous_food)
-            return np.where(np.all(candidates == expected, axis=1), 0.0, -np.inf)
-
-        free = self.free_cells(new_body)
-        log_probability = -float(np.log(free.size))
-        for cell in free:
-            expected = self._successor(
-                new_body, eat, counter, termination, previous_food, int(cell)
-            )
-            scores[np.all(candidates == expected, axis=1)] = log_probability
-        return scores
+        kernel = self._get_trans_kernel(int(action))
+        kernel.set_state(state)
+        return kernel.log_probability(candidates)
 
     # -- observations ---------------------------------------------------
 
@@ -937,6 +958,10 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
     def sample_observation(self, next_state: SnakeState, action: int, n_samples: int = 1) -> Any:
         """Report the body, a possible sighting and a noisy scent.
 
+        Runs in the C++ ``_native`` module. The detection and scent draws come
+        from that module's RNG, which ``_native.set_seed`` seeds and
+        ``np.random.seed`` does not.
+
         Args:
             next_state: The post-transition state.
             action: Unused; the reading depends on the next state alone.
@@ -947,22 +972,9 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         """
         del action
         count = int(n_samples)
-        if self.is_terminal(next_state):
-            return TERMINAL_OBSERVATION if count == 1 else [TERMINAL_OBSERVATION] * count
-
-        cells = self.body(next_state)
-        head = cells[0]
-        food = self._running_food(next_state)
-        inside = food in self.window_cells(head)
-        scent_probabilities = self.scent_probabilities(head, food)
-
-        readings: List[SnakeObservation] = []
-        for _ in range(count):
-            detected = inside and bool(np.random.random() < self.detection_probability)
-            quadrant = int(np.random.choice(len(SnakeQuadrant), p=scent_probabilities))
-            readings.append(
-                self.encode_observation_tuple(cells, food if detected else None, quadrant)
-            )
+        kernel = self._get_obs_kernel()
+        kernel.set_next_state(next_state)
+        readings = kernel.sample(count)
         return readings[0] if count == 1 else readings
 
     def observation_log_probability(
@@ -984,40 +996,9 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
             ``(N,)`` ``float64`` array of log-likelihoods.
         """
         del action
-        candidates = _as_observation_list(observations)
-        scores = np.full(len(candidates), -np.inf, dtype=np.float64)
-
-        if self.is_terminal(next_state):
-            for index, candidate in enumerate(candidates):
-                scores[index] = 0.0 if tuple(candidate) == TERMINAL_OBSERVATION else -np.inf
-            return scores
-
-        cells = self.body(next_state)
-        head = cells[0]
-        food = self._running_food(next_state)
-        inside = food in self.window_cells(head)
-        scent_probabilities = self.scent_probabilities(head, food)
-
-        with np.errstate(divide="ignore"):
-            log_scent = np.log(scent_probabilities)
-        for index, candidate in enumerate(candidates):
-            flat = tuple(int(value) for value in candidate)
-            if not flat or flat[0] != OBSERVATION_LIVE:
-                continue
-            observed_body, seen, scent = self.decode_observation(flat)
-            if observed_body != cells or not 0 <= scent < len(SnakeQuadrant):
-                continue
-            if seen is None:
-                sighting = np.log1p(-self.detection_probability) if inside else 0.0
-            elif inside and seen == food:
-                sighting = float(np.log(self.detection_probability))
-            else:
-                # No false positives: a sighting of anything but the food, or
-                # any sighting at all while the food is outside the window, is
-                # a reading this sensor cannot produce.
-                continue
-            scores[index] = float(sighting) + float(log_scent[scent])
-        return scores
+        kernel = self._get_obs_kernel()
+        kernel.set_next_state(next_state)
+        return kernel.log_probability(_as_observation_list(observations))
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check whether two readings are the same tuple of integers."""
@@ -1053,18 +1034,13 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
             The immediate reward.
         """
         del next_state
-        if self.is_terminal(state):
-            return 0.0
-        _, eat, _, termination = self.transition_outcome(state, int(action))
-        if eat:
-            return 1.0
-        if termination in (
-            SnakeTermination.WALL,
-            SnakeTermination.SELF,
-            SnakeTermination.STARVATION,
-        ):
-            return -1.0
-        return 0.0
+        return _native.reward(
+            np.asarray(state, dtype=np.float64),
+            int(action),
+            self.grid_size,
+            self.target_length,
+            self.starvation_limit,
+        )
 
     def reward_batch(
         self,
@@ -1086,15 +1062,89 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         rows = np.asarray(states, dtype=np.float64)
         if rows.ndim == 1:
             rows = rows.reshape(1, -1)
-        return np.array([self.reward(row, action) for row in rows], dtype=np.float64)
+        return _native.reward_batch(
+            rows, int(action), self.grid_size, self.target_length, self.starvation_limit
+        )
+
+    def sample_next_step(self, state: SnakeState, action: int) -> Tuple[SnakeState, Any, float]:
+        """Draw ``(next_state, observation, reward)`` in one native call.
+
+        The draws are the ones :meth:`sample_next_state` followed by
+        :meth:`sample_observation` would make, in the same order, so under one
+        seed of ``_native.set_seed`` the two routes return the same step. The
+        single call exists because POMCP calls this once per tree step and per
+        rollout step, and three Python-to-C++ crossings cost more than the
+        step itself.
+
+        Args:
+            state: Current state.
+            action: A :class:`SnakeAction` value.
+
+        Returns:
+            The successor state, its reading, and the reward of
+            ``(state, action)``.
+        """
+        next_state, observation, reward = _native.sample_next_step(
+            np.asarray(state, dtype=np.float64),
+            int(action),
+            self.grid_size,
+            self.target_length,
+            self.starvation_limit,
+            self.window_radius,
+            self.detection_probability,
+            self.scent_accuracy,
+        )
+        return next_state, observation, float(reward)
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,  # pylint: disable=unused-argument
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout run step by step in C++.
+
+        Actions are drawn uniformly from the three actions with
+        ``np.random.randint`` before the call, not from ``action_sampler``:
+        the native loop cannot call back into Python per step. That is the
+        same law as a uniform ``action_sampler``, which is what the planners
+        that call this pass.
+
+        Args:
+            state: State the rollout starts from.
+            action_sampler: Unused; see above.
+            max_depth: Depth at which the rollout stops.
+            discount_factor: Per-step discount factor.
+            depth: Depth already used by the search tree. Defaults to 0.
+
+        Returns:
+            The discounted sum of rewards from ``depth`` to ``max_depth`` or
+            the first terminal state.
+        """
+        steps_left = int(max_depth) - int(depth)
+        if steps_left <= 0 or self.is_terminal(state):
+            return 0.0
+        action_indices = np.random.randint(0, len(SnakeAction), size=steps_left, dtype=np.int32)
+        return _native.simulate_rollout_discrete(
+            np.asarray(state, dtype=np.float64),
+            action_indices,
+            int(max_depth),
+            int(depth),
+            float(discount_factor),
+            self.grid_size,
+            self.target_length,
+            self.starvation_limit,
+        )
 
     # -- terminal / initial ---------------------------------------------
 
     def is_terminal(self, state: SnakeState) -> bool:
         """Whether ``state`` is one of the four terminal states."""
-        return int(round(float(np.asarray(state, dtype=np.float64)[STATUS_INDEX]))) != int(
-            SnakeTermination.RUNNING
-        )
+        # Kept in Python: one slot read is cheaper than a call into C++.
+        status = state[STATUS_INDEX] if isinstance(state, np.ndarray) else np.asarray(state)[0]
+        return round(float(status)) != int(SnakeTermination.RUNNING)
 
     def initial_state_dist(self) -> SnakeInitialStateDistribution:
         """The fixed starting snake with the food uniform over the free cells.
@@ -1273,8 +1323,8 @@ class SnakePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public
         return SnakeVisualizer(self)
 
 
-def _as_observation_list(observations: Any) -> List[SnakeObservation]:
-    """Return ``observations`` as a list of readings.
+def _as_observation_list(observations: Any) -> AbcSequence:
+    """Return ``observations`` as a sequence of readings.
 
     A reading is itself a sequence of integers, so a bare reading and a list of
     readings are both sequences and have to be told apart by their first
@@ -1285,7 +1335,8 @@ def _as_observation_list(observations: Any) -> List[SnakeObservation]:
         observations: One reading, or a sequence of them.
 
     Returns:
-        A list of readings.
+        A sequence of readings. Each reading's values are converted with
+        ``int`` by the native kernel that scores it.
     """
     if (
         isinstance(observations, tuple)
@@ -1294,5 +1345,5 @@ def _as_observation_list(observations: Any) -> List[SnakeObservation]:
     ):
         return [observations]
     if isinstance(observations, AbcSequence) and not isinstance(observations, (str, bytes)):
-        return [tuple(int(value) for value in reading) for reading in observations]
-    return [tuple(int(value) for value in observations)]
+        return observations
+    return [observations]

@@ -125,7 +125,7 @@ from collections.abc import Hashable
 from enum import Enum
 from itertools import groupby
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -139,6 +139,13 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation.step_info_metrics import EpisodeReduction, StepInfoMetric
 from POMDPPlanners.environments.maze_pomdp.maze_geometry import Cell, MazeGeometry
+from POMDPPlanners.environments.maze_pomdp.maze_native_model import (
+    NATIVE_MODE_CONTINUOUS_MAZE,
+    NATIVE_MODE_DISCRETE_MAZE,
+    NativeMazeMixin,
+    build_native_model,
+    walkable_grid,
+)
 
 if TYPE_CHECKING:
     from POMDPPlanners.environments.maze_pomdp.maze_visualization.maze_visualizer import (
@@ -186,6 +193,11 @@ ACTION_OFFSETS: Dict[str, Cell] = {
     ACTION_RIGHT: (1, 0),
 }
 ACTIONS: Tuple[str, ...] = (ACTION_UP, ACTION_DOWN, ACTION_LEFT, ACTION_RIGHT)
+
+# Index of each action in ACTIONS: the code the native model takes. A label
+# outside ACTIONS maps to -1, which the model rejects with KeyError when it
+# moves a non-terminal state, as the Python lookup table did.
+_ACTION_CODES: Dict[str, int] = {label: index for index, label in enumerate(ACTIONS)}
 
 # A cell owns the closed square of side 1 centred on it. The tolerance widens that
 # square by a nanometre of grid so a point computed as 3.4999999996 still counts as
@@ -268,8 +280,15 @@ class StepOutcome:
         self.goal_cell = goal_cell
 
 
-class BaseMazePOMDP(Environment):
+class BaseMazePOMDP(NativeMazeMixin, Environment):
     """Everything the discrete and continuous maze variants share.
+
+    The environment API calls a planner makes per step (transition, observation,
+    reward, terminal test, rollout) are answered by the C++ model through
+    :class:`~POMDPPlanners.environments.maze_pomdp.maze_native_model.NativeMazeMixin`.
+    The Python methods below that implement the same model (``_successor``,
+    ``_reward_from_successor``, ``_observation_probs``, ``_py_is_terminal``) are
+    the reference the native-equivalence tests compare it with.
 
     Subclasses supply :meth:`_execute`, which turns a state and an action into a
     :class:`StepOutcome`. The cue phase, the reward, the observation model, the
@@ -387,6 +406,31 @@ class BaseMazePOMDP(Environment):
         self._left_goal_cell = self._geometry.left_goal_cell
         self._right_goal_cell = self._geometry.right_goal_cell
         self._goal_cells = frozenset(self._geometry.goal_cells)
+        self._model_cpp = self._build_native_model()
+
+    # Native model
+    _NATIVE_MODE = NATIVE_MODE_DISCRETE_MAZE
+
+    def _native_max_step_size(self) -> float:
+        """The displacement bound the native model clips to; unused by cell moves."""
+        return 1.0
+
+    def _build_native_model(self) -> Any:
+        walkable, origin = walkable_grid(self._walkable)
+        return build_native_model(
+            mode=self._NATIVE_MODE,
+            walkable=walkable,
+            origin=origin,
+            cue_cell=self._cue_cell,
+            left_goal_cell=self._left_goal_cell,
+            right_goal_cell=self._right_goal_cell,
+            cue_accuracy=self.cue_accuracy,
+            goal_reward=self.goal_reward,
+            wrong_goal_penalty=self.wrong_goal_penalty,
+            step_penalty=self.step_penalty,
+            max_step_size=self._native_max_step_size(),
+            observation_labels=OBSERVATIONS,
+        )
 
     # Geometry
     @property
@@ -536,7 +580,7 @@ class BaseMazePOMDP(Environment):
     def _successor(self, state: Any, action: Any) -> np.ndarray:
         """The single deterministic successor of ``(state, action)``."""
         state_array = np.asarray(state, dtype=np.float64)
-        if self.is_terminal(state_array):
+        if self._py_is_terminal(state_array):
             # Absorbing: a goal keeps its own state forever, so an over-long episode
             # cannot walk back out of a terminal state or be paid twice.
             return state_array.copy()
@@ -551,8 +595,8 @@ class BaseMazePOMDP(Environment):
             dtype=np.float64,
         )
 
-    def is_terminal(self, state: Any) -> bool:
-        """Whether ``state``'s position lies in either goal cell."""
+    def _py_is_terminal(self, state: Any) -> bool:
+        """Whether ``state``'s position lies in either goal cell (Python reference)."""
         state_array = np.asarray(state, dtype=np.float64)
         return (
             self._goal_cell_at(float(state_array[STATE_X]), float(state_array[STATE_Y])) is not None
@@ -564,34 +608,6 @@ class BaseMazePOMDP(Environment):
             if cell in self._goal_cells:
                 return cell
         return None
-
-    def sample_next_state(self, state: Any, action: Any, n_samples: int = 1) -> Any:
-        """Sample successors. Transitions are deterministic, so all samples agree."""
-        successor = self._successor(state, action)
-        if n_samples == 1:
-            return successor
-        return np.repeat(successor[np.newaxis, :], n_samples, axis=0)
-
-    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
-        """Batch transition. Returns float64, matching :meth:`sample_next_state`.
-
-        Returning the caller's dtype here would hand a particle filter int64 particles
-        from the batch path and float64 ones from the single path, and a belief mixing
-        the two would silently truncate half of them.
-        """
-        states_array = np.asarray(states, dtype=np.float64)
-        if states_array.ndim == 1:
-            states_array = states_array.reshape(1, -1)
-        return np.stack([self._successor(row, action) for row in states_array], axis=0)
-
-    def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
-        """Log ``T(s' | s, a)``: 0 for the one successor, ``-inf`` everywhere else."""
-        successor = self._successor(state, action)
-        candidates = np.asarray(next_states, dtype=np.float64)
-        if candidates.ndim == 1:
-            candidates = candidates.reshape(1, -1)
-        matches = np.all(np.isclose(candidates, successor[np.newaxis, :]), axis=1)
-        return np.where(matches, 0.0, -np.inf)
 
     # Observation model
     def _observation_probs(self, next_state: Any) -> np.ndarray:
@@ -614,66 +630,6 @@ class BaseMazePOMDP(Environment):
             probs[0] = 1.0 - self.cue_accuracy
         return probs
 
-    def sample_observation(self, next_state: Any, action: Any, n_samples: int = 1) -> Any:
-        """Draw an observation from ``P(o | s')``. ``action`` does not enter it.
-
-        Inlined rather than routed through a freshly built ``DiscreteDistribution``:
-        this runs once per node expansion inside a tree search on a wall-clock
-        budget. The draw is the distribution's own — one ``np.random.rand`` per
-        sample, in order, against the cumulative probabilities — so the RNG stream is
-        unchanged.
-        """
-        del action
-        cumulative = np.cumsum(self._observation_probs(next_state))
-        last = len(OBSERVATIONS) - 1
-        if n_samples == 1:
-            return OBSERVATIONS[min(int(np.searchsorted(cumulative, np.random.rand())), last)]
-        indices = np.clip(np.searchsorted(cumulative, np.random.rand(n_samples)), 0, last)
-        return [OBSERVATIONS[index] for index in indices]
-
-    def observation_log_probability(
-        self, next_state: Any, action: Any, observations: Any
-    ) -> np.ndarray:
-        """Log ``Z(o | s')`` for each observation in ``observations``."""
-        del action
-        probs = self._observation_probs(next_state)
-        lookup = {name: float(probs[index]) for index, name in enumerate(OBSERVATIONS)}
-        values = [observations] if isinstance(observations, str) else list(observations)
-        out = np.full(len(values), -np.inf, dtype=np.float64)
-        for index, value in enumerate(values):
-            probability = lookup.get(value, 0.0)
-            if probability > 0.0:
-                out[index] = float(np.log(probability))
-        return out
-
-    def observation_log_probability_per_state(
-        self, next_states: Any, action: Any, observation: Any
-    ) -> np.ndarray:
-        """Log ``Z(o | s')`` of one observation against many candidate states.
-
-        Vectorised over the particles rather than looped: this is the particle
-        filter's reweighting step, so it runs once per belief update over every
-        particle, and the likelihood is a two-way choice numpy can express directly.
-        """
-        del action
-        states_array = np.asarray(next_states, dtype=np.float64)
-        if states_array.ndim == 1:
-            states_array = states_array.reshape(1, -1)
-
-        emitting = states_array[:, STATE_CUE_PHASE] == CUE_EMITTING
-        if observation == OBSERVATION_EMPTY:
-            return np.where(emitting, -np.inf, 0.0)
-        if observation not in (OBSERVATION_LEFT_CUE, OBSERVATION_RIGHT_CUE):
-            return np.full(len(states_array), -np.inf, dtype=np.float64)
-
-        names_left = observation == OBSERVATION_LEFT_CUE
-        goal_is_left = states_array[:, STATE_GOAL] == GOAL_LEFT
-        matches = goal_is_left if names_left else ~goal_is_left
-        with np.errstate(divide="ignore"):
-            log_accuracy = float(np.log(self.cue_accuracy))
-            log_error = float(np.log(1.0 - self.cue_accuracy))
-        return np.where(emitting, np.where(matches, log_accuracy, log_error), -np.inf)
-
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Observations are labels, so equality is string equality."""
         return observation1 == observation2
@@ -684,7 +640,7 @@ class BaseMazePOMDP(Environment):
 
     # Reward
     def _reward_from_successor(self, state_array: np.ndarray, successor: np.ndarray) -> float:
-        if self.is_terminal(state_array):
+        if self._py_is_terminal(state_array):
             return 0.0
         reached = self._goal_cell_at(float(successor[STATE_X]), float(successor[STATE_Y]))
         if reached is None:
@@ -692,45 +648,6 @@ class BaseMazePOMDP(Environment):
         if reached == self.goal_cell(float(state_array[STATE_GOAL])):
             return float(self.goal_reward)
         return float(-self.wrong_goal_penalty)
-
-    def reward(self, state: Any, action: Any, next_state: Any = None) -> float:
-        """Immediate reward for ``(state, action)``.
-
-        Transitions are deterministic, so ``next_state`` carries no information the
-        environment cannot recompute; it is used when supplied only to stay
-        consistent with the driver that threads it through.
-        """
-        state_array = np.asarray(state, dtype=np.float64)
-        successor = (
-            self._successor(state_array, action)
-            if next_state is None
-            else np.asarray(next_state, dtype=np.float64)
-        )
-        return self._reward_from_successor(state_array, successor)
-
-    def reward_batch(
-        self,
-        states: Union[np.ndarray, Sequence[Any]],
-        action: Any,
-        next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
-    ) -> np.ndarray:
-        """Rewards for many states under one action."""
-        states_array = np.asarray(states, dtype=np.float64)
-        if states_array.ndim == 1:
-            states_array = states_array.reshape(1, -1)
-        if next_states is None:
-            successors = self.sample_next_state_batch(states_array, action)
-        else:
-            successors = np.asarray(next_states, dtype=np.float64)
-            if successors.ndim == 1:
-                successors = successors.reshape(1, -1)
-        return np.array(
-            [
-                self._reward_from_successor(state_row, successor_row)
-                for state_row, successor_row in zip(states_array, successors)
-            ],
-            dtype=np.float64,
-        )
 
     # Initial distributions
     def initial_state_dist(self) -> Distribution:
@@ -788,7 +705,7 @@ class BaseMazePOMDP(Environment):
         at_wrong = float(reached is not None and reached != goal_cell)
         collided = 0.0
         if action is not None and next_state is not None and not self.is_terminal(state_array):
-            collided = float(self._execute(state_array, action).blocked)
+            collided = float(self._model_cpp.blocked(state_array, self._native_action(action)))
         return {
             MazeStepChannel.CORRECT_GOAL.value: at_correct,
             MazeStepChannel.WRONG_GOAL.value: at_wrong,
@@ -978,6 +895,18 @@ class DiscreteMazePOMDP(BaseMazePOMDP, DiscreteActionsEnvironment):
         """The action label itself is already a hashable key."""
         return action
 
+    def _native_action(self, action: Any) -> int:
+        """The index of ``action`` in :data:`ACTIONS`, or -1 for any other label."""
+        return _ACTION_CODES.get(action, -1)
+
+    def _native_rollout_actions(self, actions: Sequence[Any]) -> np.ndarray:
+        """The rollout's action labels as an int32 array of :data:`ACTIONS` indices."""
+        return np.fromiter(
+            (_ACTION_CODES.get(action, -1) for action in actions),
+            dtype=np.int32,
+            count=len(actions),
+        )
+
     def _execute(self, state_array: np.ndarray, action: Any) -> StepOutcome:
         """Resolve one cell step.
 
@@ -1089,6 +1018,26 @@ class ContinuousMazePOMDP(BaseMazePOMDP):
     def draws_cell_guides(self) -> bool:
         """False: positions are real here, and a grid would suggest a quantization."""
         return False
+
+    _NATIVE_MODE = NATIVE_MODE_CONTINUOUS_MAZE
+
+    def _native_max_step_size(self) -> float:
+        return self.max_step_size
+
+    def _native_action(self, action: Any) -> Any:
+        """The action itself: the native model clips and validates it."""
+        return action
+
+    def _native_rollout_actions(self, actions: Sequence[Any]) -> np.ndarray:
+        """The rollout's displacements as a ``(K, 2)`` float64 array.
+
+        Raises:
+            ValueError: If an action is not a 2-vector.
+        """
+        rows = [np.asarray(action, dtype=np.float64).reshape(-1) for action in actions]
+        if any(row.shape != (2,) for row in rows):
+            raise ValueError("every rollout action must be a 2-vector.")
+        return np.ascontiguousarray(np.stack(rows), dtype=np.float64)
 
     def hash_action(self, action: Any) -> Hashable:
         """Bytes of the action vector, which match ``np.array_equal`` for one shape."""

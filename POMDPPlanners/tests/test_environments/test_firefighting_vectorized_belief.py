@@ -18,6 +18,7 @@ from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
 from POMDPPlanners.environments.firefighting_pomdp import (
+    _native,
     FirefightingVectorizedBelief,
     FirefightingVectorizedUpdater,
     FirefightingPOMDP,
@@ -122,6 +123,7 @@ class TestFirefightingVectorizedUpdater:
         rng = np.random.default_rng(2)
         states = _reachable_states(env, 30, rng)
         np.random.seed(3)
+        _native.set_seed(3)
 
         for source in states[:12]:
             observation = env.sample_observation(source, 0)
@@ -202,6 +204,7 @@ class TestFirefightingVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
+        _native.set_seed(0)
         belief = cast(
             VectorizedWeightedParticleBelief,
             create_environment_belief(env, n_particles=64),
@@ -229,6 +232,7 @@ class TestFirefightingVectorizedBelief:
         Test type: integration
         """
         np.random.seed(0)
+        _native.set_seed(0)
         belief = cast(
             VectorizedWeightedParticleBelief,
             create_environment_belief(env, n_particles=200),
@@ -260,17 +264,20 @@ class TestFirefightingVectorizedBelief:
         Purpose: The wind is the whole inference problem here, and it is only
         identifiable through which neighbours catch -- so with random actions
         the evidence arrives slowly. The mean over episodes is what is
-        meaningful, not any single run.
+        meaningful, not any single run. In most single episodes the weight on
+        the true wind ends near zero, so the mean is taken over twenty
+        episodes: over six, whether it clears the prior depends on the seed.
 
-        Given: Six 30-step episodes with 400 particles and random actions.
+        Given: Twenty 30-step episodes with 400 particles and random actions.
         When: Every reading is conditioned on.
         Then: The mean weight on the true wind beats the 0.125 prior.
 
         Test type: integration
         """
         masses = []
-        for seed in range(6):
+        for seed in range(20):
             np.random.seed(seed)
+            _native.set_seed(seed)
             belief = cast(
                 VectorizedWeightedParticleBelief,
                 create_environment_belief(env, n_particles=400),

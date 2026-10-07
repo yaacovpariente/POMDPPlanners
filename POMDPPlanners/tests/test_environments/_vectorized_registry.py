@@ -207,6 +207,9 @@ _HAND_WRITTEN_BELIEF_SPECS: List[BeliefSpec] = [
         "ChicheckInvadersPOMDP",
         "ChicheckInvadersVectorizedUpdater",
         "ChicheckInvadersVectorizedBelief",
+        # The batch path draws the dive coins from numpy; the scalar step draws
+        # them from the native RNG.
+        transition_shares_rng=False,
         # Re-draws the unreported chickens of a fraction of the particles.
         update_matches_reference=False,
         **_SHARP_READING,
@@ -215,6 +218,7 @@ _HAND_WRITTEN_BELIEF_SPECS: List[BeliefSpec] = [
         "ChicheckInvadersPOMDP[fully_observable]",
         "ChicheckInvadersVectorizedUpdater",
         "ChicheckInvadersVectorizedBelief",
+        transition_shares_rng=False,
         # Collapses onto the observed state.
         update_matches_reference=False,
         # The reading is the state itself.

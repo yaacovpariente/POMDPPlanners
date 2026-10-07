@@ -514,8 +514,12 @@ VOPP plans on ``FirefightingVectorizedModel``, a torch copy of the
 transition, observation, reward and terminal rules that runs a whole batch of
 states in one call. It supports every configuration, including more than two
 firefighters, but the joint action space grows as ``5 ** num_firefighters``,
-and VOPP keeps one preference per action at every belief node. There is no
-C++ native model. ``PFT_DPW`` takes the scalar API directly.
+and VOPP keeps one preference per action at every belief node. ``PFT_DPW``
+takes the scalar API directly.
+
+Sampling, both densities, the reward, the terminal check and the random
+rollout run in a C++ extension; the Python versions stay in the class as the
+reference the extension is tested against.
 
 VOPP's tree branches on an integer key per reading. A reading has
 ``4 * num_firefighters + num_rows * num_cols`` entries, too many for an exact
@@ -541,8 +545,9 @@ and inspect effective sample size rather than trusting the wind histogram on
 sight. The wind *is* identifiable from the spread -- an exact posterior over the
 eight values, given the map, puts most of its mass on the true wind within about
 twenty-five steps -- but with random actions this filter is slower than that: in
-a six-episode check it held about 0.4 of its weight on the true wind after
-thirty steps, against a prior of 0.125. A flat histogram late in an episode is a
+a twenty-episode check it held about 0.2 of its weight on the true wind after
+thirty steps, against a prior of 0.125, and in most single episodes it held
+almost none. A flat histogram late in an episode is a
 statement about the filter, not about the environment.
 
 Can I use?
@@ -572,7 +577,7 @@ Can I use?
    * - Also supports
      -
    * - Native C++ backend
-     - ❌
+     - ✔️
    * - Vectorized (torch) model
      - ✔️ ``FirefightingVectorizedModel``
    * - In the ``get_environment`` registry

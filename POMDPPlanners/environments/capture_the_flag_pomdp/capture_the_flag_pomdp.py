@@ -44,6 +44,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
 )
+from POMDPPlanners.environments.capture_the_flag_pomdp import (  # pylint: disable=no-name-in-module
+    _native,
+)
 from POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_pomdp_utils import (
     ACTION_DELTAS,
     ACTION_SCAN,
@@ -253,6 +256,10 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
             2 * self.n_blue + self.n_blue * self.n_red + self.n_blue + 2 + self.n_blue + 2
         )
         self.max_range = self.grid_size[0] + self.grid_size[1] - 2
+        # The C++ model, built on first use and dropped on pickling: a pybind11
+        # object cannot be pickled, and the leading underscore keeps it out of
+        # `config_id` and `__eq__`.
+        self._native_model_cache: Optional[Any] = None
 
         super().__init__(
             discount_factor=discount_factor,
@@ -371,6 +378,63 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         # A terminal state scores 0.0 whatever the costs are, so the bound has
         # to admit it even when every action is expensive.
         return (float(min(minimum, 0.0)), float(max(maximum, 0.0)))
+
+    # ----------------------------------------------------------------- native
+
+    def _native_model(self) -> Optional[Any]:
+        """Return the C++ model for this configuration, building it once.
+
+        Returns:
+            The ``CaptureTheFlagModelCpp`` instance, or ``None`` when a team is
+            larger than the native scratch buffers hold; the caller then runs
+            the Python reference instead.
+        """
+        model = self._native_model_cache
+        if model is None:
+            if max(self.n_blue, self.n_red) > _native.MAX_PLAYERS_PER_TEAM:
+                return None
+            model = _native.CaptureTheFlagModelCpp(
+                width=self.grid_size[0],
+                height=self.grid_size[1],
+                midline=self.midline,
+                trees=list(self.trees),
+                n_blue=self.n_blue,
+                n_red=self.n_red,
+                n_red_defenders=self.n_red_defenders,
+                blue_base=self.blue_base,
+                red_base=self.red_base,
+                blue_flag_cell=self.blue_flag_cell,
+                red_flag_candidates=list(self.red_flag_candidates),
+                slip_probability=self.slip_probability,
+                range_error_probability=self.range_error_probability,
+                red_pursuit_probability=self.red_pursuit_probability,
+                red_alert_radius=self.red_alert_radius,
+                freeze_steps=self.freeze_steps,
+                tagger_cooldown_steps=self.tagger_cooldown_steps,
+                detector_half_distance_move=self.detector_half_distance_move,
+                detector_half_distance_scan=self.detector_half_distance_scan,
+                score_to_win=self.score_to_win,
+                capture_reward=self.capture_reward,
+                concede_penalty=self.concede_penalty,
+                tagged_penalty=self.tagged_penalty,
+                tag_reward=self.tag_reward,
+                pickup_reward=self.pickup_reward,
+                move_cost=self.move_cost,
+                scan_cost=self.scan_cost,
+            )
+            self._native_model_cache = model
+        return model
+
+    def __getstate__(self) -> Dict[str, Any]:
+        """Drop the C++ model, which cannot be pickled; it is rebuilt on use."""
+        state = self.__dict__.copy()
+        state["_native_model_cache"] = None
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Restore pickled attributes; the C++ model is rebuilt on first use."""
+        vars(self).update(state)
+        self._native_model_cache = None
 
     # ------------------------------------------------------------------ field
 
@@ -750,6 +814,25 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
     def sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
         """Sample the successor state.
 
+        Runs the C++ model; :meth:`_python_sample_next_state` is the reference
+        it is tested against.
+
+        Args:
+            state: Current state vector.
+            action: Joint action id.
+            n_samples: Number of independent samples to draw.
+
+        Returns:
+            One state vector when ``n_samples`` is 1, otherwise a list of them.
+        """
+        model = self._native_model()
+        if model is None:
+            return self._python_sample_next_state(state, action, n_samples)
+        return model.sample_next_state(_as_state(state), int(action), int(n_samples))
+
+    def _python_sample_next_state(self, state: np.ndarray, action: int, n_samples: int = 1) -> Any:
+        """Python reference for :meth:`sample_next_state`, drawing from ``np.random``.
+
         Args:
             state: Current state vector.
             action: Joint action id.
@@ -822,14 +905,38 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         state_array = np.asarray(states, dtype=np.float64)
         if state_array.ndim == 1:
             state_array = state_array.reshape(1, -1)
-        return np.asarray(
-            [self.sample_next_state(row, action, 1) for row in state_array], dtype=np.float64
-        )
+        model = self._native_model()
+        if model is None:
+            return np.asarray(
+                [self._python_sample_next_state(row, action, 1) for row in state_array],
+                dtype=np.float64,
+            )
+        return model.batch_sample(np.ascontiguousarray(state_array), int(action))
 
     def transition_log_probability(
         self, state: np.ndarray, action: int, next_states: Any
     ) -> np.ndarray:
         """Log-probability of each candidate successor.
+
+        Args:
+            state: The state the step was taken from.
+            action: The joint action id.
+            next_states: Candidate successor state vectors.
+
+        Returns:
+            One log-probability per candidate; ``-inf`` for unreachable ones.
+        """
+        model = self._native_model()
+        if model is None:
+            return self._python_transition_log_probability(state, action, next_states)
+        probabilities = model.transition_probability(_as_state(state), int(action), next_states)
+        with np.errstate(divide="ignore"):
+            return np.log(probabilities)
+
+    def _python_transition_log_probability(
+        self, state: np.ndarray, action: int, next_states: Any
+    ) -> np.ndarray:
+        """Python reference for :meth:`transition_log_probability`.
 
         Args:
             state: The state the step was taken from.
@@ -943,6 +1050,24 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         Returns:
             One observation tuple when ``n_samples`` is 1, otherwise a list.
         """
+        model = self._native_model()
+        if model is None:
+            return self._python_sample_observation(next_state, action, n_samples)
+        return model.sample_observation(_as_state(next_state), int(action), int(n_samples))
+
+    def _python_sample_observation(
+        self, next_state: np.ndarray, action: int, n_samples: int = 1
+    ) -> Any:
+        """Python reference for :meth:`sample_observation`, drawing from ``np.random``.
+
+        Args:
+            next_state: The realised successor state.
+            action: The joint action taken to reach it.
+            n_samples: Number of independent samples to draw.
+
+        Returns:
+            One observation tuple when ``n_samples`` is 1, otherwise a list.
+        """
         if self.is_terminal(next_state):
             terminal = self._terminal_observation()
             return terminal if n_samples == 1 else [terminal] * n_samples
@@ -983,6 +1108,54 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
 
         The exactly-observed components act as a delta factor: an observation
         that disagrees with them is impossible, not merely unlikely.
+
+        Args:
+            next_state: The realised successor state.
+            action: The joint action taken to reach it.
+            observations: Candidate observations.
+
+        Returns:
+            One log-likelihood per candidate.
+        """
+        model = self._native_model()
+        if model is None:
+            return self._python_observation_log_probability(next_state, action, observations)
+        probabilities = model.observation_probability(
+            _as_state(next_state), int(action), observations
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(probabilities)
+
+    def observation_log_probability_per_state(
+        self, next_states: Any, action: Any, observation: Any
+    ) -> np.ndarray:
+        """Log-likelihood of one observation under each candidate successor.
+
+        Args:
+            next_states: Candidate successor states, shape ``(N, state_size)``.
+            action: The joint action taken to reach them.
+            observation: The single observation to score.
+
+        Returns:
+            One log-likelihood per candidate, equal to what
+            :meth:`observation_log_probability` returns for each one.
+        """
+        model = self._native_model()
+        if model is None:
+            return super().observation_log_probability_per_state(next_states, action, observation)
+        state_array = np.asarray(next_states, dtype=np.float64)
+        if state_array.ndim == 1:
+            state_array = state_array.reshape(1, -1)
+        probabilities = model.batch_observation_probability(
+            np.ascontiguousarray(state_array), int(action), observation
+        )
+        with np.errstate(divide="ignore"):
+            return np.log(probabilities)
+
+    def _python_observation_log_probability(
+        self, next_state: np.ndarray, action: int, observations: Any
+    ) -> np.ndarray:
+        """Python reference for :meth:`observation_log_probability`.
 
         Args:
             next_state: The realised successor state.
@@ -1071,6 +1244,29 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         Returns:
             The immediate reward.
         """
+        model = self._native_model()
+        # The reference counts tags only when both arguments are state arrays
+        # of the right shape, and scores anything else without them. Only the
+        # well-formed case goes native, so the odd inputs keep that behaviour.
+        if (
+            model is None
+            or not _is_state(state, self.layout.size)
+            or not _is_state(next_state, self.layout.size)
+        ):
+            return self._python_reward(state, action, next_state)
+        return float(model.reward(state, int(action), next_state))
+
+    def _python_reward(self, state: np.ndarray, action: int, next_state: Any = None) -> float:
+        """Python reference for :meth:`reward`.
+
+        Args:
+            state: The state the step was taken from.
+            action: The joint action id.
+            next_state: The realised successor, sampled here when ``None``.
+
+        Returns:
+            The immediate reward.
+        """
         if self.is_terminal(state):
             return 0.0
         if next_state is None:
@@ -1110,13 +1306,23 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
         state_array = np.asarray(states, dtype=np.float64)
         if state_array.ndim == 1:
             state_array = state_array.reshape(1, -1)
+        model = self._native_model()
         if next_states is None:
-            return np.array(
-                [self.reward(row, action, None) for row in state_array], dtype=np.float64
-            )
+            if model is None:
+                return np.array(
+                    [self.reward(row, action, None) for row in state_array], dtype=np.float64
+                )
+            # One successor per row, as the looped `reward(row, action, None)`
+            # draws, then the rewards of those draws.
+            state_array = np.ascontiguousarray(state_array)
+            next_states = model.batch_sample(state_array, int(action))
         next_array = np.asarray(next_states, dtype=np.float64)
         if next_array.ndim == 1:
             next_array = next_array.reshape(1, -1)
+        if model is not None and next_array.shape[1:] == state_array.shape[1:]:
+            return model.reward_batch(
+                np.ascontiguousarray(state_array), int(action), np.ascontiguousarray(next_array)
+            )
         return np.array(
             [self.reward(row, action, next_row) for row, next_row in zip(state_array, next_array)],
             dtype=np.float64,
@@ -1152,6 +1358,69 @@ class CaptureTheFlagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-ma
             and int(next_state[layout.freeze_red + j]) == self.freeze_steps
         )
         return {"tags_suffered": suffered, "tags_inflicted": inflicted}
+
+    def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
+        """Sample successor, observation and reward in one C++ call.
+
+        Same result as the base class's three calls -- the reward is scored on
+        the drawn successor -- without two extra round trips into Python.
+
+        Args:
+            state: Current state vector.
+            action: Joint action id.
+
+        Returns:
+            ``(next_state, observation, reward)``.
+        """
+        model = self._native_model()
+        if model is None:
+            return super().sample_next_step(state, action)
+        next_state, observation, reward = model.sample_next_step(_as_state(state), int(action))
+        return next_state, observation, float(reward)
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout run in C++, used by the planners' rollout dispatcher.
+
+        Joint actions are drawn uniformly with ``np.random`` up front, one per
+        remaining step, as the other native rollouts do; ``action_sampler`` is
+        used only when the Python reference runs.
+
+        Args:
+            state: Starting state vector.
+            action_sampler: Sampler the Python fallback draws actions from.
+            max_depth: Depth at which the rollout stops.
+            discount_factor: Per-step discount.
+            depth: Depth already used by the search tree.
+
+        Returns:
+            The discounted sum of rewards until ``max_depth`` or a terminal state.
+        """
+        model = self._native_model()
+        if model is None:
+            # pylint: disable-next=import-outside-toplevel
+            from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
+
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+        steps_left = max_depth - depth
+        state_array = _as_state(state)
+        if steps_left <= 0 or self.is_terminal(state_array):
+            return 0.0
+        action_indices = np.random.randint(0, len(self.actions), size=steps_left, dtype=np.int64)
+        return float(model.simulate_rollout(state_array, action_indices, float(discount_factor)))
 
     def is_terminal(self, state: np.ndarray) -> bool:
         """Return whether either side has reached the winning score."""
@@ -1495,6 +1764,13 @@ def _inverse_cdf(table: Dict[int, float], draw: float) -> int:
         if draw < cumulative:
             return value
     return value
+
+
+def _as_state(state: Any) -> np.ndarray:
+    """Return a state as the contiguous float64 vector the C++ model reads."""
+    if isinstance(state, np.ndarray) and state.dtype == np.float64 and state.flags.c_contiguous:
+        return state
+    return np.ascontiguousarray(state, dtype=np.float64)
 
 
 def _is_state(candidate: Any, size: int) -> bool:

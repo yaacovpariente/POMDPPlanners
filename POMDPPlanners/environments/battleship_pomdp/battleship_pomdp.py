@@ -62,6 +62,7 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     EpisodeReduction,
     StepInfoMetric,
 )
+from POMDPPlanners.environments.battleship_pomdp import _native
 from POMDPPlanners.environments.battleship_pomdp.battleship_layouts import (
     BattleshipInitialStateDistribution,
     FleetLayoutTable,
@@ -323,8 +324,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             A single ``float64`` state when ``n_samples == 1``, else an
             ``(n_samples, 2 * num_cells)`` ``float64`` array.
         """
-        next_state = np.array(state, dtype=np.float64, copy=True)
-        next_state[self.num_cells + int(action)] = 1.0
+        next_state = _native.sample_next_state(state, int(action), self.num_cells)
         if n_samples == 1:
             return next_state
         return np.tile(next_state, (int(n_samples), 1))
@@ -341,11 +341,10 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             :meth:`sample_next_state` so a particle filter mixing the two paths
             cannot silently change particle precision.
         """
-        next_states = np.array(states, dtype=np.float64, copy=True)
-        if next_states.ndim == 1:
-            next_states = next_states.reshape(1, -1)
-        next_states[:, self.num_cells + int(action)] = 1.0
-        return next_states
+        states_arr = np.asarray(states, dtype=np.float64)
+        if states_arr.ndim == 1:
+            states_arr = states_arr.reshape(1, -1)
+        return _native.sample_next_state_batch(states_arr, int(action), self.num_cells)
 
     def transition_log_probability(
         self, state: BattleshipState, action: int, next_states: Any
@@ -360,12 +359,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         Returns:
             ``0.0`` for the one realisable successor, ``-inf`` otherwise.
         """
-        expected = self.sample_next_state(state=state, action=action)
-        candidates = np.asarray(next_states, dtype=np.float64)
-        if candidates.ndim == 1:
-            candidates = candidates.reshape(1, -1)
-        matches = np.all(np.abs(candidates - expected) < 0.5, axis=1)
-        return np.where(matches, 0.0, -np.inf)
+        return _native.transition_log_probability(state, int(action), self.num_cells, next_states)
 
     def sample_observation(
         self, next_state: BattleshipState, action: int, n_samples: int = 1
@@ -381,7 +375,7 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             :data:`HIT` or :data:`MISS` when ``n_samples == 1``, else a list of
             ``n_samples`` copies of it.
         """
-        observation = HIT if bool(self.occupancy(next_state)[int(action)]) else MISS
+        observation = _native.sample_observation(next_state, int(action), self.num_cells)
         if n_samples == 1:
             return observation
         return [observation] * int(n_samples)
@@ -405,9 +399,9 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             ``observation_log_probability_per_state``, precisely so that flooring
             stays in play for any caller that does use a generic filter.
         """
-        truth = HIT if bool(self.occupancy(next_state)[int(action)]) else MISS
-        candidates = np.asarray(observations).ravel()
-        return np.where(candidates == truth, 0.0, -np.inf).astype(np.float64)
+        return _native.observation_log_probability(
+            next_state, int(action), self.num_cells, observations
+        )
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check whether two hit/miss observations are the same."""
@@ -440,11 +434,9 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             ``hit_reward`` for a newly hit ship cell, ``-miss_penalty`` otherwise.
         """
         del next_state
-        state_arr = np.asarray(state, dtype=np.float64)
-        cell = int(action)
-        holds_ship = bool(state_arr[cell] > 0.5)
-        already_probed = bool(state_arr[self.num_cells + cell] > 0.5)
-        return self.hit_reward if holds_ship and not already_probed else -self.miss_penalty
+        return _native.reward(
+            state, int(action), self.num_cells, self.hit_reward, self.miss_penalty
+        )
 
     def reward_batch(
         self,
@@ -466,17 +458,75 @@ class BattleshipPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         states_arr = np.asarray(states, dtype=np.float64)
         if states_arr.ndim == 1:
             states_arr = states_arr.reshape(1, -1)
-        cell = int(action)
-        is_new_hit = (states_arr[:, cell] > 0.5) & (states_arr[:, self.num_cells + cell] <= 0.5)
-        return np.where(is_new_hit, self.hit_reward, -self.miss_penalty).astype(np.float64)
+        return _native.reward_batch(
+            states_arr, int(action), self.num_cells, self.hit_reward, self.miss_penalty
+        )
 
     # ── terminal / initial ──────────────────────────────────────────
 
     def is_terminal(self, state: BattleshipState) -> bool:
         """Whether every occupied cell has been probed."""
-        state_arr = np.asarray(state, dtype=np.float64)
-        return not bool(
-            np.any((state_arr[: self.num_cells] > 0.5) & (state_arr[self.num_cells :] <= 0.5))
+        return _native.is_terminal(state, self.num_cells)
+
+    def sample_next_step(self, state: BattleshipState, action: int) -> Tuple[Any, int, float]:
+        """Probe once: successor, observation and reward from one native call.
+
+        Returns the same triple as the base implementation, which calls
+        :meth:`sample_next_state`, :meth:`sample_observation` and
+        :meth:`reward` in turn; all three are deterministic, so one call that
+        computes them together returns the same values.
+
+        Args:
+            state: The state the probe is taken from.
+            action: The probed cell index.
+
+        Returns:
+            ``(next_state, observation, reward)``.
+        """
+        return _native.sample_next_step(
+            state, int(action), self.num_cells, self.hit_reward, self.miss_penalty
+        )
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,  # pylint: disable=unused-argument
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Random rollout run by the native kernel.
+
+        Draws ``max_depth - depth`` actions uniformly over the cells with
+        ``np.random.randint`` up front, as the RockSample and Pac-Man kernels
+        do, and ignores ``action_sampler``. The rollout stops at the first
+        terminal state, so actions past it are drawn and not used. The return
+        is summed in the same order as ``python_random_rollout``, so for the
+        same actions the two agree exactly.
+
+        Args:
+            state: The state the rollout starts from.
+            action_sampler: Unused; actions are uniform over the cells.
+            max_depth: Depth at which the rollout stops.
+            discount_factor: Per-step discount factor.
+            depth: Depth already used by the search tree. Defaults to 0.
+
+        Returns:
+            The discounted return of the rollout.
+        """
+        steps_left = int(max_depth) - int(depth)
+        if steps_left <= 0:
+            return 0.0
+        action_indices = np.random.randint(0, self.num_cells, size=steps_left, dtype=np.int32)
+        return _native.simulate_rollout_discrete(
+            state,
+            action_indices,
+            int(max_depth),
+            int(depth),
+            float(discount_factor),
+            self.num_cells,
+            self.hit_reward,
+            self.miss_penalty,
         )
 
     def initial_state_dist(self) -> Distribution:

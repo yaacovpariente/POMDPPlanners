@@ -156,6 +156,7 @@ ignore = "CVS"
 persistent = true
 extension-pkg-allow-list = [
     "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.battleship_pomdp._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
@@ -163,7 +164,12 @@ extension-pkg-allow-list = [
     "POMDPPlanners.environments.push_pomdp._native",
     "POMDPPlanners.environments.pacman_pomdp._native",
     "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.maze_pomdp._native",
     "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+    "POMDPPlanners.environments.capture_the_flag_pomdp._native",
+    "POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+    "POMDPPlanners.environments.firefighting_pomdp._native",
+    "POMDPPlanners.environments.snake_pomdp._native",
 ]
 
 [tool.pylint.messages_control]
@@ -232,6 +238,7 @@ ignored-modules = [
     "nuplan",
     "highway_env",
     "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.battleship_pomdp._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
@@ -239,7 +246,12 @@ ignored-modules = [
     "POMDPPlanners.environments.push_pomdp._native",
     "POMDPPlanners.environments.pacman_pomdp._native",
     "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.maze_pomdp._native",
     "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+    "POMDPPlanners.environments.capture_the_flag_pomdp._native",
+    "POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+    "POMDPPlanners.environments.firefighting_pomdp._native",
+    "POMDPPlanners.environments.snake_pomdp._native",
 ]
 ignored-classes = ["SQLObject"]
 

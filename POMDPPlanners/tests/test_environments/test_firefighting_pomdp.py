@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.environments.firefighting_pomdp import (
+    _native,
     DIRECTION_OFFSETS,
     FireCategory,
     FirefightingAction,
@@ -298,6 +299,7 @@ def test_slipping_sometimes_refuses_an_otherwise_legal_move() -> None:
     fire[9, 9] = float(FireCategory.SMOLDERING)
     state = create_firefighting_state(fire_env, [(4, 4, 6, 3), (9, 0, 6, 3)], (0, 0), fire)
     np.random.seed(0)
+    _native.set_seed(0)
     moved = sum(
         tuple(
             fire_env.firefighters(
@@ -408,6 +410,7 @@ def test_two_sprays_on_one_cell_beat_one() -> None:
             env, [(4, 3, 6, 3), (second_cell[0], second_cell[1], 6, 3)], (0, 0), fire
         )
         np.random.seed(11)
+        _native.set_seed(11)
         return (
             sum(
                 int(
@@ -450,6 +453,7 @@ def test_an_empty_tank_sprays_nothing_and_pays_nothing() -> None:
     state = create_firefighting_state(env, [(4, 3, 0, 3), (9, 9, 6, 3)], (0, 0), fire)
     action = joint(FirefightingAction.SUPPRESS, FirefightingAction.NORTH)
     np.random.seed(2)
+    _native.set_seed(2)
     for _ in range(40):
         successor = env.sample_next_state(state, action)
         assert int(env.fire_map(successor)[4, 4]) != int(FireCategory.WET)
@@ -532,6 +536,7 @@ def test_spread_favours_the_downwind_neighbour_under_every_wind(direction, stren
 
     trials = 3000
     np.random.seed(17)
+    _native.set_seed(17)
     counts = {offset: 0 for offset in DIRECTION_OFFSETS}
     for _ in range(trials):
         successor = env.fire_map(env.sample_next_state(state, action))
@@ -571,6 +576,7 @@ def test_wet_burnt_and_obstacle_cells_never_ignite() -> None:
     fire[3, 4] = float(FireCategory.BURNT)
     action = joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS)
     np.random.seed(5)
+    _native.set_seed(5)
     for direction in WindDirection:
         state = create_firefighting_state(
             env, [(0, 0, 0, 3), (9, 9, 0, 3)], (int(direction), int(WindStrength.HIGH)), fire
@@ -605,6 +611,7 @@ def test_a_cell_cannot_ignite_and_grow_in_the_same_step() -> None:
     )
     action = joint(FirefightingAction.SUPPRESS, FirefightingAction.SUPPRESS)
     np.random.seed(9)
+    _native.set_seed(9)
     lit = 0
     for _ in range(400):
         successor = env.fire_map(env.sample_next_state(state, action))
@@ -687,6 +694,7 @@ def test_only_cells_inside_a_live_footprint_are_reported() -> None:
     fire[4, 4] = float(FireCategory.BURNING)
     state = create_firefighting_state(env, [(4, 4, 6, 3), (0, 9, 6, 0)], (0, 0), fire)
     np.random.seed(1)
+    _native.set_seed(1)
     observation = env.sample_observation(state, 0)
 
     reported = observation[4 * env.num_firefighters :].reshape(env.num_rows, env.num_cols)
@@ -725,6 +733,8 @@ def test_the_observation_likelihood_is_the_confusion_matrix() -> None:
     truth = env.fire_map(state).ravel()
 
     np.random.seed(4)
+
+    _native.set_seed(4)
     wrong = 0
     total = 0
     for _ in range(400):
@@ -768,6 +778,7 @@ def test_the_observation_never_reports_the_wind() -> None:
     east = create_firefighting_state(env, [(4, 4, 6, 3), (0, 9, 6, 3)], (1, 1), fire)
     west = create_firefighting_state(env, [(4, 4, 6, 3), (0, 9, 6, 3)], (3, 0), fire)
     np.random.seed(6)
+    _native.set_seed(6)
     observation = env.sample_observation(east, 0)
     assert env.observation_log_probability(east, 0, [observation])[0] == pytest.approx(
         env.observation_log_probability(west, 0, [observation])[0]
@@ -822,6 +833,7 @@ def test_the_transition_density_matches_sampling_and_sums_to_one() -> None:
         int(FirefightingAction.SUPPRESS),
     ):
         np.random.seed(7)
+        _native.set_seed(7)
         seen: dict = {}
         for _ in range(trials):
             key = env.sample_next_state(state, action).tobytes()
@@ -867,6 +879,7 @@ def test_the_wind_is_identifiable_from_the_spread_pattern() -> None:
         (WindDirection.WEST, WindStrength.LOW, 103),
     ):
         np.random.seed(seed)
+        _native.set_seed(seed)
         fire = empty_fire(env)
         fire[5, 5] = float(FireCategory.BURNING)
         state = create_firefighting_state(
@@ -1033,6 +1046,7 @@ def test_every_declared_metric_has_a_channel_step_info_emits() -> None:
     """
     env = build_env()
     np.random.seed(0)
+    _native.set_seed(0)
     state = env.initial_state_dist().sample()[0]
     successor = env.sample_next_state(state, 0)
     emitted = set(env.step_info(state, 0, successor))
@@ -1064,6 +1078,7 @@ def test_reset_always_lights_a_fire_and_never_lights_an_obstacle() -> None:
     """
     env = build_env(num_initial_fires=3)
     np.random.seed(0)
+    _native.set_seed(0)
     states = env.initial_state_dist().sample(400)
     winds = set()
     for state in states:
@@ -1103,6 +1118,7 @@ def test_the_reset_distribution_reports_its_own_density() -> None:
     env = build_env()
     distribution = env.initial_state_dist()
     np.random.seed(0)
+    _native.set_seed(0)
     states = distribution.sample(12)
     ignitable = env.num_cells - len(env.obstacle_cells)
     expected = 1.0 / (8.0 * comb(ignitable, env.num_initial_fires))
@@ -1221,6 +1237,7 @@ def test_the_observation_likelihood_is_finite_at_both_error_extremes(error) -> N
     fire[4, 4] = float(FireCategory.BURNING)
     state = create_firefighting_state(env, [(4, 4, 6, 3), (0, 9, 6, 3)], (0, 0), fire)
     np.random.seed(8)
+    _native.set_seed(8)
     observation = env.sample_observation(state, 0)
     score = env.observation_log_probability(state, 0, [observation])[0]
     assert not np.isnan(score)

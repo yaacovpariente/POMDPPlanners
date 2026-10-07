@@ -481,14 +481,19 @@ SEED_DETERMINISM_BROKEN_ENVS: frozenset = frozenset()
 # tests already use).
 _NATIVE_SEED_MODULES: Tuple[str, ...] = (
     "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.capture_the_flag_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
+    "POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+    "POMDPPlanners.environments.firefighting_pomdp._native",
     "POMDPPlanners.environments.laser_tag_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
+    "POMDPPlanners.environments.maze_pomdp._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.pacman_pomdp._native",
     "POMDPPlanners.environments.push_pomdp._native",
     "POMDPPlanners.environments.rock_sample_pomdp._native",
     "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+    "POMDPPlanners.environments.snake_pomdp._native",
 )
 
 

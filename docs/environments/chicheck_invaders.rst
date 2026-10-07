@@ -482,7 +482,7 @@ visualizer. The results site replays it in 3D, as the replay on this page does.
 Limits
 ~~~~~~
 
-There is no C++ model. ``ChicheckInvadersVectorizedModel`` is the torch model
+``ChicheckInvadersVectorizedModel`` is the torch model
 that VOPP plans on. It reads the grid, flock, sensor, reward and step-budget
 arguments from the environment and supports both observation modes, so it
 declines no configuration. Like the
@@ -495,6 +495,11 @@ deviations off) scores the impossible floor ``-1e18``, where the scalar
 environment returns a finite log-probability below ``-103``. Build the model with ``dtype=torch.float64`` when the belief must
 rank such far-off readings. Scalar ``PFT_DPW`` also runs on the environment
 directly, and the QA gate uses it.
+
+The step, the sensor readings, their likelihood and the reward run in C++
+(``chicheck_invaders_pomdp/_native``), which draws from its own random number
+generator: ``np.random.seed`` does not reach it, and
+``_native.set_seed`` does.
 
 Can I use?
 ----------
@@ -523,7 +528,7 @@ Can I use?
    * - Also supports
      -
    * - Native C++ backend
-     - ❌
+     - ✔️
    * - Vectorized (torch) model
      - ✔️ ``ChicheckInvadersVectorizedModel`` (both observation modes)
    * - In the ``get_environment`` registry

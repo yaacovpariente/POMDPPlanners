@@ -17,6 +17,9 @@ import pytest
 from POMDPPlanners.core.belief.vectorized_weighted_particle_belief import (
     VectorizedWeightedParticleBelief,
 )
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (  # pylint: disable=no-name-in-module
+    _native,
+)
 from POMDPPlanners.environments.chicheck_invaders_pomdp import (
     ChicheckInvadersAction,
     ChicheckInvadersPOMDP,
@@ -188,6 +191,7 @@ class TestChicheckInvadersVectorizedBelief:
         """
         env = ChicheckInvadersPOMDP(discount_factor=0.95, **noiseless_preset())
         np.random.seed(2)
+        _native.set_seed(2)
         belief = cast(
             VectorizedWeightedParticleBelief,
             create_environment_belief(env, n_particles=64),

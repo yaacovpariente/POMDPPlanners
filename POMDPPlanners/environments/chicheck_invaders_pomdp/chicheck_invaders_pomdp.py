@@ -77,6 +77,9 @@ from POMDPPlanners.core.simulation.step_info_metrics import (
     extract_episode_step_infos,
     require_non_empty_histories,
 )
+from POMDPPlanners.environments.chicheck_invaders_pomdp import (  # pylint: disable=no-name-in-module
+    _native,
+)
 from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_schema import (
     CHICKEN_ALIVE,
     CHICKEN_COLUMN,
@@ -109,6 +112,8 @@ from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_sensor
     rounded_normal_pmf,
     sample_rounded_normal,
 )
+from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 if TYPE_CHECKING:
@@ -475,6 +480,65 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         #: Largest Chebyshev distance any chicken can be from the ship, which is
         #: what the encroachment channel is measured back from.
         self.max_chicken_distance = float(max(self.num_columns - 1, self.num_rows - 1))
+        self._build_native_kernels()
+
+    # -- native kernels -------------------------------------------------
+
+    def _build_native_kernels(self) -> None:
+        """Build the C++ kernels the sampling, scoring and reward paths call.
+
+        The kernels copy the configuration once, here, so an attribute changed
+        after construction does not reach them. They are private, so
+        ``config_id`` and ``__eq__`` skip them, and ``__getstate__`` drops
+        them because pybind11 objects do not pickle.
+        """
+        self._native_config = _native.ChicheckInvadersConfigCpp(
+            num_columns=self.num_columns,
+            num_rows=self.num_rows,
+            num_chickens=self.num_chickens,
+            fire_cooldown=self.fire_cooldown,
+            dive_probability=self.dive_probability,
+            camera_detection_probability=self.camera_detection_probability,
+            radar_detection_probability=self.radar_detection_probability,
+            ship_column_noise_std=self.ship_column_noise_std,
+            camera_offset_noise_std=self.camera_offset_noise_std,
+            radar_range_noise_std=self.radar_range_noise_std,
+            drop_flag_error_probability=self.drop_flag_error_probability,
+            camera_slope=self.camera_slope,
+            radar_radius=self.radar_radius,
+            full_observation=self.observation_mode is ObservationMode.FULL,
+            kill_reward=self.kill_reward,
+            shot_cost=self.shot_cost,
+            step_cost=self.step_cost,
+            ship_hit_penalty=self.ship_hit_penalty,
+            clear_reward=self.clear_reward,
+            max_steps=self.max_steps,
+        )
+        placeholder = np.zeros(self.state_size, dtype=np.float64)
+        # Keyed by action index. An action outside the four is not an error in
+        # the Python model (it moves nothing and fires nothing), so a lookup
+        # miss falls back to the Python reference rather than raising.
+        self._native_transitions: Dict[int, Any] = {
+            int(action): _native.ChicheckInvadersTransitionCpp(
+                state=placeholder, action=int(action), config=self._native_config
+            )
+            for action in ChicheckInvadersAction
+        }
+        self._native_observation = _native.ChicheckInvadersObservationCpp(
+            next_state=placeholder, config=self._native_config
+        )
+
+    def __getstate__(self) -> Dict[str, Any]:
+        """Drop the native kernels, which pybind11 cannot pickle."""
+        state = self.__dict__.copy()
+        for key in ("_native_config", "_native_transitions", "_native_observation"):
+            state.pop(key, None)
+        return state
+
+    def __setstate__(self, state: Dict[str, Any]) -> None:
+        """Restore the attributes and rebuild the native kernels from them."""
+        vars(self).update(state)
+        self._build_native_kernels()
 
     # -- state accessors ------------------------------------------------
 
@@ -603,6 +667,10 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
     ) -> ChicheckInvadersState:
         """Advance one step, with this step's dive coins drawn or supplied.
 
+        This is the Python reference for the native step in
+        ``_cpp/chicheck_invaders.cpp``; :meth:`sample_next_state` calls the
+        native one. The tests replay native successors through this method.
+
         The order is: move the ship, resolve the shot, flip the dive coins, move
         the chickens, then settle whatever reached row 0.
 
@@ -622,9 +690,9 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             state: The state to advance.
             action: The action taken.
             switches: Dive coins to use instead of drawing them, one per slot.
-                :meth:`transition_log_probability` passes these to replay a
-                candidate successor without touching the RNG. Defaults to
-                ``None``, which draws.
+                :meth:`_python_transition_log_probability` passes these to
+                replay a candidate successor without touching the RNG.
+                Defaults to ``None``, which draws from ``np.random``.
 
         Returns:
             A fresh successor state vector.
@@ -706,9 +774,109 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             One ``float64`` state vector, or an ``(n_samples, state_size)``
             array.
         """
+        kernel = self._native_transitions.get(int(action))
+        if kernel is None:
+            if int(n_samples) == 1:
+                return self._step_once(state, action)
+            return np.asarray([self._step_once(state, action) for _ in range(int(n_samples))])
         if int(n_samples) == 1:
-            return self._step_once(state, action)
-        return np.asarray([self._step_once(state, action) for _ in range(int(n_samples))])
+            return kernel.sample_from(state)
+        kernel.set_state(state)
+        return np.asarray(kernel.sample(int(n_samples)))
+
+    def sample_next_state_batch(self, states: Any, action: Any) -> np.ndarray:
+        """Sample one successor per row of ``states``, all under ``action``.
+
+        Args:
+            states: An ``(N, state_size)`` array or a sequence of state vectors.
+            action: The action applied to every row.
+
+        Returns:
+            An ``(N, state_size)`` ``float64`` array.
+        """
+        rows = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if rows.ndim == 1:
+            rows = rows.reshape(1, -1)
+        kernel = self._native_transitions.get(int(action))
+        if kernel is None:
+            return np.asarray([self._step_once(row, action) for row in rows], dtype=np.float64)
+        return kernel.batch_sample(rows)
+
+    def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
+        """Sample the successor, its reading and the reward in one native call.
+
+        Draws in the order :meth:`Environment.sample_next_step` does --
+        successor, then reading -- and scores the reward against the sampled
+        successor.
+
+        Args:
+            state: The state to advance.
+            action: The action taken.
+
+        Returns:
+            ``(next_state, observation, reward)``.
+        """
+        if int(action) not in self._native_transitions:
+            return super().sample_next_step(state, action)
+        next_state, observation, reward = _native.sample_next_step(
+            self._native_config, state, int(action)
+        )
+        return next_state, observation, float(reward)
+
+    def simulate_random_rollout(
+        self,
+        state: Any,
+        action_sampler: Any,
+        max_depth: int,
+        discount_factor: float,
+        depth: int = 0,
+    ) -> float:
+        """Discounted return of a uniform random rollout, run in C++.
+
+        The actions are drawn up front from ``np.random``, uniformly over the
+        four, and the steps then run in C++. That is the same law as a
+        ``DiscreteActionSampler`` over the four actions. Any other sampler
+        gets :func:`python_random_rollout`, so a planner's own rollout policy
+        is still the one followed.
+
+        Args:
+            state: The state the rollout starts from.
+            action_sampler: The planner's rollout action sampler.
+            max_depth: Depth at which the rollout stops.
+            discount_factor: Per-step discount.
+            depth: Depth already used by the search tree. Defaults to 0.
+
+        Returns:
+            The discounted sum of rewards along the rollout.
+        """
+        if not self._is_uniform_sampler(action_sampler):
+            return python_random_rollout(
+                state=state,
+                depth=depth,
+                action_sampler=action_sampler,
+                environment=self,
+                discount_factor=discount_factor,
+                max_depth=max_depth,
+            )
+        steps = int(max_depth) - int(depth)
+        if steps <= 0:
+            return 0.0
+        actions = np.random.randint(0, len(ChicheckInvadersAction), size=steps, dtype=np.int32)
+        return float(
+            _native.simulate_rollout(self._native_config, state, actions, float(discount_factor))
+        )
+
+    @staticmethod
+    def _is_uniform_sampler(action_sampler: Any) -> bool:
+        """Whether ``action_sampler`` draws uniformly from exactly the four actions."""
+        # An exact type check, not isinstance: a subclass may override sample().
+        # pylint: disable-next=unidiomatic-typecheck
+        if type(action_sampler) is not DiscreteActionSampler:
+            return False
+        actions = getattr(action_sampler, "actions", None)
+        if actions is None or len(actions) != len(ChicheckInvadersAction):
+            return False
+        return sorted(int(action) for action in actions) == [int(a) for a in ChicheckInvadersAction]
 
     def transition_log_probability(self, state: Any, action: Any, next_states: Any) -> np.ndarray:
         """Log-probability of each candidate successor of ``(state, action)``.
@@ -727,6 +895,22 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             One log-probability per candidate, shape ``(N,)``.
         """
         candidates = np.atleast_2d(np.asarray(next_states, dtype=np.float64))
+        kernel = self._native_transitions.get(int(action))
+        if kernel is None or candidates.ndim != 2:
+            return self._python_transition_log_probability(state, action, candidates)
+        if candidates.shape[1] != self.state_size:
+            return np.full(len(candidates), IMPOSSIBLE_LOG_PROBABILITY, dtype=np.float64)
+        kernel.set_state(state)
+        return kernel.log_probability(np.ascontiguousarray(candidates))
+
+    def _python_transition_log_probability(
+        self, state: Any, action: Any, candidates: np.ndarray
+    ) -> np.ndarray:
+        """Python reference for :meth:`transition_log_probability`.
+
+        The native kernel is tested against this, and it serves actions
+        outside the four, which have no kernel.
+        """
         scores = np.full(len(candidates), IMPOSSIBLE_LOG_PROBABILITY, dtype=np.float64)
         before = chicken_slots(np.asarray(state, dtype=np.float64), self.num_chickens)
         eligible = self.coin_eligible_slots(state, action)
@@ -894,11 +1078,16 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         """
         del action
         if int(n_samples) == 1:
-            return self._sample_observation_once(next_state)
-        return np.asarray([self._sample_observation_once(next_state) for _ in range(n_samples)])
+            return self._native_observation.sample_from(next_state)
+        self._native_observation.set_next_state(next_state)
+        return np.asarray(self._native_observation.sample(int(n_samples)))
 
     def _sample_observation_once(self, next_state: Any) -> np.ndarray:
-        """Draw one reading of ``next_state``."""
+        """Python reference for one draw of :meth:`sample_observation`.
+
+        It draws from ``np.random``; the native sampler draws the same law
+        from its own RNG. The tests compare the two in distribution.
+        """
         values = np.asarray(next_state, dtype=np.float64)
         if self.observation_mode is ObservationMode.FULL:
             return np.array(values, dtype=np.float64, copy=True)
@@ -931,10 +1120,11 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         return observation
 
     def _observation_log_likelihood(self, next_state: np.ndarray, observation: np.ndarray) -> float:
-        """Log ``Z(o | s')`` for one successor and one reading.
+        """Log ``Z(o | s')`` for one successor and one reading, in Python.
 
-        The single implementation every likelihood path goes through, so the
-        batched and scalar entry points cannot drift apart.
+        The reference the native likelihood is tested against. Every public
+        likelihood method calls the one native kernel, so the batched and
+        scalar entry points cannot drift apart.
         """
         if self.observation_mode is ObservationMode.FULL:
             return 0.0 if np.array_equal(next_state, observation) else IMPOSSIBLE_LOG_PROBABILITY
@@ -1031,36 +1221,35 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
             One log-probability per candidate, shape ``(N,)``.
         """
         del action
-        successor = np.asarray(next_state, dtype=np.float64)
         candidates = np.atleast_2d(np.asarray(observations, dtype=np.float64))
-        return np.asarray(
-            [self._observation_log_likelihood(successor, candidate) for candidate in candidates],
-            dtype=np.float64,
-        )
+        if candidates.ndim != 2 or candidates.shape[1] != self.observation_size:
+            return np.full(len(candidates), IMPOSSIBLE_LOG_PROBABILITY, dtype=np.float64)
+        self._native_observation.set_next_state(next_state)
+        return self._native_observation.log_probability(np.ascontiguousarray(candidates))
 
     def observation_log_probability_single(
         self, next_state: Any, action: Any, observation: Any
     ) -> float:
         """Scalar log-likelihood for one ``(successor, reading)`` pair."""
         del action
-        return self._observation_log_likelihood(
-            np.asarray(next_state, dtype=np.float64),
-            np.asarray(observation, dtype=np.float64),
-        )
+        reading = np.asarray(observation, dtype=np.float64)
+        if reading.shape != (self.observation_size,):
+            return IMPOSSIBLE_LOG_PROBABILITY
+        self._native_observation.set_next_state(next_state)
+        return float(self._native_observation.log_probability(reading.reshape(1, -1))[0])
 
     def observation_log_probability_per_state(
         self, next_states: Any, action: Any, observation: Any
     ) -> np.ndarray:
         """Log-likelihood of one reading under each candidate successor."""
         del action
-        candidate = np.asarray(observation, dtype=np.float64)
-        return np.asarray(
-            [
-                self._observation_log_likelihood(np.asarray(state, dtype=np.float64), candidate)
-                for state in next_states
-            ],
-            dtype=np.float64,
-        )
+        reading = np.asarray(observation, dtype=np.float64)
+        successors = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+        if successors.size == 0:
+            return np.zeros(0, dtype=np.float64)
+        if reading.shape != (self.observation_size,):
+            return np.full(len(successors), IMPOSSIBLE_LOG_PROBABILITY, dtype=np.float64)
+        return self._native_observation.batch_log_likelihood(successors, reading)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         """Check whether two readings are the same vector of numbers."""
@@ -1119,6 +1308,31 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         Returns:
             The immediate reward.
         """
+        return float(_native.reward(self._native_config, state, int(action), next_state))
+
+    def reward_batch(self, states: Any, action: Any, next_states: Any = None) -> np.ndarray:
+        """Reward of each row of ``states`` under ``action``, as :meth:`reward` scores it.
+
+        Args:
+            states: An ``(N, state_size)`` array or a sequence of state vectors.
+            action: The action taken from every row.
+            next_states: Matching successors, or ``None``.
+
+        Returns:
+            An ``(N,)`` ``float64`` array.
+        """
+        rows = np.ascontiguousarray(np.asarray(states, dtype=np.float64))
+        if rows.ndim == 1:
+            rows = rows.reshape(1, -1)
+        successors = None
+        if next_states is not None:
+            successors = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
+            if successors.ndim == 1:
+                successors = successors.reshape(1, -1)
+        return _native.reward_batch(self._native_config, rows, int(action), successors)
+
+    def _python_reward(self, state: Any, action: Any, next_state: Any = None) -> float:
+        """Python reference for :meth:`reward`, which the native kernel is tested against."""
         charged = -self.step_cost - (self.shot_cost if self.fires(state, action) else 0.0)
         if next_state is None:
             if not self.fires(state, action) or self.shot_target(state) < 0:
@@ -1152,6 +1366,10 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         Returns:
             ``True`` in any of those three cases.
         """
+        return bool(_native.is_terminal(self._native_config, state))
+
+    def _python_is_terminal(self, state: Any) -> bool:
+        """Python reference for :meth:`is_terminal`, which the native kernel is tested against."""
         values = np.asarray(state, dtype=np.float64)
         if values[SHIP_HIT_INDEX] > 0.0:
             return True
