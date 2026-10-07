@@ -150,8 +150,7 @@ class SnakeBelief(WeightedParticleBelief):
         back as a Monte Carlo summary of itself and the visualization's belief
         layer would lose its resolution.
 
-        This follows the convention ``OccupancyGridMappingBelief`` sets. It is
-        only half a fix: ``History.from_dict`` reconstructs the literal
+        It is only half a fix: ``History.from_dict`` reconstructs the literal
         ``WeightedParticleBelief`` and no subclass, so a belief read back out of
         a serialized history is still a plain dict. Keeping the field here is
         what makes that a framework gap rather than lost data.

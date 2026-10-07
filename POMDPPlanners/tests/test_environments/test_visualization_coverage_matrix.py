@@ -272,19 +272,6 @@ FAMILIES: Tuple[EnvironmentFamily, ...] = (
         viewers=("docs/environments/traces/mountain_car.json",),
     ),
     EnvironmentFamily(
-        package="occupancy_grid_mapping_pomdp",
-        label="OccupancyGridMapping",
-        hooks=(
-            (
-                "occupancy_grid_mapping_pomdp/occupancy_grid_mapping_pomdp.py",
-                "OccupancyGridMappingPOMDP",
-            ),
-        ),
-        docs_page="occupancy_grid_mapping.rst",
-        docs_section=None,
-        viewers=("docs/environments/traces/occupancy_grid_mapping.json",),
-    ),
-    EnvironmentFamily(
         package="pacman_pomdp",
         label="PacMan",
         hooks=(("pacman_pomdp/pacman_pomdp.py", "PacManPOMDP"),),

@@ -21,7 +21,6 @@ Available Environments:
     DiscreteMazePOMDP: Seeded maze memory task with cell actions
     ContinuousMazePOMDP: The same maze with real displacement actions
     TMazePOMDP: Compatibility class for the original T-shaped layout
-    OccupancyGridMappingPOMDP: Occupancy-grid mapping and exploration with a range sensor
     ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
     FirefightingPOMDP: Several firefighters fighting a wind-driven grid fire
     CaptureTheFlagPOMDP: Two teams racing to carry the other side's flag home
@@ -54,9 +53,6 @@ from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
     FirefightingPOMDP,
 )
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
-    OccupancyGridMappingPOMDP,
-)
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
@@ -84,7 +80,6 @@ __all__ = [
     "FirefightingPOMDP",
     "LaserTagPOMDP",
     "MountainCarPOMDP",
-    "OccupancyGridMappingPOMDP",
     "PacManPOMDP",
     "PushPOMDP",
     "RockSamplePOMDP",
@@ -109,7 +104,6 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "FirefightingPOMDP": FirefightingPOMDP,
     "LaserTagPOMDP": LaserTagPOMDP,
     "MountainCarPOMDP": MountainCarPOMDP,
-    "OccupancyGridMappingPOMDP": OccupancyGridMappingPOMDP,
     "PacManPOMDP": PacManPOMDP,
     "PushPOMDP": PushPOMDP,
     "RockSamplePOMDP": RockSamplePOMDP,

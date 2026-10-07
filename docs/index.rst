@@ -122,7 +122,6 @@ What is in the package
    environments/rock_sample
    environments/battleship
    environments/capture_the_flag
-   environments/occupancy_grid_mapping
    environments/chicheck_invaders
    environments/firefighting
    environments/snake

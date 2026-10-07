@@ -26,8 +26,8 @@ CARLA's perception models) have no enum config axis to sweep, and IsaacLab's
 vectorized model is not env-constructed; those remain covered by their own
 per-model tests.
 
-Environments with no torch vectorized model at all -- Battleship,
-OccupancyGridMapping and Snake -- have nothing for this contract to sweep and
+Environments with no torch vectorized model at all -- Battleship and
+Snake -- have nothing for this contract to sweep and
 are absent on purpose rather than by oversight. The cost of that absence is
 that none of them can be planned on with VOPP; each is QA'd with PFT-DPW on the
 scalar ``Environment`` API instead. Writing one is a substantial piece of work

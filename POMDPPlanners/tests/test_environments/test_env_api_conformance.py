@@ -95,9 +95,6 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
     FirefightingPOMDP,
 )
-from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_pomdp import (
-    OccupancyGridMappingPOMDP,
-)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import (
     ContinuousPushPOMDP,
@@ -134,7 +131,6 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
     firefighting_pinned_kwargs,
-    occupancy_grid_mapping_pinned_kwargs,
     pacman_pinned_kwargs,
     push_pinned_kwargs,
     rock_sample_pinned_kwargs,
@@ -211,24 +207,6 @@ def _build_chicheck_invaders_fully_observable() -> ChicheckInvadersPOMDP:
     return ChicheckInvadersPOMDP(
         discount_factor=0.95,
         **chicheck_invaders_pinned_kwargs(observation_mode=ChicheckInvadersObservationMode.FULL),
-    )
-
-
-def _build_occupancy_grid_mapping(**overrides: Any) -> OccupancyGridMappingPOMDP:
-    return OccupancyGridMappingPOMDP(
-        discount_factor=0.95, **occupancy_grid_mapping_pinned_kwargs(**overrides)
-    )
-
-
-def _build_occupancy_grid_mapping_truncated_normal() -> OccupancyGridMappingPOMDP:
-    # The second range law is a different observation model on the same
-    # class, so it gets its own registry entry; the wider noise is what makes
-    # the truncation actually bite on the pinned world.
-    return OccupancyGridMappingPOMDP(
-        discount_factor=0.95,
-        **occupancy_grid_mapping_pinned_kwargs(
-            range_noise_model="truncated_normal", range_noise_std_cells=1.0
-        ),
     )
 
 
@@ -344,8 +322,6 @@ HAND_WRITTEN_ENV_BUILDERS: List[Tuple[str, Callable[..., Environment]]] = [
     ("FirefightingPOMDP[3 firefighters]", _build_firefighting_three_firefighters),
     ("LaserTagPOMDP", _build_laser_tag),
     ("MountainCarPOMDP", _build_mountain_car),
-    ("OccupancyGridMappingPOMDP", _build_occupancy_grid_mapping),
-    ("OccupancyGridMappingPOMDP[truncated_normal]", _build_occupancy_grid_mapping_truncated_normal),
     ("PacManPOMDP", _build_pacman),
     ("PushPOMDP", _build_push),
     ("PushPOMDP[transition_error_prob=0.2]", _build_push_with_failed_actions),

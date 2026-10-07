@@ -104,19 +104,6 @@ def _maze_observation(observation: Any) -> np.ndarray:
     return np.asarray(observation, dtype=np.float64)
 
 
-def _occupancy_grid_mapping_belief(particles: List[Any], log_weights: np.ndarray) -> Any:
-    # The occupancy reading is a whole range scan that a freshly predicted
-    # particle never reproduces exactly, so a plain predict-and-reweight filter
-    # loses all support on the first step. The environment's own scalar
-    # filter conditions on the reading instead; it is the general
-    # implementation the vectorized belief duplicates.
-    from POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_belief import (
-        OccupancyGridMappingBelief,
-    )
-
-    return OccupancyGridMappingBelief(particles=particles, log_weights=log_weights)
-
-
 ReferenceBelief = Callable[[List[Any], np.ndarray], Any]
 
 
@@ -311,20 +298,6 @@ _HAND_WRITTEN_BELIEF_SPECS: List[BeliefSpec] = [
         **_SHARP_READING,
     ),
     BeliefSpec("MountainCarPOMDP", "MountainCarVectorizedUpdater", _PLAIN),
-    BeliefSpec(
-        "OccupancyGridMappingPOMDP",
-        "OccupancyGridMappingVectorizedUpdater",
-        "OccupancyGridMappingVectorizedBelief",
-        reference_belief=_occupancy_grid_mapping_belief,
-        **_SHARP_READING,
-    ),
-    BeliefSpec(
-        "OccupancyGridMappingPOMDP[truncated_normal]",
-        "OccupancyGridMappingVectorizedUpdater",
-        "OccupancyGridMappingVectorizedBelief",
-        reference_belief=_occupancy_grid_mapping_belief,
-        **_SHARP_READING,
-    ),
     BeliefSpec("PacManPOMDP", "PacManVectorizedUpdater", _PLAIN),
     BeliefSpec("PushPOMDP", "PushVectorizedUpdater", _PLAIN, **_SHARP_READING),
     BeliefSpec(

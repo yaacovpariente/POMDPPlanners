@@ -30,14 +30,13 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
   <img src="docs/images/t_maze.jpg" alt="3D episode replay of the T-Maze environment" width="49%">
   <img src="docs/images/snake.jpg" alt="3D episode replay of the Snake environment" width="49%">
   <img src="docs/images/chicheck_invaders.jpg" alt="3D episode replay of the Chicheck Invaders environment" width="49%">
-  <img src="docs/images/occupancy_grid_mapping.jpg" alt="3D episode replay of the Occupancy Grid Mapping environment" width="49%">
   <img src="docs/images/cartpole.jpg" alt="3D episode replay of the CartPole environment" width="49%">
   <img src="docs/images/mountain_car.jpg" alt="3D episode replay of the Mountain Car environment" width="49%">
   <img src="docs/images/safety_ant_velocity.jpg" alt="3D episode replay of the Safety Ant Velocity environment" width="49%">
   <img src="docs/images/racetrack.jpg" alt="3D episode replay of the Racetrack environment" width="49%">
 </p>
 <p align="center">
-  <em>Row by row: <a href="POMDPPlanners/environments/tiger_pomdp">Tiger</a> and <a href="POMDPPlanners/environments/rock_sample_pomdp">RockSample</a>; <a href="POMDPPlanners/environments/laser_tag_pomdp">LaserTag</a> and <a href="POMDPPlanners/environments/pacman_pomdp">PacMan</a>; <a href="POMDPPlanners/environments/battleship_pomdp">Battleship</a> and <a href="POMDPPlanners/environments/maze_pomdp">Maze</a>; <a href="POMDPPlanners/environments/t_maze_pomdp">T-Maze</a> and <a href="POMDPPlanners/environments/snake_pomdp">Snake</a>; <a href="POMDPPlanners/environments/chicheck_invaders_pomdp">Chicheck Invaders</a> and <a href="POMDPPlanners/environments/occupancy_grid_mapping_pomdp">Occupancy Grid Mapping</a>; <a href="POMDPPlanners/environments/cartpole_pomdp">CartPole</a> and <a href="POMDPPlanners/environments/mountain_car_pomdp">Mountain Car</a>; <a href="POMDPPlanners/environments/safety_ant_velocity_pomdp">Safety Ant Velocity</a> and <a href="POMDPPlanners/environments/racetrack_pomdp">Racetrack</a>.</em>
+  <em>Row by row: <a href="POMDPPlanners/environments/tiger_pomdp">Tiger</a> and <a href="POMDPPlanners/environments/rock_sample_pomdp">RockSample</a>; <a href="POMDPPlanners/environments/laser_tag_pomdp">LaserTag</a> and <a href="POMDPPlanners/environments/pacman_pomdp">PacMan</a>; <a href="POMDPPlanners/environments/battleship_pomdp">Battleship</a> and <a href="POMDPPlanners/environments/maze_pomdp">Maze</a>; <a href="POMDPPlanners/environments/t_maze_pomdp">T-Maze</a> and <a href="POMDPPlanners/environments/snake_pomdp">Snake</a>; <a href="POMDPPlanners/environments/chicheck_invaders_pomdp">Chicheck Invaders</a> and <a href="POMDPPlanners/environments/cartpole_pomdp">CartPole</a>; <a href="POMDPPlanners/environments/mountain_car_pomdp">Mountain Car</a> and <a href="POMDPPlanners/environments/safety_ant_velocity_pomdp">Safety Ant Velocity</a>; <a href="POMDPPlanners/environments/racetrack_pomdp">Racetrack</a>.</em>
 </p>
 </details>
 <details>
@@ -397,7 +396,6 @@ Self-contained Jupyter notebooks with executable end-to-end examples live in
 | Maze / T-Maze | Memory task: a one-time noisy cue at the start says which distant goal pays (T-shaped corridor, or a generated maze with discrete & continuous movement) |
 | Snake | Arcade Snake with hidden food, located through a short-range vision window and a noisy scent |
 | Chicheck Invaders | Grid shooter: clear a flock of chickens whose dives start unseen |
-| Occupancy Grid Mapping | Exploration that maps a hidden grid from noisy range scans |
 | CartPole / MountainCar | Partially observable versions of the Gym classics |
 | Push | Object manipulation under contact uncertainty |
 | Firefighting | Several firefighters put out a grid fire spread by a hidden wind |

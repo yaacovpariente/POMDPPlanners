@@ -149,11 +149,6 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_firefighting_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
-    "OccupancyGridMappingPOMDP": (
-        "POMDPPlanners.environments.occupancy_grid_mapping_pomdp.occupancy_grid_mapping_beliefs",
-        "create_occupancy_grid_mapping_belief",
-        BeliefType.VECTORIZED_PARTICLE,
-    ),
     "SnakePOMDP": (
         "POMDPPlanners.environments.snake_pomdp.snake_vectorized_belief",
         "create_snake_belief",

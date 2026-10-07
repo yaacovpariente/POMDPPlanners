@@ -63,10 +63,6 @@ HAND_BUILT_VARIANTS: Dict[VariantKey, str] = {
     ("ChicheckInvadersPOMDP", "observation_mode", "FULL"): (
         "ChicheckInvadersPOMDP[fully_observable]"
     ),
-    # Built with a wider range noise, so the truncation actually bites.
-    ("OccupancyGridMappingPOMDP", "range_noise_model", "TRUNCATED_NORMAL"): (
-        "OccupancyGridMappingPOMDP[truncated_normal]"
-    ),
 }
 
 # Switches whose branches only run when the map holds a hazard.

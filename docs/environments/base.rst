@@ -90,13 +90,6 @@ The Guide column says which page to open for a given class.
      - continuous
      - none
      - :doc:`capture_the_flag`
-   * - ``OccupancyGridMappingPOMDP``
-     - Explore an unknown grid world, paid for the entropy it maps away.
-     - ``[step, pose, true map, log-odds map]``
-     - discrete
-     - continuous
-     - none
-     - :doc:`occupancy_grid_mapping`
    * - ``ChicheckInvadersPOMDP``
      - Shoot down a diving flock seen through a split camera/radar reading.
      - ``[ship, chickens]``

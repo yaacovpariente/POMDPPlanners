@@ -1201,7 +1201,7 @@ class ChicheckInvadersPOMDP(DiscreteActionsEnvironment):
         where firing is decided.
 
         Outcome channels are read from ``next_state`` when there is one, for the
-        reason Battleship and occupancy-grid mapping both document: the episode
+        reason Battleship documents: the episode
         runner checks its step budget before it checks terminality, so an
         episode whose final allowed step clears the flock records no terminal
         bookkeeping step, and reading the outcome from ``state`` alone would

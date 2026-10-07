@@ -204,12 +204,6 @@ WORLDS: List[DocsWorld] = [
         "mountain_car", _env(ENV, "MountainCarPOMDP", discount_factor=0.99), num_steps=60, depth=20
     ),
     DocsWorld("firefighting", _env(ENV, "FirefightingPOMDP"), num_steps=20),
-    DocsWorld(
-        "occupancy_grid_mapping",
-        # A particle is a whole map, so fewer of them keep the trace small.
-        _env(ENV, "OccupancyGridMappingPOMDP", n_particles=20),
-        num_steps=30,
-    ),
     DocsWorld("pacman", _env(ENV, "PacManPOMDP", maze_size=(7, 7), num_ghosts=1), num_steps=30),
     DocsWorld("push", _env(ENV, "PushPOMDP", discount_factor=0.95, grid_size=10), num_steps=30),
     DocsWorld(

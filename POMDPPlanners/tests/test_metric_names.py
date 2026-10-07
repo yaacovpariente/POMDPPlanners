@@ -25,9 +25,10 @@ from POMDPPlanners.tests.test_utils.golden_metric_snapshot import build_registry
 
 _ENVIRONMENTS_DIR = Path(__file__).resolve().parents[1] / "environments"
 
-# Every metrics enum the repository had when this test was written. A count
-# below this means the source scan broke, not that the names became clean.
-_MIN_METRIC_ENUMS = 24
+# Every metrics enum the repository had when this test was written, less the
+# one removed with OccupancyGridMappingPOMDP. A count below this means the
+# source scan broke, not that the names became clean.
+_MIN_METRIC_ENUMS = 23
 
 # An environment-specific name that ends like a common one but is not one: laser
 # tag reports tagging the opponent separately from reaching its goal.
