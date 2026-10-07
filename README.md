@@ -51,6 +51,35 @@ POMDPPlanners is a set of reliable implementations of **POMDP (Partially Observa
   <em>Episodes planned online by PFT-DPW and replayed in the package's 3D viewer. Left: <a href="POMDPPlanners/environments/firefighting_pomdp">Firefighting</a>, where the two firefighters put the fire out. Right: <a href="POMDPPlanners/environments/capture_the_flag_pomdp">Capture the Flag</a>, where the blue team defends its half and tags a red attacker; it does not capture the flag in this episode.</em>
 </p>
 </details>
+<details>
+<summary>Show environment space types</summary>
+
+Which space types each environment supports. A world with several variants (for example a discrete and a continuous Light-Dark) gets a check for every type one of its variants uses. Isaac Lab's action and observation types depend on the task.
+
+| Environment | Discrete state | Continuous state | Discrete actions | Continuous actions | Discrete obs. | Continuous obs. |
+| --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| [Tiger](POMDPPlanners/environments/tiger_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [RockSample](POMDPPlanners/environments/rock_sample_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Battleship](POMDPPlanners/environments/battleship_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Capture the Flag](POMDPPlanners/environments/capture_the_flag_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ❌ | ✔️ |
+| [Chicheck Invaders](POMDPPlanners/environments/chicheck_invaders_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Firefighting](POMDPPlanners/environments/firefighting_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Snake](POMDPPlanners/environments/snake_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [PacMan](POMDPPlanners/environments/pacman_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Sanity](POMDPPlanners/environments/sanity_pomdp) | ✔️ | ❌ | ✔️ | ❌ | ✔️ | ❌ |
+| [Maze / T-Maze](POMDPPlanners/environments/maze_pomdp) | ✔️ | ✔️ | ✔️ | ✔️ | ✔️ | ❌ |
+| [Light-Dark](POMDPPlanners/environments/light_dark_pomdp) | ✔️ | ✔️ | ✔️ | ✔️ | ✔️ | ✔️ |
+| [LaserTag](POMDPPlanners/environments/laser_tag_pomdp) | ✔️ | ✔️ | ✔️ | ✔️ | ❌ | ✔️ |
+| [Push](POMDPPlanners/environments/push_pomdp) | ❌ | ✔️ | ✔️ | ✔️ | ❌ | ✔️ |
+| [CartPole](POMDPPlanners/environments/cartpole_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+| [Mountain Car](POMDPPlanners/environments/mountain_car_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+| [Safety Ant Velocity](POMDPPlanners/environments/safety_ant_velocity_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+| [Racetrack](POMDPPlanners/environments/racetrack_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+| [CARLA](POMDPPlanners/environments/carla_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+| [Isaac Lab](POMDPPlanners/environments/isaac_lab_pomdp) | ❌ | ✔️ | ✔️ | ✔️ | ✔️ | ✔️ |
+| [nuPlan](POMDPPlanners/environments/nuplan_pomdp) | ❌ | ✔️ | ✔️ | ❌ | ❌ | ✔️ |
+
+</details>
 
 ## Main Features
 

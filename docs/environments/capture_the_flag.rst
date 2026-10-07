@@ -506,14 +506,27 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``CaptureTheFlagPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
    :widths: 34 30
 
-   * - Capability
-     - ``CaptureTheFlagPOMDP``
-   * - Action space
-     - Discrete
-   * - Observation space
-     - Continuous
+   * - Also supports
+     -
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model

@@ -292,20 +292,63 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``LaserTagPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousLaserTagPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ❌
+     - ✔️
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousLaserTagPOMDPDiscreteActions``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
    :widths: 28 24 24 24
 
-   * - Capability
+   * - Also supports
      - ``LaserTagPOMDP``
      - ``ContinuousLaserTagPOMDP``
      - ``ContinuousLaserTagPOMDPDiscreteActions``
-   * - Action space
-     - Discrete
-     - Continuous
-     - Discrete
-   * - Observation space
-     - Continuous
-     - Continuous
-     - Continuous
    * - Native C++ backend
      - ✔️ (loaded lazily; falls back to Python if the extension is missing)
      - ✔️

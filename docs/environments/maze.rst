@@ -251,20 +251,63 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``DiscreteMazePOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousMazePOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ❌
+     - ✔️
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``TMazePOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
    :widths: 28 24 24 24
 
-   * - Capability
+   * - Also supports
      - ``DiscreteMazePOMDP``
      - ``ContinuousMazePOMDP``
      - ``TMazePOMDP``
-   * - Action space
-     - Discrete
-     - Continuous
-     - Discrete
-   * - Observation space
-     - Discrete
-     - Discrete
-     - Discrete
    * - Native C++ backend
      - ❌
      - ❌

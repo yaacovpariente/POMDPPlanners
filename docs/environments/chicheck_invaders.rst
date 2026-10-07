@@ -488,14 +488,27 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ChicheckInvadersPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
    :widths: 34 30
 
-   * - Capability
-     - ``ChicheckInvadersPOMDP``
-   * - Action space
-     - Discrete
-   * - Observation space
-     - Discrete
+   * - Also supports
+     -
    * - Native C++ backend
      - ❌
    * - Vectorized (torch) model

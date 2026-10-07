@@ -410,29 +410,70 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousLightDarkPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ❌
+     - ✔️
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousLightDarkPOMDPDiscreteActions``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``DiscreteLightDarkPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
    :widths: 28 24 24 24
 
-   * - Capability
+   * - Also supports
      - ``ContinuousLightDarkPOMDP``
      - ``ContinuousLightDarkPOMDPDiscreteActions``
      - ``DiscreteLightDarkPOMDP``
-   * - Action space
-     - Continuous
-     - Discrete
-     - Discrete
-   * - Observation space
-     - Continuous
-     - Continuous
-     - Discrete
    * - Native C++ backend
      - ✔️
      - ✔️
      - ✔️
    * - Vectorized (torch) model
-     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise
-       ``NotImplementedError``)
-     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise
-       ``NotImplementedError``)
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
+     - ✔️ ``ContinuousLightDarkVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
      - ❌
    * - In the ``get_environment`` registry
      - ✔️

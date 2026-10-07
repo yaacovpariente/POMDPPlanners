@@ -256,27 +256,69 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``PushPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousPushPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ❌
+     - ✔️
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousPushPOMDPDiscreteActions``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
    :widths: 28 24 24 24
 
-   * - Capability
+   * - Also supports
      - ``PushPOMDP``
      - ``ContinuousPushPOMDP``
      - ``ContinuousPushPOMDPDiscreteActions``
-   * - Action space
-     - Discrete
-     - Continuous
-     - Discrete
-   * - Observation space
-     - Continuous
-     - Continuous
-     - Continuous
    * - Native C++ backend
      - ✔️
      - ✔️
      - ✔️
    * - Vectorized (torch) model
-     - ✔️ ``PushVectorizedModel`` (some configurations; others raise
-       ``NotImplementedError``)
+     - ✔️ ``PushVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
      - ❌
      - ❌
    * - In the ``get_environment`` registry

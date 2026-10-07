@@ -24,18 +24,27 @@ Can I use?
 
 .. list-table::
    :header-rows: 1
-   :widths: 34 14
+   :widths: 20 12 12
 
-   * - Capability
-     - Supported
-   * - Discrete actions
+   * -
+     - Discrete
+     - Continuous
+   * - State
      - ✔️
-   * - Continuous actions
      - ✔️
-   * - Discrete observations
+   * - Action
      - ✔️
-   * - Continuous observations
      - ✔️
+   * - Observation
+     - ✔️
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12
+
+   * - Also supports
+     -
    * - Cost constraints
      - ❌
    * - GPU
