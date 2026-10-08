@@ -1064,7 +1064,11 @@ class ContinuousMazePOMDP(BaseMazePOMDP):
             raise ValueError(f"action must be a 2-vector, got shape {np.shape(action)}.")
         if not np.all(np.isfinite(vector)):
             raise ValueError(f"action must contain only finite values, got {vector}.")
-        magnitude = float(np.linalg.norm(vector))
+        # Not np.linalg.norm: its BLAS dot product uses a fused multiply-add on
+        # some x86 CPUs and not others, which moves the length by one ulp and
+        # breaks bitwise agreement with the native port's sqrt(x*x + y*y).
+        x0, x1 = float(vector[0]), float(vector[1])
+        magnitude = math.sqrt(x0 * x0 + x1 * x1)
         if magnitude > self.max_step_size:
             return vector * (self.max_step_size / magnitude)
         return vector
