@@ -114,7 +114,6 @@ class TestBattleshipVectorizedUpdater:
 
 
 class TestBattleshipVectorizedBelief:
-
     def test_particle_type_still_available(self, env):
         """Test that the generic particle belief is still selectable.
 

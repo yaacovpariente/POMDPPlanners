@@ -480,7 +480,6 @@ class TestBatchObservationLogLikelihood:
 
 
 class TestConfigId:
-
     def test_config_id_differs_for_different_params(self, env):
         """Test that config_id changes when parameters differ.
 

@@ -130,7 +130,6 @@ class TestChicheckInvadersVectorizedUpdater:
 
 
 class TestChicheckInvadersVectorizedBelief:
-
     def test_scalar_filter_still_available(self, env):
         """Test that the scalar filter is still selectable.
 
