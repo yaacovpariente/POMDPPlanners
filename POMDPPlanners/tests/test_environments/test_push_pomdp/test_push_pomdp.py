@@ -19,6 +19,7 @@ import pytest
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.push_pomdp import PushPOMDP, _native as push_native
+from POMDPPlanners.environments.push_pomdp.push_pomdp import RewardModelType
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -28,6 +29,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -619,80 +621,6 @@ class TestPushPOMDP:
         # Verify reward is calculated
         assert reward == self.env.reward(next_state, action)
 
-    def test_environment_equality(self):
-        """Test environment equality comparison."""
-        # Create two identical environments
-        env1 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        env2 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-
-        # Test equality
-        assert env1 == env2
-
-        # Test inequality with different parameters
-        env3 = PushPOMDP(
-            discount_factor=0.9,  # Different discount factor
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        assert env1 != env3
-
-    def test_config_id(self):
-        """Test config_id behavior."""
-        # Create two environments with same parameters
-        env1 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        env2 = PushPOMDP(
-            discount_factor=0.95,
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-
-        # Test same config_id for identical environments
-        assert env1.config_id == env2.config_id
-
-        # Test different config_id for different environments
-        env3 = PushPOMDP(
-            discount_factor=0.9,  # Different discount factor
-            **push_pinned_kwargs(
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-            ),
-        )
-        assert env1.config_id != env3.config_id
-
     def test_observation_never_empty_from_sample(self):
         """Test that env.sample_observation never produces empty observations.
 
@@ -762,7 +690,7 @@ class TestPushPOMDP:
             for action in actions:
                 # Call sample_next_step multiple times to check consistency
                 for _ in range(5):
-                    next_state, observation, reward = self.env.sample_next_step(state, action)
+                    next_state, observation, _ = self.env.sample_next_step(state, action)
 
                     # Check observation properties
                     assert isinstance(observation, np.ndarray), "Observation should be numpy array"
@@ -1692,12 +1620,12 @@ class TestPushDangerousAreas:
         """compute_metrics reports dangerous-area step counts.
 
         Purpose: Validates that the new ``dangerous_area_rate`` and
-            ``total_dangerous_area_steps`` metrics are emitted.
+            ``average_dangerous_area_steps`` metrics are emitted.
 
         Given: A PushPOMDP with one dangerous area and a hand-built
             history with two steps inside the zone and one outside.
         When: ``compute_metrics`` is called on a single-history list.
-        Then: Both metrics are present and ``total_dangerous_area_steps``
+        Then: Both metrics are present and ``average_dangerous_area_steps``
             equals 2.
 
         Test type: unit
@@ -1744,10 +1672,10 @@ class TestPushDangerousAreas:
             reach_terminal_state=False,
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
-        metrics = {m.name: m for m in env.compute_metrics([history])}
+        metrics = {m.name: m for m in env.compute_metrics(attach_step_info(env, [history]))}
         assert "dangerous_area_rate" in metrics
-        assert "total_dangerous_area_steps" in metrics
-        assert metrics["total_dangerous_area_steps"].value == pytest.approx(2.0)
+        assert "average_dangerous_area_steps" in metrics
+        assert metrics["average_dangerous_area_steps"].value == pytest.approx(2.0)
         assert metrics["dangerous_area_rate"].value == pytest.approx(2.0 / 3.0)
 
     @pytest.mark.parametrize("bad_value", [-0.1, 1.1, float("nan")])
@@ -1835,6 +1763,20 @@ class TestPushDangerousAreas:
             ),
         )
         assert env_yes.reward_range[0] == pytest.approx(env_no.reward_range[0] - 3.5)
+
+    def test_zero_mean_danger_shock_expands_both_reward_range_bounds(self):
+        """A zero-mean danger shock advertises both possible shock signs."""
+        env = PushPOMDP(
+            discount_factor=0.95,
+            **push_pinned_kwargs(
+                grid_size=10,
+                dangerous_areas=[(2.0, 2.0)],
+                dangerous_area_penalty=-3.5,
+                reward_model_type=RewardModelType.ZERO_MEAN_HAZARD_SHOCK,
+            ),
+        )
+        max_distance = np.sqrt(2) * 9
+        assert env.reward_range == pytest.approx((-max_distance - 3.5, 103.5))
 
 
 class TestSampleNextStepEquivalence:
@@ -2527,7 +2469,7 @@ def test_compute_metrics_values_within_confidence_intervals():
             )
         )
 
-    metrics = env.compute_metrics(histories)
+    metrics = env.compute_metrics(attach_step_info(env, histories))
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, env)
     verify_history_returns_bounded(histories, env)

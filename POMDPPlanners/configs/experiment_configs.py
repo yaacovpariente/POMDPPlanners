@@ -4,6 +4,7 @@
 from typing import List, Tuple, Optional, Sequence, Type
 from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator, EnvironmentRunParams
 from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
@@ -34,6 +35,9 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
 )
 from POMDPPlanners.environments.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
+    SafeAntVelocityPOMDPMetrics,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
@@ -51,25 +55,65 @@ class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
 
         # Add goal-reaching metric based on environment type
         if isinstance(environment, CartPolePOMDP):
-            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, MountainCarPOMDP):
-            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, ContinuousLightDarkPOMDP):
-            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, DiscreteLightDarkPOMDP):
-            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, PushPOMDP):
-            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, TigerPOMDP):
-            params.append(("success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, RockSamplePOMDP):
-            params.append(("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         elif isinstance(environment, ContinuousLaserTagPOMDP):
             params.append(("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
         elif isinstance(environment, LaserTagPOMDP):
             params.append(("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
         elif isinstance(environment, PacManPOMDP):
-            params.append(("win_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+            params.append(
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )
+            )
         # SafeAntVelocityPOMDP doesn't have a goal metric
 
         return params
@@ -81,54 +125,102 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
     ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
         if isinstance(environment, CartPolePOMDP):
             return [
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, MountainCarPOMDP):
             return [
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, ContinuousLightDarkPOMDP):
             return [
-                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.AVERAGE_COLLISIONS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, DiscreteLightDarkPOMDP):
             return [
-                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.AVERAGE_COLLISIONS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, PushPOMDP):
             return [
-                ("total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE),
-                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.AVERAGE_COLLISIONS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, SafeAntVelocityPOMDP):
             return [
-                ("total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE),
+                (
+                    SafeAntVelocityPOMDPMetrics.AVERAGE_SAFETY_VIOLATIONS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
             ]
         if isinstance(environment, TigerPOMDP):
             return [
-                ("success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, RockSamplePOMDP):
             return [
-                ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
-                ("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         if isinstance(environment, ContinuousLaserTagPOMDP):
             return [
-                ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
+                (
+                    CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
                 ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         if isinstance(environment, LaserTagPOMDP):
             return [
-                ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
+                (
+                    CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
                 ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         if isinstance(environment, PacManPOMDP):
             return [
-                ("avg_collision_encounters", HyperParameterOptimizationDirection.MINIMIZE),
-                ("win_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+                (
+                    CommonMetricName.AVERAGE_COLLISIONS.value,
+                    HyperParameterOptimizationDirection.MINIMIZE,
+                ),
+                (
+                    CommonMetricName.TASK_COMPLETION_RATE.value,
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                ),
             ]
         raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
 

@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import EpisodeTrace, History, StepData
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -134,8 +134,8 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ) as mock_run_episode:
-            # Mock environment.cache_visualization
-            tiger_environment.cache_visualization = Mock()
+            # Mock the environment's episode visualizer
+            tiger_environment.episode_visualizer = Mock()
 
             # Execute function
             visualize_planner_episode(
@@ -161,13 +161,15 @@ class TestVisualizePlannerEpisode:
                 assert "logger" in kwargs
 
             # Verify environment visualization was called twice
-            assert tiger_environment.cache_visualization.call_count == 2
+            assert tiger_environment.episode_visualizer.return_value.write.call_count == 2
 
-            # The environment owns the output file name; the planner name scopes
+            # The visualizer owns the output file name; the planner name scopes
             # the output directory and the episode id becomes the episode index.
             expected_output_dir = temp_cache_dir / "TestPlanner"
 
-            for i, call_args in enumerate(tiger_environment.cache_visualization.call_args_list):
+            for i, call_args in enumerate(
+                tiger_environment.episode_visualizer.return_value.write.call_args_list
+            ):
                 kwargs = call_args[1]
                 assert (
                     kwargs["history"] == sample_episode_history.history
@@ -199,7 +201,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ) as mock_run_episode:
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             visualize_planner_episode(
                 planner=test_planner,
@@ -219,10 +221,11 @@ class TestVisualizePlannerEpisode:
             assert call_args["num_steps"] == 5
             assert "logger" in call_args
 
-            tiger_environment.cache_visualization.assert_called_once_with(
+            tiger_environment.episode_visualizer.return_value.write.assert_called_once_with(
                 history=sample_episode_history.history,  # Pass the history list, not the History object
                 output_dir=temp_cache_dir / "TestPlanner",
                 episode_index=0,
+                policy_name="TestPlanner",
             )
 
     def test_visualize_planner_episode_zero_episodes(
@@ -241,7 +244,7 @@ class TestVisualizePlannerEpisode:
         with patch(
             "POMDPPlanners.utils.planner_episode_visualization.run_episode"
         ) as mock_run_episode:
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             visualize_planner_episode(
                 planner=test_planner,
@@ -254,7 +257,7 @@ class TestVisualizePlannerEpisode:
 
             # Verify no calls were made
             mock_run_episode.assert_not_called()
-            tiger_environment.cache_visualization.assert_not_called()
+            tiger_environment.episode_visualizer.return_value.write.assert_not_called()
 
     def test_visualize_planner_episode_cache_path_formatting(
         self,
@@ -284,7 +287,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ):
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             visualize_planner_episode(
                 planner=test_planner,
@@ -298,11 +301,11 @@ class TestVisualizePlannerEpisode:
             # Extract output directories and episode indices from calls
             output_dirs = []
             episode_indices = []
-            for call_args in tiger_environment.cache_visualization.call_args_list:
+            for call_args in tiger_environment.episode_visualizer.return_value.write.call_args_list:
                 output_dirs.append(call_args[1]["output_dir"])
                 episode_indices.append(call_args[1]["episode_index"])
 
-            # Each planner writes into its own subdirectory; the environment owns
+            # Each planner writes into its own subdirectory; the visualizer owns
             # the per-episode file name.
             expected_dir = temp_cache_dir / "POMCP_TestPlanner_123"
             assert output_dirs == [expected_dir, expected_dir, expected_dir]
@@ -335,8 +338,8 @@ class TestVisualizePlannerEpisode:
         # Create a proper belief for testing using the environment's initial state distribution
         belief = get_initial_belief(env, n_particles=20)  # Reduced for testing
 
-        # Mock the environment's cache_visualization to avoid file I/O
-        env.cache_visualization = Mock()
+        # Mock the environment's episode visualizer to avoid file I/O
+        env.episode_visualizer = Mock()
 
         # Use the policy as both planner and policy (common pattern)
         visualize_planner_episode(
@@ -349,12 +352,12 @@ class TestVisualizePlannerEpisode:
         )
 
         # Verify visualization was called
-        assert env.cache_visualization.call_count == 2
+        assert env.episode_visualizer.return_value.write.call_count == 2
 
         # Verify per-planner output directory and episode indices
         expected_dir = temp_cache_dir / "RealPOMCP"
 
-        for i, call_args in enumerate(env.cache_visualization.call_args_list):
+        for i, call_args in enumerate(env.episode_visualizer.return_value.write.call_args_list):
             kwargs = call_args[1]
             assert kwargs["output_dir"] == expected_dir
             assert kwargs["episode_index"] == i
@@ -379,7 +382,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             side_effect=RuntimeError("Episode execution failed"),
         ):
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             with pytest.raises(RuntimeError, match="Episode execution failed"):
                 visualize_planner_episode(
@@ -401,9 +404,9 @@ class TestVisualizePlannerEpisode:
     ):
         """Test exception handling when environment visualization fails.
 
-        Purpose: Validates that exceptions in cache_visualization are properly propagated
+        Purpose: Validates that exceptions while writing a visualization are propagated
 
-        Given: environment.cache_visualization that raises an exception
+        Given: an episode visualizer whose write raises an exception
         When: visualize_planner_episode is called
         Then: Exception is propagated to caller
 
@@ -415,8 +418,9 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ):
-            tiger_environment.cache_visualization = Mock(
-                side_effect=IOError("Visualization cache failed")
+            tiger_environment.episode_visualizer = Mock()
+            tiger_environment.episode_visualizer.return_value.write.side_effect = IOError(
+                "Visualization cache failed"
             )
 
             with pytest.raises(IOError, match="Visualization cache failed"):
@@ -453,7 +457,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ):
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             # Test with various valid parameter types
             visualize_planner_episode(
@@ -466,7 +470,7 @@ class TestVisualizePlannerEpisode:
             )
 
             # Should execute without errors
-            assert tiger_environment.cache_visualization.call_count == 5
+            assert tiger_environment.episode_visualizer.return_value.write.call_count == 5
 
     def test_visualize_planner_episode_large_number_episodes(
         self,
@@ -492,7 +496,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ) as mock_run_episode:
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             n_episodes = 10
             visualize_planner_episode(
@@ -506,7 +510,7 @@ class TestVisualizePlannerEpisode:
 
             # Verify all episodes were processed
             assert mock_run_episode.call_count == n_episodes
-            assert tiger_environment.cache_visualization.call_count == n_episodes
+            assert tiger_environment.episode_visualizer.return_value.write.call_count == n_episodes
 
             # Verify all calls have correct parameters
             for call_args in mock_run_episode.call_args_list:
@@ -524,7 +528,7 @@ class TestVisualizePlannerEpisode:
 
         Purpose: Validates function is environment-agnostic
 
-        Given: Different mock environments with cache_visualization method
+        Given: Different environments with a mocked episode visualizer
         When: visualize_planner_episode is called with each environment
         Then: Function works with all environment types
 
@@ -549,9 +553,9 @@ class TestVisualizePlannerEpisode:
             ),
         ]
 
-        # Mock cache_visualization for all environments to avoid file I/O
+        # Mock the episode visualizer for all environments to avoid file I/O
         for env in environments:
-            env.cache_visualization = Mock()
+            env.episode_visualizer = Mock()
 
         with patch(
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
@@ -568,7 +572,7 @@ class TestVisualizePlannerEpisode:
                 )
 
                 # Verify visualization was called for each environment
-                env.cache_visualization.assert_called_once()
+                env.episode_visualizer.return_value.write.assert_called_once()
 
     def test_visualize_planner_episode_cache_dir_types(
         self, test_planner, tiger_environment, test_belief, sample_episode_history
@@ -589,7 +593,7 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ):
-            tiger_environment.cache_visualization = Mock()
+            tiger_environment.episode_visualizer = Mock()
 
             # Test with Path object
             with tempfile.TemporaryDirectory() as temp_str:
@@ -605,10 +609,11 @@ class TestVisualizePlannerEpisode:
                 )
 
                 # Verify the output directory and episode index are passed correctly
-                tiger_environment.cache_visualization.assert_called_with(
+                tiger_environment.episode_visualizer.return_value.write.assert_called_with(
                     history=sample_episode_history.history,  # Pass the history list, not the History object
                     output_dir=temp_path / "TestPlanner",
                     episode_index=0,
+                    policy_name="TestPlanner",
                 )
 
     def test_visualize_planner_episode_docstring_example(self, temp_cache_dir):
@@ -637,7 +642,7 @@ class TestVisualizePlannerEpisode:
         belief = get_initial_belief(env, n_particles=20)  # Reduced for testing
 
         # Mock visualization to avoid file I/O
-        env.cache_visualization = Mock()
+        env.episode_visualizer = Mock()
 
         # Execute typical usage
         visualize_planner_episode(
@@ -650,11 +655,11 @@ class TestVisualizePlannerEpisode:
         )
 
         # Verify expected behavior
-        assert env.cache_visualization.call_count == 3
+        assert env.episode_visualizer.return_value.write.call_count == 3
 
         # Verify per-planner output directory and episode indices
         for i in range(3):
-            kwargs = env.cache_visualization.call_args_list[i][1]
+            kwargs = env.episode_visualizer.return_value.write.call_args_list[i][1]
             assert kwargs["output_dir"] == temp_cache_dir / "POMCP"
             assert kwargs["episode_index"] == i
 
@@ -801,7 +806,7 @@ class TestVisualizePlannerEpisode:
                 mock_parallel.return_value.__call__ = Mock(
                     side_effect=lambda func_list: [func() for func in func_list]
                 )
-                tiger_environment.cache_visualization = Mock()
+                tiger_environment.episode_visualizer = Mock()
 
                 # Test n_jobs=1 (should NOT call Parallel)
                 visualize_planner_episode(
@@ -819,7 +824,7 @@ class TestVisualizePlannerEpisode:
 
                 # Reset mock for parallel test
                 mock_parallel.reset_mock()
-                tiger_environment.cache_visualization.reset_mock()
+                tiger_environment.episode_visualizer.return_value.write.reset_mock()
 
                 # Test n_jobs=2 (should call Parallel)
                 visualize_planner_episode(
@@ -987,7 +992,7 @@ class TestVisualizePlannerEpisode:
         belief = get_initial_belief(env, n_particles=10)  # Minimal for testing
 
         # Mock visualization to avoid file I/O
-        env.cache_visualization = Mock()
+        env.episode_visualizer = Mock()
 
         # Mock Parallel to verify it's called but avoid actual parallel execution
         with patch("POMDPPlanners.utils.planner_episode_visualization.Parallel") as mock_parallel:
@@ -1011,15 +1016,15 @@ class TestVisualizePlannerEpisode:
     def test_visualize_planner_episode_writes_per_planner_subdir_hierarchy(self, temp_cache_dir):
         """Test the on-disk output hierarchy with a real rendering environment.
 
-        Purpose: Validates that the environment now owns the file name and each
+        Purpose: Validates that the visualizer owns the file name and each
             planner's visualizations land in their own subdirectory, i.e.
-            ``cache_dir/<planner_name>/agent_path_{episode}.gif``.
+            ``cache_dir/<planner_name>/trace_{episode}.json``.
 
-        Given: A real RockSamplePOMDP (which renders a GIF), a POMCP planner, and
-            a mocked run_episode returning a fixed two-step history.
+        Given: A real RockSamplePOMDP (which writes a trace), a POMCP planner,
+            and a mocked run_episode returning a fixed two-step history.
         When: visualize_planner_episode is called with n_episodes=2.
-        Then: ``cache_dir/HierarchyPOMCP/agent_path_{0,1}.gif`` exist as non-empty
-            files, and nothing is written flat under ``cache_dir``.
+        Then: ``cache_dir/HierarchyPOMCP/trace_{0,1}.json`` exist and read back
+            as RockSample traces, and nothing is written flat under ``cache_dir``.
 
         Test type: integration
         """
@@ -1082,11 +1087,12 @@ class TestVisualizePlannerEpisode:
         planner_dir = temp_cache_dir / "HierarchyPOMCP"
         assert planner_dir.is_dir(), f"Per-planner directory not created: {planner_dir}"
 
-        # The environment owns the file name: agent_path_{episode}.gif inside it.
+        # The visualizer owns the file name: trace_{episode}.json inside it.
         for episode_index in range(2):
-            gif_path = planner_dir / f"agent_path_{episode_index}.gif"
-            assert gif_path.is_file(), f"Missing visualization file: {gif_path}"
-            assert gif_path.stat().st_size > 0, f"Empty visualization file: {gif_path}"
+            trace = EpisodeTrace.read(planner_dir / f"trace_{episode_index}.json")
+            assert trace.payload_kind == "rock_sample.v1"
+            assert trace.episode_index == episode_index
+            assert trace.policy == "HierarchyPOMCP"
 
         # Nothing is written flat under cache_dir; the per-planner subdir is used.
-        assert not list(temp_cache_dir.glob("agent_path_*.gif"))
+        assert not list(temp_cache_dir.glob("trace_*.json"))

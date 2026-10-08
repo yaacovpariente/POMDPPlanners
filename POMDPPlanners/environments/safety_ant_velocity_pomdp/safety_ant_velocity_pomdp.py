@@ -28,7 +28,7 @@ from enum import Enum
 from math import hypot
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
 
@@ -38,12 +38,15 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import _native
-from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualizer import (
-    SafeAntVelocityVisualizer,
-)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.safety_ant_velocity_visualizer import (
+        SafeAntVelocityVisualizer,
+    )
 
 DEFAULT_FORCE_SCALES: np.ndarray = np.array([0.0, 0.33, 0.67, 1.0])
 
@@ -53,8 +56,8 @@ class SafeAntVelocityPOMDPMetrics(Enum):
 
     SAFETY_VIOLATION_RATE = "safety_violation_rate"
     CRITICAL_VIOLATION_RATE = "critical_violation_rate"
-    TOTAL_SAFETY_VIOLATIONS = "total_safety_violations"
-    TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
+    AVERAGE_SAFETY_VIOLATIONS = "average_safety_violations"
+    AVERAGE_CRITICAL_VIOLATIONS = "average_critical_violations"
 
 
 def _build_safe_ant_obs_covariance(position_noise: float, velocity_noise: float) -> np.ndarray:
@@ -228,8 +231,14 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # ``hypot`` outperforms ``numpy.linalg.norm`` for fixed 2-D inputs:
         # cProfile attributed ~25% of POMCPOW wall time to the norm calls
         # in this method plus ``is_terminal``.
-        del action, next_state
-        speed = hypot(float(state[2]), float(state[3]))
+        #
+        # A step is scored by the speed it ends at: given the realised
+        # ``next_state``, that is the state scored, as in ``sample_next_step``,
+        # the native rollout and the torch model. Without one -- the episode
+        # driver's pre-transition call -- the state itself is scored.
+        del action
+        scored = state if next_state is None else next_state
+        speed = hypot(float(scored[2]), float(scored[3]))
         reward = speed * self.movement_reward_scale
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
@@ -241,8 +250,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         action: int,
         next_states: Optional[Union[np.ndarray, Sequence[Any]]] = None,
     ) -> np.ndarray:
-        del action, next_states
-        states_arr = np.asarray(states)
+        # Same rule as ``reward``: the realised next states when given.
+        del action
+        states_arr = np.asarray(states if next_states is None else next_states)
         speeds = np.linalg.norm(states_arr[:, 2:4], axis=1)
         rewards = speeds * self.movement_reward_scale
         rewards[speeds > self.safe_velocity_threshold] += self.safety_violation_penalty
@@ -282,36 +292,28 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (force levels); already hashable.
         return action
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache animated visualization of the safety ant velocity episode.
+    def episode_visualizer(self) -> "SafeAntVelocityVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_visualization.safety_ant_velocity_visualizer import (
+            SafeAntVelocityVisualizer,
+        )
 
-        Creates an animated GIF showing the ant's movement trajectory with velocity vectors,
-        safety zones, force applications, and safety constraint violations.
-
-        Args:
-            history: Episode history containing states, actions, and rewards
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
-
-        Raises:
-            ValueError: If history is empty
-        """
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = SafeAntVelocityVisualizer(self)
-        visualizer.create_animation(history, cache_path)
+        return SafeAntVelocityVisualizer(self)
 
     def get_metric_names(self) -> List[str]:
         """Get names of Safety Ant Velocity POMDP specific metrics.
 
         Returns:
             List containing metric names: safety_violation_rate, critical_violation_rate,
-            total_safety_violations, and total_critical_violations
+            average_safety_violations, and average_critical_violations
         """
         return [metric.value for metric in SafeAntVelocityPOMDPMetrics]
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        require_non_empty_histories(histories, type(self).__name__)
         # Initialize metrics
         safety_violations = []
         critical_violations = []
@@ -376,13 +378,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 upper_confidence_bound=critical_violations_ci[1],
             ),
             MetricValue(
-                name=SafeAntVelocityPOMDPMetrics.TOTAL_SAFETY_VIOLATIONS.value,
+                name=SafeAntVelocityPOMDPMetrics.AVERAGE_SAFETY_VIOLATIONS.value,
                 value=float(np.mean(safety_violations)) if safety_violations else 0.0,
                 lower_confidence_bound=total_safety_violations_ci[0],
                 upper_confidence_bound=total_safety_violations_ci[1],
             ),
             MetricValue(
-                name=SafeAntVelocityPOMDPMetrics.TOTAL_CRITICAL_VIOLATIONS.value,
+                name=SafeAntVelocityPOMDPMetrics.AVERAGE_CRITICAL_VIOLATIONS.value,
                 value=float(np.mean(critical_violations)) if critical_violations else 0.0,
                 lower_confidence_bound=total_critical_violations_ci[0],
                 upper_confidence_bound=total_critical_violations_ci[1],
@@ -553,12 +555,3 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             safety_violation_penalty=float(self.safety_violation_penalty),
             movement_reward_scale=float(self.movement_reward_scale),
         )
-
-    def sample_next_step(
-        self, state: np.ndarray, action: int
-    ) -> Tuple[np.ndarray, np.ndarray, float]:
-        next_state = self.sample_next_state(state=state, action=action)
-        next_observation = self.sample_observation(next_state=next_state, action=action)
-        reward = self.reward(state=next_state, action=action)
-
-        return next_state, next_observation, reward

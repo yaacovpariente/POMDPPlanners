@@ -141,7 +141,6 @@ class RockSampleVectorizedModel:
         self._rock_rows = self._to_tensor(rocks[:, 0])
         self._rock_cols = self._to_tensor(rocks[:, 1])
         self._sensor_efficiency = float(env.sensor_efficiency)
-        self._inv_sigma = 1.0 / self._sensor_efficiency
 
     def _build_reward(self, env: RockSamplePOMDP) -> None:
         self._step_penalty = float(env.step_penalty)
@@ -240,12 +239,17 @@ class RockSampleVectorizedModel:
     ) -> Tuple[Tensor, Tensor]:
         rock_idx = torch.clamp(actions - _NUM_MOVE_ACTIONS, min=0)
         if self._num_rocks == 0:
-            zeros = torch.zeros(next_states.shape[0], dtype=self.dtype, device=self.device)
-            return zeros, zeros > 0.5
+            # No rock means no check action exists, so this accuracy is never
+            # consumed; return the uninformative 0.5 rather than a value the
+            # sensor law cannot produce.
+            half = torch.full((next_states.shape[0],), 0.5, dtype=self.dtype, device=self.device)
+            return half, half > 0.5
         rock_r = self._rock_rows[rock_idx]
         rock_c = self._rock_cols[rock_idx]
         dist = torch.sqrt((next_states[:, 0] - rock_r) ** 2 + (next_states[:, 1] - rock_c) ** 2)
-        efficiency = torch.exp(-dist * self._inv_sigma)
+        # Smith & Simmons (2004): accuracy decays from 1 to 0.5, never below,
+        # so a distant check is uninformative instead of reliably wrong.
+        efficiency = 0.5 * (1.0 + torch.exp2(-dist / self._sensor_efficiency))
         quality = next_states.gather(1, (rock_idx + 2).unsqueeze(1)).squeeze(1)
         return efficiency, quality > 0.5
 

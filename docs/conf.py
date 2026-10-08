@@ -14,6 +14,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath(".."))
+# Local extensions: ``episode_viewer`` embeds the 3D episode replays.
+sys.path.insert(0, os.path.abspath("_ext"))
 
 # -- Project information -----------------------------------------------------
 
@@ -22,7 +24,7 @@ copyright = "2024, POMDPPlanners Team"
 author = "POMDPPlanners Team"
 
 # The full version, including alpha/beta/rc tags
-release = "0.5.0"
+release = "0.6.0"
 
 # -- General configuration ---------------------------------------------------
 
@@ -31,11 +33,14 @@ release = "0.5.0"
 # ones.
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
+    "sphinx.ext.mathjax",  # Renders the ``.. math::`` blocks in the environment guides
     "sphinx.ext.intersphinx",
     "sphinx.ext.extlinks",  # For the :gh: pull-request role used in the changelog
     "sphinx_autodoc_typehints",  # Better type hint formatting
+    "episode_viewer",  # ``.. episode-viewer::`` 3D replays on the environment pages
 ]
 
 # Shorthand for pull-request references in docs/misc/changelog.rst:
@@ -43,6 +48,11 @@ extensions = [
 extlinks = {
     "gh": ("https://github.com/yaacovpariente/POMDPPlanners/pull/%s", "#%s"),
 }
+
+# Generate the stub pages that the ``autosummary`` tables link to. Without this
+# the tables render as empty headings, which is how the environment lists went
+# missing from the published site.
+autosummary_generate = True
 
 # Napoleon settings for Google-style docstrings
 napoleon_google_docstring = True
@@ -89,6 +99,11 @@ suppress_warnings = [
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
+# ``_static/videos`` holds the walkthrough videos the quickstart embeds. They
+# are served from the docs because GitHub's README attachment links do not
+# play outside github.com.
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
 
 # Ensure consistent navigation across all pages
 html_use_smartypants = True
@@ -114,22 +129,16 @@ html_sidebars = {
 autodoc_typehints = "description"
 autodoc_typehints_format = "short"
 
-# Mock imports for external dependencies
-autodoc_mock_imports = [
-    "numpy",
-    "scipy",
-    "matplotlib",
-    "torch",
-    "gym",
-    "gymnasium",
-    "dask",
-    "joblib",
-    "pandas",
-    "ray",
-    "dask_jobqueue",
-    "PIL",
-    "cv2",
-]
+# Mock imports for external dependencies.
+#
+# Deliberately empty. The docs build installs the package itself
+# (``pip install -e ".[docs]"``), so numpy, torch, ray and friends are all
+# genuinely importable. Mocking them anyway broke ``autosummary``: the stub
+# generator imports each documented object for real, and a mocked numpy made
+# every ``POMDPPlanners.environments.*`` import fail, so the environment tables
+# rendered as empty headings. Only list a module here if it is truly absent
+# from the docs environment.
+autodoc_mock_imports: list[str] = []
 
 # -- Options for intersphinx mapping ----------------------------------------
 

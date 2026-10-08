@@ -203,6 +203,9 @@ class BaseSimulator(ABC):
         self.task_manager.set_progress_callback(
             lambda: self._notifier.episode_completed(self._run_id)
         )
+        # MLflow id of the run the last comparison logged to, so a caller can
+        # link that run to others -- a tuning study links its evaluation.
+        self.last_comparison_run_id: Optional[str] = None
 
     def __getstate__(self) -> Dict:
         # The signal-handler uninstall callable is a closure created by
@@ -371,7 +374,10 @@ class BaseSimulator(ABC):
 
         active_run = mlflow.active_run()
         nested = active_run is not None
-        with mlflow.start_run(run_name="environment_policy_comparison", nested=nested):
+        with mlflow.start_run(
+            run_name="environment_policy_comparison", nested=nested
+        ) as comparison_run:
+            self.last_comparison_run_id = comparison_run.info.run_id
             self._log_mlflow_comparison_parameters(
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
@@ -444,13 +450,13 @@ class BaseSimulator(ABC):
         confidence_interval_level: float,
         n_jobs: int,
     ) -> Tuple[Dict[str, Dict[str, list]], Dict[str, Dict[str, List[MetricValue]]]]:
-        results: Dict[str, Dict[str, list]] = (
-            self.simulate_multiple_environments_and_policies_parallel(
-                environment_run_params=environment_run_params,
-                alpha=alpha,
-                confidence_interval_level=confidence_interval_level,
-                n_jobs=n_jobs,
-            )
+        results: Dict[
+            str, Dict[str, list]
+        ] = self.simulate_multiple_environments_and_policies_parallel(
+            environment_run_params=environment_run_params,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
         )
 
         metrics: Dict[str, Dict[str, List[MetricValue]]] = self._compute_metrics(

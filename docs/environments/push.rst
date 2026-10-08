@@ -1,0 +1,386 @@
+Push
+====
+
+.. episode-viewer:: traces/push.json
+
+   Grid variant, ``PushPOMDP``: one recorded episode planned by PFT-DPW, replayed
+   in 3D. Drag to orbit, scroll to zoom, and use the bar to play, scrub and
+   switch camera.
+
+.. episode-viewer:: traces/continuous_push.json
+
+   Continuous variant, ``ContinuousPushPOMDP``: the same, in the continuous
+   world. Drag to orbit, scroll to zoom, and use the bar to play, scrub and
+   switch camera.
+
+A robot moves around a square arena and pushes an object towards a fixed target
+corner. Only the object's position is observed noisily; the robot always knows
+where it is. Pushing is indirect — you have to get on the far side of the object
+first — so the agent must plan several steps ahead through a contact model.
+There is a grid variant and a continuous one; see `Variants`_.
+
+What the agent sees and does
+----------------------------
+
+- **State** — ``np.ndarray`` of shape ``(6,)``:
+  ``[robot_x, robot_y, object_x, object_y, target_x, target_y]``. The continuous
+  variant appends a terminal-flag slot when either hazard-terminal flag is on.
+- **Actions** (discrete / continuous) — ``PushPOMDP``: ``"up"``, ``"down"``, ``"right"``, ``"left"``.
+  ``ContinuousPushPOMDP``: a 2-D displacement vector, with Gaussian noise
+  ``state_transition_cov_matrix``.
+- **Observations** (continuous) — the same vector as the state, with only the
+  object's position noised by ``observation_noise``. It is 7-D on a
+  ``ContinuousPushPOMDP`` that carries the terminal slot.
+
+Formal definition
+-----------------
+
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma \rangle`.
+
+**State space.** Write the state as :math:`s = (\mathbf{r}, \mathbf{q},
+\mathbf{t})` — robot, object and target positions — and let
+:math:`\mathcal{G} = [0, n{-}1]^2` with :math:`n` = ``grid_size``. Six
+numbers, plus a terminal slot on the continuous variant when a
+hazard-terminal flag is on:
+
+.. math::
+
+   S = \mathcal{G} \times \mathcal{G} \times \mathcal{G}
+   \subseteq \mathbb{R}^6
+
+:math:`\mathbf{t}` is a constant of the episode — it is carried in the state
+so ``reward`` and ``is_terminal`` can read it from the state, not because it
+moves.
+
+**Action space.**
+
+.. math::
+
+   A = \begin{cases}
+     \{\textsf{up}, \textsf{down}, \textsf{right}, \textsf{left}\}
+       & \texttt{PushPOMDP} \\
+     \{\mathbf{d} \in \mathbb{R}^2 :
+       \lVert \mathbf{d} \rVert \leq \texttt{max\_push}\}
+       & \texttt{ContinuousPushPOMDP}
+   \end{cases}
+
+A discrete action moves the robot one unit:
+
+- up :math:`\mathbf{d} = (0, 1)`;
+- down :math:`(0, -1)`;
+- right :math:`(1, 0)`;
+- left :math:`(-1, 0)`.
+
+A continuous action is the displacement :math:`\mathbf{d}` itself.
+
+**Observation space.** The same layout as the state: exact robot and target
+positions and a noisy object position clamped to the grid (plus the terminal
+slot when the continuous state carries one):
+
+.. math::
+
+   Z = \mathcal{G} \times \mathcal{G} \times \mathcal{G}
+   \subseteq \mathbb{R}^6
+
+**Transition model.** The robot moves, and *then* drags the object if it is
+close enough. The model uses:
+
+- displacement :math:`\mathbf{d}`;
+- friction :math:`f` = ``friction_coefficient``;
+- push radius :math:`h` = ``push_threshold``.
+
+Then:
+
+.. math::
+
+   \mathbf{r}' &= \mathrm{clip}_\mathcal{G}\big(
+     \mathrm{blk}(\mathbf{r} + \mathbf{d})\big) \\
+   \mathbf{q}' &= \begin{cases}
+     \mathrm{clip}_\mathcal{G}\big(\mathrm{blk}(\mathbf{q} + (1 - f)\mathbf{d})\big)
+       & \lVert \mathbf{r}' - \mathbf{q} \rVert_2 < h \\
+     \mathbf{q} & \text{otherwise}
+   \end{cases} \\
+   \mathbf{t}' &= \mathbf{t}
+
+where :math:`\mathrm{blk}(\mathbf{y}) = \mathbf{y}` unless :math:`\mathbf{y}`
+lies in an obstacle (a disc of radius ``obstacle_radius`` around a point of
+``obstacles``), in which case the mover stays put, and
+:math:`\mathrm{clip}_\mathcal{G}` clamps to the grid. The object moves a factor
+:math:`1 - f` of the robot's displacement — friction is a *slip* between
+robot and object, not a drag on the robot.
+
+Note the push test uses :math:`\mathbf{r}'`, the robot's **post-move**
+position: the robot must end its step near the object, not start there.
+
+The discrete variant adds action noise. With probability
+:math:`p` = ``transition_error_prob`` one of the other three moves
+fires instead, uniformly:
+
+.. math::
+
+   \Pr[\text{executed} = a] = 1 - p, \qquad
+   \Pr[\text{executed} = a'] = p / 3, \quad a' \neq a
+
+The continuous variant instead perturbs the displacement by
+:math:`\mathcal{N}(0, \Sigma_T)`, :math:`\Sigma_T` =
+``state_transition_cov_matrix``.
+
+**Observation model.** The robot knows where *it* is; only the object is
+hidden:
+
+.. math::
+
+   o = \big(\mathbf{r}',\;
+   \mathrm{clip}_\mathcal{G}(\mathbf{q}' + \mathbf{v}),\;
+   \mathbf{t}\big), \qquad
+   \mathbf{v} \sim
+   \mathcal{N}(0,\; \texttt{observation\_noise}^2 I_2)
+
+Robot and target slices are exact; only the two object coordinates are
+noised, then clamped to the grid. The clamp is what makes the likelihood
+non-Gaussian at the walls.
+
+**Reward function.** Distance shaping toward the target plus an exclusive
+success bonus, then the hazard terms:
+
+.. math::
+
+   R(s, a, s') = -\lVert \mathbf{q}' - \mathbf{t} \rVert_2
+   + 100 \cdot \mathbb{1}\big[\lVert \mathbf{q}' - \mathbf{t} \rVert_2
+     < 0.5\big]
+   + C(\mathbf{r}') + D(\mathbf{r}')
+
+with
+
+.. math::
+
+   C(\mathbf{r}') &= \texttt{obstacle\_penalty} \cdot
+     \mathbb{1}[\mathbf{r}' \in \mathcal{O}] \\
+     &\quad \cdot \mathrm{Bern}(\texttt{obstacle\_hit\_probability}) \\
+   D(\mathbf{r}') &= \texttt{dangerous\_area\_penalty} \cdot
+     \mathbb{1}[\mathbf{r}' \in \text{hazard}] \\
+     &\quad \cdot \mathrm{Bern}(\texttt{dangerous\_area\_hit\_probability})
+
+where :math:`\mathcal{O}` is the union of the obstacle discs (radius
+``obstacle_radius`` around each point of ``obstacles``) and *hazard* the
+union of the danger discs (radius ``dangerous_area_radius`` around each point
+of ``dangerous_areas``). The shaping term is on the **object**, the penalties
+on the **robot**. This is the default ``reward_model_type``,
+``CONSTANT_HAZARD_PENALTY``; ``ZERO_MEAN_HAZARD_SHOCK`` and
+``DISTANCE_DECAYED_HAZARD_PENALTY`` change how the two hazard terms are
+drawn. With either hit probability below one, ``reward`` draws a
+Bernoulli per call and is not a deterministic function of its arguments.
+
+**Initial belief.** With ``initial_state`` supplied, :math:`b_0` is a point
+mass on it. Otherwise robot and object positions are drawn at random over the
+grid, clear of the obstacles and of the target. Note :math:`\mathbf{r}` is
+then in the prior but observed exactly on the first reading, so the belief
+concentrates on the object alone.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, required.
+
+**Terminal set.** The *object* reaching the target, within a fixed half-cell
+radius:
+
+.. math::
+
+   S_T = \{s : \lVert \mathbf{q} - \mathbf{t} \rVert_2 < 0.5\}
+
+The target sits at :math:`(n{-}1, n{-}1)` and is not configurable.
+
+Rewards
+-------
+
+============================================  =======================================
+Event                                         Reward
+============================================  =======================================
+Every step                                    ``-distance(object, target)``
+Object within 0.5 of the target               ``+100.0``
+Robot inside an obstacle                      ``obstacle_penalty`` (``-10.0``)
+Robot inside a dangerous area                 ``dangerous_area_penalty`` (``-10.0``)
+============================================  =======================================
+
+Penalties are **added**, so pass them negative.
+
+Key settings
+------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 44
+
+   * - Argument
+     - Default
+     - What it changes
+   * - ``grid_size``
+     - ``10``
+     - Arena size, and therefore the target corner.
+   * - ``push_threshold``
+     - ``1.0``
+     - How close the robot must be to move the object.
+   * - ``friction_coefficient``
+     - ``0.3``
+     - How far a push carries.
+   * - ``observation_noise``
+     - ``0.1``
+     - Object-position sensor noise — the partial-observability knob.
+   * - ``obstacles``
+     - ``None``
+     - Centres of circular obstacles of radius ``obstacle_radius``
+       (discrete, default ``0.5``), or ``(cx, cy, half_extent)`` squares
+       (continuous).
+   * - ``max_push``
+     - ``2.0`` (continuous only)
+     - Cap on the force delivered to the object, not on the action itself.
+   * - ``robot_radius``
+     - ``0.3`` (continuous only)
+     -
+   * - ``initial_state``
+     - ``None``
+     - ``None`` randomizes robot and object placement each episode, keeping the
+       object at least 2.0 away from the target.
+
+An episode ends when the object is within 0.5 of the target. On
+``ContinuousPushPOMDP`` the absorbing terminal slot is checked first, so an
+obstacle or hazard hit also ends the episode when the matching
+``is_*_hit_terminal`` flag is on.
+
+Variants
+~~~~~~~~
+
+- :class:`PushPOMDP <POMDPPlanners.environments.push_pomdp.PushPOMDP>`
+  — four grid moves.
+- :class:`ContinuousPushPOMDP
+  <POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP>`
+  — a circular robot and free 2-D displacement actions, with square obstacles.
+  ``ContinuousPushPOMDPDiscreteActions`` gives that world four unit moves.
+
+VOPP needs a finite action set, so only ``ContinuousPushPOMDPDiscreteActions``
+of the two continuous classes has a torch model, ``ContinuousPushVectorizedModel``.
+It models every configuration of that class: all three reward models, the
+hazard probabilities, and both hazard-terminal flags, which add a seventh,
+terminal-flag column to the state. It declines nothing.
+
+.. note::
+
+   ``ContinuousPushPOMDP`` and ``ContinuousPushPOMDPDiscreteActions`` are **not**
+   in ``ENVIRONMENT_REGISTRY``, so ``get_environment("ContinuousPushPOMDP")``
+   fails. Import the class directly.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``PushPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousPushPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ❌
+     - ✔️
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ContinuousPushPOMDPDiscreteActions``
+     - Discrete
+     - Continuous
+   * - State
+     - ❌
+     - ✔️
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ❌
+     - ✔️
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 24 24 24
+
+   * - Also supports
+     - ``PushPOMDP``
+     - ``ContinuousPushPOMDP``
+     - ``ContinuousPushPOMDPDiscreteActions``
+   * - Native C++ backend
+     - ✔️
+     - ✔️
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``PushVectorizedModel`` (some configurations; others raise ``NotImplementedError``)
+     - ❌ (no finite action set)
+     - ✔️ ``ContinuousPushVectorizedModel`` (every configuration)
+   * - In the ``get_environment`` registry
+     - ✔️
+     - ❌
+     - ❌
+   * - Optional dependencies
+     - None
+     - None
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.push_pomdp import PushPOMDP
+
+   env = PushPOMDP(discount_factor=0.95, grid_size=10)
+
+   state = env.initial_state_dist().sample(1)[0]
+   next_state = env.sample_next_state(state, "right")
+   observation = env.sample_observation(next_state, "right")
+   print(next_state, observation, env.reward(state, "right", next_state))
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.PushPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.ContinuousPushPOMDP
+   :members:
+   :show-inheritance:
+
+.. autoclass:: POMDPPlanners.environments.push_pomdp.continuous_push_pomdp.ContinuousPushPOMDPDiscreteActions
+   :members:
+   :show-inheritance:
+
+See also
+--------
+
+- Batched torch model:
+  ``POMDPPlanners.environments.push_pomdp.push_vectorized_model.PushVectorizedModel``
+  (grid variant) and
+  ``POMDPPlanners.environments.push_pomdp.ContinuousPushVectorizedModel``
+  (``ContinuousPushPOMDPDiscreteActions``).
+- :doc:`base` — the full catalog and the environment interface.

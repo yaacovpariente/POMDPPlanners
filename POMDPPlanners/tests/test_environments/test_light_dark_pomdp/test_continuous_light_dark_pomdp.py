@@ -12,7 +12,6 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 # pylint: disable=too-many-lines
 
 import random
-import time
 from typing import Any
 
 import numpy as np
@@ -21,7 +20,6 @@ from scipy.stats import multivariate_normal
 
 from POMDPPlanners.configs.environment_configs import RiskAverseEnvironmentConfigsAPI
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp import _native
@@ -113,50 +111,6 @@ def pomdp():
 
 class TestContinuousLightDarkPOMDPEquality:
     """Test suite for ContinuousLightDarkPOMDP equality comparisons."""
-
-    def test_same_discount_factor(
-        self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
-    ):
-        """Test that ContinuousLightDarkPOMDPs with same discount factor are equal."""
-        other_env = ContinuousLightDarkPOMDPDiscreteActions(
-            discount_factor=0.95,
-            **continuous_light_dark_discrete_actions_pinned_kwargs(
-                state_transition_cov_matrix=np.eye(2),
-                observation_cov_matrix=np.eye(2),
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                goal_state_radius=1.5,
-                beacon_radius=1.0,
-                obstacle_radius=1.5,
-            ),
-        )
-        assert base_light_dark_environment == other_env
-        assert other_env == base_light_dark_environment  # Test symmetry
-
-    def test_different_discount_factor(
-        self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
-    ):
-        """Test that ContinuousLightDarkPOMDPs with different discount factors are not equal."""
-        other_env = ContinuousLightDarkPOMDPDiscreteActions(
-            discount_factor=0.8,
-            **continuous_light_dark_discrete_actions_pinned_kwargs(
-                state_transition_cov_matrix=np.eye(2),
-                observation_cov_matrix=np.eye(2),
-                obstacle_hit_probability=0.2,
-                obstacle_reward=-10.0,
-                goal_reward=10.0,
-                fuel_cost=2.0,
-                grid_size=11,
-                goal_state_radius=1.5,
-                beacon_radius=1.0,
-                obstacle_radius=1.5,
-            ),
-        )
-        assert base_light_dark_environment != other_env
-        assert other_env != base_light_dark_environment  # Test symmetry
 
     def test_different_covariance_matrices(
         self, base_light_dark_environment: ContinuousLightDarkPOMDPDiscreteActions
@@ -424,14 +378,25 @@ def test_is_terminal():
     assert not env.is_terminal(np.array([1, 1, 0.0]))
 
 
-def test_reward_range():
-    """Test that reward range is correctly calculated.
+def test_reward_range_is_the_bound_over_in_grid_states():
+    """Test that reward range is correctly calculated over in-grid states.
 
-    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions calculates reward range based on environment parameters
+    Purpose: Validates that reward_range is the bound over the states this
+        environment models -- those inside the grid. The minimum is the reward
+        at the far corner, using the grid diagonal as the greatest in-grid
+        distance to the goal, so nothing inside the grid scores lower.
+        Out-of-grid states are reachable, because leaving the grid is penalised
+        rather than terminal and the transition sampler deliberately does not
+        clip, and a reward sampled from one of those falls below this minimum;
+        those states are outside the region the bound is defined over, so the
+        two do not contradict. test_env_api_conformance records that case as a
+        strict xfail
 
-    Given: A ContinuousLightDarkPOMDPDiscreteActions environment with specific parameters
+    Given: ContinuousLightDarkPOMDPDiscreteActions environments with specific
+        reward parameters and grid sizes
     When: Environment reward_range attribute is checked
-    Then: Returns calculated range based on maximum distance to goal and reward parameters
+    Then: Returns the range calculated from the grid diagonal and the reward
+        parameters
 
     Test type: unit
     """
@@ -442,16 +407,14 @@ def test_reward_range():
         ),
     )
 
-    # Expected calculation for CONSTANT_HAZARD_PENALTY reward model:
-    # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
+    # Greatest in-grid distance to the goal is the diagonal: sqrt(2) * grid_size
     max_distance_to_goal = np.sqrt(2) * 11  # grid_size=11
     # Min: -fuel_cost - max_distance + obstacle_reward
     expected_min = -2.0 - max_distance_to_goal + (-15.0)
     # Max: -fuel_cost + goal_reward
     expected_max = -2.0 + 25.0
 
-    expected_reward_range = (expected_min, expected_max)
-    assert env.reward_range == expected_reward_range
+    assert env.reward_range == (expected_min, expected_max)
 
     # Test with another environment instance with different parameters
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
@@ -461,13 +424,11 @@ def test_reward_range():
         ),
     )
 
-    # Calculate expected range for different parameters
     max_distance2 = np.sqrt(2) * 15  # grid_size=15
     expected_min2 = -3.0 - max_distance2 + (-50.0)
     expected_max2 = -3.0 + 100.0
-    expected_reward_range2 = (expected_min2, expected_max2)
 
-    assert env2.reward_range == expected_reward_range2
+    assert env2.reward_range == (expected_min2, expected_max2)
 
 
 def test_compute_metrics():
@@ -555,14 +516,14 @@ def test_compute_metrics():
     metrics_dict = {metric.name: metric for metric in metrics}
 
     # Test goal reaching rate
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 0.5  # 1 out of 2 histories reach goal
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
     # Test obstacle hit rate
-    assert "obstacle_hit_rate" in metrics_dict
-    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert "collision_rate" in metrics_dict
+    obstacle_rate = metrics_dict["collision_rate"]
     assert obstacle_rate.value == 0.5  # 1 out of 2 histories hits obstacle
     assert (
         obstacle_rate.lower_confidence_bound
@@ -837,12 +798,12 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
     )
     metrics = env.compute_metrics([history1, history2])
     metrics_dict = {metric.name: metric for metric in metrics}
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 0.5
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
-    assert "obstacle_hit_rate" in metrics_dict
-    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert "collision_rate" in metrics_dict
+    obstacle_rate = metrics_dict["collision_rate"]
     assert obstacle_rate.value == 0.5
     assert (
         obstacle_rate.lower_confidence_bound
@@ -1005,452 +966,6 @@ def test_single_obstacle_reward_behavior():
     print(f"Average outside reward: {avg_outside_reward:.2f}")
     print(f"Expected obstacle reward: {expected_obstacle_reward:.2f}")
     print(f"Expected outside reward: {expected_outside_radius_reward:.2f}")
-
-
-class TestVisualizePath:
-    """Test suite for visualize_path function."""
-
-    def test_visualize_path_creates_gif_file(self, base_light_dark_environment, tmp_path):
-        """Test that visualize_path creates a GIF file at the specified cache path.
-
-        Purpose: Validates that visualize_path successfully creates a GIF animation file
-
-        Given: A light-dark environment, simple agent path, belief path, actions, and valid cache path
-        When: visualize_path is called with the test data
-        Then: A GIF file is created at the specified cache path and has non-zero size
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        # Create simple test path
-        path = [
-            np.array([0, 5]),  # Start state
-            np.array([1, 5]),  # Move right
-            np.array([2, 5]),  # Move right again
-            np.array([3, 5]),  # Final position
-        ]
-
-        # Create simple belief distributions
-        belief_path = [
-            DiscreteDistribution(
-                values=[np.array([0, 5]), np.array([0, 4])], probs=np.array([0.8, 0.2])
-            ),
-            DiscreteDistribution(
-                values=[np.array([1, 5]), np.array([1, 4])], probs=np.array([0.9, 0.1])
-            ),
-            DiscreteDistribution(
-                values=[np.array([2, 5]), np.array([2, 4])],
-                probs=np.array([0.95, 0.05]),
-            ),
-            DiscreteDistribution(values=[np.array([3, 5])], probs=np.array([1.0])),
-        ]
-
-        # Create actions
-        actions = ["right", "right", "right"]
-
-        # Create cache path
-        cache_path = tmp_path / "test_visualization.gif"
-
-        # Call visualize_path
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        # Verify file was created
-        assert cache_path.exists(), "GIF file should be created"
-        assert cache_path.stat().st_size > 0, "GIF file should have non-zero size"
-
-        # Verify it's a valid GIF file by checking magic bytes
-        with open(cache_path, "rb") as f:
-            magic = f.read(6)
-            assert magic in [
-                b"GIF87a",
-                b"GIF89a",
-            ], "File should have valid GIF magic bytes"
-
-    def test_visualize_path_with_invalid_cache_path_type(self, base_light_dark_environment):
-        """Test that visualize_path raises TypeError for invalid cache_path type.
-
-        Purpose: Validates proper error handling when cache_path is not a Path object
-
-        Given: A light-dark environment and cache_path as string instead of Path object
-        When: visualize_path is called with invalid cache_path type
-        Then: TypeError is raised with appropriate error message
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        path = [np.array([0, 5])]
-        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
-        actions = []
-
-        # Test with string instead of Path
-        with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            env.visualize_path(path, belief_path, actions, "not_a_path.gif")
-
-    def test_visualize_path_with_invalid_cache_path_extension(
-        self, base_light_dark_environment, tmp_path
-    ):
-        """Test that visualize_path raises ValueError for non-GIF cache path.
-
-        Purpose: Validates proper error handling when cache_path doesn't end with .gif
-
-        Given: A light-dark environment and cache_path without .gif extension
-        When: visualize_path is called with invalid file extension
-        Then: ValueError is raised with appropriate error message
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        path = [np.array([0, 5])]
-        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
-        actions = []
-
-        # Test with .png extension
-        cache_path = tmp_path / "test_visualization.png"
-        with pytest.raises(ValueError, match="cache_path must end with .gif"):
-            env.visualize_path(path, belief_path, actions, cache_path)
-
-    def test_visualize_path_with_empty_path(self, base_light_dark_environment, tmp_path):
-        """Test that visualize_path handles empty path gracefully.
-
-        Purpose: Validates robustness when provided with empty input data
-
-        Given: A light-dark environment with empty path, belief_path, and actions
-        When: visualize_path is called with empty data
-        Then: IndexError is raised due to matplotlib limitation with empty frames
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        path = []
-        belief_path = []
-        actions = []
-        cache_path = tmp_path / "empty_visualization.gif"
-
-        # Empty path causes matplotlib to fail with IndexError
-        with pytest.raises(IndexError, match="list index out of range"):
-            env.visualize_path(path, belief_path, actions, cache_path)
-
-    def test_visualize_path_with_complex_belief_distributions(
-        self, base_light_dark_environment, tmp_path
-    ):
-        """Test visualize_path with complex belief distributions containing multiple particles.
-
-        Purpose: Validates visualization handles complex belief states with many particles
-
-        Given: A light-dark environment with path and belief distributions having many particles
-        When: visualize_path is called with complex belief data
-        Then: GIF file is created successfully and belief particles are properly visualized
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        # Create path with more complex movement
-        path = [
-            np.array([0, 5]),
-            np.array([1, 4]),
-            np.array([2, 4]),
-            np.array([3, 5]),
-            np.array([4, 5]),
-        ]
-
-        # Create complex belief distributions with multiple particles
-        belief_path = [
-            DiscreteDistribution(
-                values=[
-                    np.array([0, 5]),
-                    np.array([0, 4]),
-                    np.array([1, 5]),
-                    np.array([0, 6]),
-                ],
-                probs=np.array([0.4, 0.3, 0.2, 0.1]),
-            ),
-            DiscreteDistribution(
-                values=[
-                    np.array([1, 4]),
-                    np.array([1, 3]),
-                    np.array([2, 4]),
-                    np.array([1, 5]),
-                ],
-                probs=np.array([0.5, 0.2, 0.2, 0.1]),
-            ),
-            DiscreteDistribution(
-                values=[np.array([2, 4]), np.array([2, 3]), np.array([3, 4])],
-                probs=np.array([0.6, 0.25, 0.15]),
-            ),
-            DiscreteDistribution(
-                values=[np.array([3, 5]), np.array([3, 4])], probs=np.array([0.8, 0.2])
-            ),
-            DiscreteDistribution(values=[np.array([4, 5])], probs=np.array([1.0])),
-        ]
-
-        actions = ["down", "right", "up", "right"]
-        cache_path = tmp_path / "complex_visualization.gif"
-
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        # Verify successful creation
-        assert cache_path.exists()
-        assert cache_path.stat().st_size > 0
-
-    def test_visualize_path_with_continuous_actions(
-        self, base_continuous_light_dark_pomdp, tmp_path
-    ):
-        """Test visualize_path with continuous actions (numpy arrays).
-
-        Purpose: Validates visualization works with continuous action spaces
-
-        Given: A continuous light-dark environment with numpy array actions
-        When: visualize_path is called with continuous actions
-        Then: GIF file is created successfully with proper action arrows
-
-        Test type: unit
-        """
-        env = base_continuous_light_dark_pomdp
-
-        path = [np.array([0, 5]), np.array([1.5, 4.5]), np.array([3.2, 4.8])]
-
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
-            DiscreteDistribution(values=[np.array([1.5, 4.5])], probs=np.array([1.0])),
-            DiscreteDistribution(values=[np.array([3.2, 4.8])], probs=np.array([1.0])),
-        ]
-
-        # Use continuous actions (numpy arrays)
-        actions = [np.array([1.5, -0.5]), np.array([1.7, 0.3])]
-        cache_path = tmp_path / "continuous_actions_visualization.gif"
-
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        assert cache_path.exists()
-        assert cache_path.stat().st_size > 0
-
-    def test_visualize_path_caching_behavior(self, base_light_dark_environment, tmp_path):
-        """Test that visualize_path caching works correctly by overwriting existing files.
-
-        Purpose: Validates that visualization caching works properly by overwriting files
-
-        Given: A light-dark environment and an existing GIF file at the cache path
-        When: visualize_path is called multiple times with the same cache path
-        Then: File is successfully overwritten each time and contains different content
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-        cache_path = tmp_path / "cached_visualization.gif"
-
-        # First visualization with simple path
-        path1 = [np.array([0, 5]), np.array([1, 5])]
-        belief_path1 = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
-            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0])),
-        ]
-        actions1 = ["right"]
-
-        env.visualize_path(path1, belief_path1, actions1, cache_path)
-
-        # Verify first file exists
-        assert cache_path.exists()
-        first_size = cache_path.stat().st_size
-        first_mtime = cache_path.stat().st_mtime
-
-        # Small delay to ensure different modification time
-
-        time.sleep(0.1)
-
-        # Second visualization with different path (should overwrite)
-        path2 = [
-            np.array([0, 5]),
-            np.array([1, 5]),
-            np.array([2, 5]),
-            np.array([3, 5]),
-            np.array([4, 5]),
-        ]
-        belief_path2 = [
-            DiscreteDistribution(values=[np.array([i, 5])], probs=np.array([1.0])) for i in range(5)
-        ]
-        actions2 = ["right", "right", "right", "right"]
-
-        env.visualize_path(path2, belief_path2, actions2, cache_path)
-
-        # Verify file was updated
-        assert cache_path.exists()
-        second_size = cache_path.stat().st_size
-        second_mtime = cache_path.stat().st_mtime
-
-        # File should have been modified (different size or modification time)
-        assert (
-            second_mtime > first_mtime or second_size != first_size
-        ), "Cache file should be updated with new visualization"
-
-    def test_visualize_path_cache_directory_creation(self, base_light_dark_environment, tmp_path):
-        """Test that visualize_path requires parent directories to exist.
-
-        Purpose: Validates that visualization requires existing parent directories
-
-        Given: A light-dark environment and cache path with non-existent parent directories
-        When: visualize_path is called with nested cache path
-        Then: FileNotFoundError is raised due to missing parent directories
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        # Create nested path that doesn't exist
-        nested_cache_path = tmp_path / "visualizations" / "experiments" / "test_run.gif"
-
-        # Ensure parent directories don't exist initially
-        assert not nested_cache_path.parent.exists()
-
-        path = [np.array([0, 5]), np.array([1, 5])]
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
-            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0])),
-        ]
-        actions = ["right"]
-
-        # Should raise FileNotFoundError due to missing parent directories
-        with pytest.raises(FileNotFoundError):
-            env.visualize_path(path, belief_path, actions, nested_cache_path)
-
-        # Now create parent directories and try again
-        nested_cache_path.parent.mkdir(parents=True)
-        env.visualize_path(path, belief_path, actions, nested_cache_path)
-
-        # Verify file was created successfully
-        assert (
-            nested_cache_path.exists()
-        ), "GIF file should be created when parent directories exist"
-        assert nested_cache_path.stat().st_size > 0
-
-    def test_visualize_path_with_mismatched_lengths(self, base_light_dark_environment, tmp_path):
-        """Test visualize_path behavior with mismatched path, belief_path, and actions lengths.
-
-        Purpose: Validates robustness when input arrays have different lengths
-
-        Given: A light-dark environment with path, belief_path, and actions of different lengths
-        When: visualize_path is called with mismatched array lengths
-        Then: Function completes without error, handling missing data gracefully
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        # Intentionally create mismatched lengths
-        path = [
-            np.array([0, 5]),
-            np.array([1, 5]),
-            np.array([2, 5]),
-            np.array([3, 5]),
-        ]  # 4 states
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
-            DiscreteDistribution(
-                values=[np.array([1, 5])], probs=np.array([1.0])
-            ),  # Only 2 beliefs
-        ]
-        actions = ["right"]  # Only 1 action
-
-        cache_path = tmp_path / "mismatched_lengths.gif"
-
-        # Should handle gracefully without throwing exceptions
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        assert cache_path.exists()
-        assert cache_path.stat().st_size > 0
-
-    def test_visualize_path_belief_particles_with_zero_probabilities(
-        self, base_light_dark_environment, tmp_path
-    ):
-        """Test visualize_path with belief distributions containing zero probabilities.
-
-        Purpose: Validates handling of belief particles with zero or very small probabilities
-
-        Given: A light-dark environment with belief distributions containing zero probabilities
-        When: visualize_path is called with zero-probability particles
-        Then: Visualization handles zero probabilities correctly without errors
-
-        Test type: unit
-        """
-        env = base_light_dark_environment
-
-        path = [np.array([0, 5]), np.array([1, 5])]
-
-        # Create belief with zero probabilities
-        belief_path = [
-            DiscreteDistribution(
-                values=[np.array([0, 5]), np.array([0, 4]), np.array([1, 5])],
-                probs=np.array([0.8, 0.0, 0.2]),  # Middle particle has zero probability
-            ),
-            DiscreteDistribution(
-                values=[np.array([1, 5]), np.array([1, 4])],
-                probs=np.array([1.0, 0.0]),  # Second particle has zero probability
-            ),
-        ]
-
-        actions = ["right"]
-        cache_path = tmp_path / "zero_prob_particles.gif"
-
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        assert cache_path.exists()
-        assert cache_path.stat().st_size > 0
-
-    def test_visualize_path_preserves_existing_cache_structure(
-        self, base_light_dark_environment, tmp_path
-    ):
-        """Test that visualize_path preserves existing cache directory structure.
-
-        Purpose: Validates that caching doesn't interfere with existing directory structure
-
-        Given: A light-dark environment and existing cache directory with other files
-        When: visualize_path is called to save in existing directory
-        Then: New GIF is saved without affecting other files in the cache directory
-
-        Test type: integration
-        """
-        env = base_light_dark_environment
-
-        # Create existing cache structure
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-
-        # Create some existing files
-        existing_file1 = cache_dir / "existing1.txt"
-        existing_file2 = cache_dir / "existing2.json"
-        existing_file1.write_text("existing content 1")
-        existing_file2.write_text('{"existing": "content"}')
-
-        # Store original content and timestamps
-        original_content1 = existing_file1.read_text()
-        original_content2 = existing_file2.read_text()
-        original_mtime1 = existing_file1.stat().st_mtime
-        original_mtime2 = existing_file2.stat().st_mtime
-
-        # Create visualization in same directory
-        path = [np.array([0, 5]), np.array([1, 5])]
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
-            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0])),
-        ]
-        actions = ["right"]
-        cache_path = cache_dir / "new_visualization.gif"
-
-        env.visualize_path(path, belief_path, actions, cache_path)
-
-        # Verify new file was created
-        assert cache_path.exists()
-        assert cache_path.stat().st_size > 0
-
-        # Verify existing files were not modified
-        assert existing_file1.read_text() == original_content1
-        assert existing_file2.read_text() == original_content2
-        assert existing_file1.stat().st_mtime == original_mtime1
-        assert existing_file2.stat().st_mtime == original_mtime2
 
 
 def test_beacon_proximity_observation_covariance_changes():
@@ -3589,3 +3104,39 @@ class TestContinuousLightDarkRewardNextStateConsistency:
             f"Discrete wrapper should thread next_state; got hit="
             f"{reward_hit:.3f} vs clean={reward_clean:.3f}"
         )
+
+
+@pytest.mark.parametrize(
+    "reward_model_type",
+    [RewardModelType.CONSTANT_HAZARD_PENALTY, RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY],
+    ids=lambda reward_model_type: reward_model_type.name,
+)
+def test_env_pickled_before_reward_model_type_was_stored_still_serializes(reward_model_type):
+    """An env unpickled from an older pickle round-trips through ``to_dict``.
+
+    Purpose: ``to_dict`` writes the reward model type from a private attribute
+        that older pickles do not carry -- a joblib cache entry written before
+        the attribute existed, for instance. ``__setstate__`` recovers it from
+        the reward variant code those pickles do hold. Without that,
+        ``to_dict`` raises on such an env, and with a constant-penalty default
+        it would rebuild the wrong reward model.
+
+    Given: An env's pickled state with the reward-model-type attribute removed,
+        as an older version would have written it.
+    When: The state is restored into a new instance, and the instance goes
+        through ``to_dict`` and ``from_dict``.
+    Then: The rebuilt env compares equal to the original and has its
+        ``config_id``.
+
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDP(discount_factor=0.95, reward_model_type=reward_model_type)
+    old_state = env.__getstate__()
+    del old_state["_reward_model_type"]
+
+    restored = ContinuousLightDarkPOMDP.__new__(ContinuousLightDarkPOMDP)
+    restored.__setstate__(old_state)
+    rebuilt = ContinuousLightDarkPOMDP.from_dict(restored.to_dict())
+
+    assert rebuilt == env
+    assert rebuilt.config_id == env.config_id

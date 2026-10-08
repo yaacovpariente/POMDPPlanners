@@ -8,6 +8,7 @@ where an agent must navigate a grid to tag an opponent that moves stochastically
 The agent has noisy observations of the opponent's location.
 
 The LaserTag problem features:
+
 - A grid-based environment (default 7x11) with optional walls
 - Robot and opponent moving on discrete grid cells
 - 5 possible actions: North, South, East, West, Tag
@@ -31,17 +32,23 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import (
     CONSTANT_HAZARD_PENALTY_CODE,
     DISTANCE_DECAYED_HAZARD_PENALTY_CODE,
@@ -49,9 +56,7 @@ from POMDPPlanners.environments.environment_utils.dangerous_areas_kernels import
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (  # pylint: disable=import-outside-toplevel
-    LaserTagVisualizer,
-)
+
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
@@ -61,6 +66,11 @@ from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils.laser_tag_
     LaserTagZeroMeanHazardShockRewardModel,
     LaserTagRewardModel,
 )
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+        LaserTagVisualizer,
+    )
 
 
 # 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW (matches LaserTagObservation)
@@ -76,16 +86,31 @@ _LASER_DIRECTIONS: List[Tuple[int, int]] = [
 ]
 
 
+# Action ids: 0=North, 1=South, 2=East, 3=West, 4=Tag.
+MOVE_ACTIONS = (0, 1, 2, 3)
+TAG_ACTION = 4
+
+
+class LaserTagStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`LaserTagPOMDP.step_info`."""
+
+    TAGGED = "tagged"
+    RECORDED_STEP = "recorded_step"
+    OBSTACLE_COLLISION = "obstacle_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
+    DANGEROUS_ENCOUNTER = "dangerous_encounter"
+
+
 class LaserTagPOMDPMetrics(Enum):
     """Metric names for LaserTag POMDP environment."""
 
     TAG_SUCCESS_RATE = "tag_success_rate"
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
-    AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
-    AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class RewardModelType(Enum):
@@ -120,7 +145,7 @@ class RewardModelType(Enum):
 #   is_terminal = bool(state[4])
 
 
-class LaserTagPOMDP(DiscreteActionsEnvironment):
+class LaserTagPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-public-methods
     """LaserTag POMDP environment implementation.
 
     This is a pursuit-evasion problem where a robot must navigate a grid to tag
@@ -266,11 +291,49 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             observation_space=SpaceType.CONTINUOUS,  # Continuous 8-dimensional laser measurements with noise
         )
 
+        # ``None`` means "use the built-in default set", which is non-empty for
+        # both, so a None here still admits a hazard contribution.
+        has_walls = walls is None or bool(walls)
+        has_dangerous_areas = dangerous_areas is None or bool(dangerous_areas)
+
+        # Whether the wall and dangerous-area contributions stack. The plain
+        # constant model charges a single ``-dangerous_area_penalty`` on wall
+        # *or* danger (LaserTagRewardModel._compute_area_penalty_scalar).
+        # Every other path applies the two independently: the decayed model
+        # adds a decayed danger term on top of the wall penalty, the shock
+        # model applies a wall penalty and a separate +/- shock, and the
+        # draw-coupled hazard-terminal path (_deterministic_hazard_reward)
+        # subtracts one for each. A step that hits both then costs two.
+        hazards_stack = (
+            reward_model_type != RewardModelType.CONSTANT_HAZARD_PENALTY
+            or is_dangerous_area_hit_terminal
+        )
+
+        danger_term_min = 0.0
+        danger_term_max = 0.0
+        if hazards_stack:
+            if has_walls:
+                danger_term_min -= abs(dangerous_area_penalty)
+            if has_dangerous_areas:
+                danger_term_min -= abs(dangerous_area_penalty)
+        elif has_walls or has_dangerous_areas:
+            danger_term_min -= abs(dangerous_area_penalty)
+        if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK and has_dangerous_areas:
+            # This model's danger contribution is a +/- shock of equal
+            # magnitude, so it raises the maximum as well as lowering the
+            # minimum. Wall hits stay deterministically negative.
+            danger_term_max += abs(dangerous_area_penalty)
+
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
-            reward_range=(-tag_penalty, tag_reward),
+            reward_range=(
+                # The worst base reward is a failed tag or, if a movement step
+                # costs more than a failed tag does, that step cost.
+                -max(tag_penalty, step_cost) + danger_term_min,
+                tag_reward + danger_term_max,
+            ),
             output_dir=output_dir,
             debug=debug,
             use_queue_logger=use_queue_logger,
@@ -458,6 +521,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # (the POMCPOW hot path). RNG draws are issued from numpy in the same
         # order and quantity as the original Python implementation, then
         # forwarded to C++ to preserve byte-identical reproducibility.
+        if float(state[4]) != 0.0:
+            # A terminal state is absorbing, as it is on the batch path and in
+            # the vectorized updater. No RNG draw is consumed.
+            absorbed = np.asarray(state, dtype=np.float64)
+            if n_samples == 1:
+                return absorbed.copy()
+            return [absorbed.copy() for _ in range(n_samples)]
         if n_samples == 1:
             params = self._get_native_step_params()
             if params is not None:
@@ -836,6 +906,11 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Inlined from the deleted LaserTagStateTransition._compute_transition_probability_for_action.
         if not isinstance(next_state, np.ndarray) or len(next_state) != 5:
             return 0.0
+
+        if float(state[4]) != 0.0:
+            # A terminal state is absorbing, as in ``sample_next_state``: the
+            # only possible next state is the state itself.
+            return 1.0 if np.array_equal(np.asarray(next_state), np.asarray(state)) else 0.0
 
         robot_current = (int(state[0]), int(state[1]))
         opponent_current = (int(state[2]), int(state[3]))
@@ -1344,307 +1419,183 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         clipped_c = np.clip(realised_c, 0, cols - 1)
         return in_bounds & self._hazard_wall_grid[clipped_r, clipped_c]
 
-    def _count_episode_metrics(
-        self, history: History, action_dirs: Dict[int, Tuple[int, int]]
-    ) -> Tuple[int, int, int, int]:
-        episode_failed_tags = 0
-        episode_obstacle_collisions = 0
-        episode_dangerous_area_steps = 0
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report tag status, hazard exposure and wall collisions for this step.
 
-        for step in history.history:
-            if step.action == 4 and step.reward is not None and step.reward < 0:
-                episode_failed_tags += 1
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: The realised successor state, or ``None`` on the terminal
+                step. Needed to tell a blocked move from a completed one.
 
-            if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                robot_pos = (int(step.state[0]), int(step.state[1]))
-                if self._is_in_dangerous_area(robot_pos):
-                    episode_dangerous_area_steps += 1
+        Returns:
+            The per-step channels. ``recorded_step`` is a constant 1.0 so that
+            summing it reproduces ``len(history.history)``, including the
+            terminal bookkeeping step, which the historical episode-length count
+            included.
 
-            if step.action in [0, 1, 2, 3]:
-                if (
-                    isinstance(step.state, np.ndarray)
-                    and len(step.state) == 5
-                    and hasattr(step, "next_state")
-                    and isinstance(step.next_state, np.ndarray)
-                    and len(step.next_state) == 5
-                ):
-                    if step.action in action_dirs:
-                        dr, dc = action_dirs[step.action]
-                        robot_pos = (int(step.state[0]), int(step.state[1]))
-                        next_robot_pos = (int(step.next_state[0]), int(step.next_state[1]))
-                        intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
+        Note:
+            Nothing here reads the realised reward, which ``step_info`` is not
+            given. ``tag_success_rate`` and ``average_failed_tag_attempts`` are
+            defined in terms of it, so they stay in :meth:`compute_metrics`.
+            Recomputing the reward here is not an option: two of the reward
+            models draw from ``np.random``, so it would both return a different
+            number and shift the RNG stream for every later transition.
+        """
+        is_state_valid = isinstance(state, np.ndarray) and len(state) == 5
+        in_dangerous_area = 0.0
+        if is_state_valid:
+            robot_pos = (int(state[0]), int(state[1]))
+            in_dangerous_area = float(self._is_in_dangerous_area(robot_pos))
+        obstacle_collision = float(self._is_blocked_by_wall(state, action, next_state))
+        return {
+            LaserTagStepChannel.TAGGED.value: (float(bool(state[4])) if is_state_valid else 0.0),
+            LaserTagStepChannel.RECORDED_STEP.value: 1.0,
+            LaserTagStepChannel.OBSTACLE_COLLISION.value: obstacle_collision,
+            LaserTagStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
+            # Emitted as its own channel because the aggregator reduces one
+            # channel at a time and cannot add two. Summing the per-step sum
+            # equals summing each part, so this matches the historical
+            # collisions + dangerous-steps total exactly.
+            LaserTagStepChannel.DANGEROUS_ENCOUNTER.value: obstacle_collision + in_dangerous_area,
+        }
 
-                        if intended_pos in self.walls and next_robot_pos == robot_pos:
-                            episode_obstacle_collisions += 1
+    def _is_blocked_by_wall(self, state: Any, action: Any, next_state: Any) -> bool:
+        # A collision is a move action whose intended cell is a wall and which
+        # left the robot where it started. Both states must be well formed, and
+        # the terminal step (action None) is never a collision. Restricted to the
+        # movement actions: ``_action_directions`` also maps the tag action, to
+        # a zero displacement, which was never considered a collision candidate.
+        if action not in MOVE_ACTIONS:
+            return False
+        if not (isinstance(state, np.ndarray) and len(state) == 5):
+            return False
+        if not (isinstance(next_state, np.ndarray) and len(next_state) == 5):
+            return False
+        row_delta, col_delta = self._action_directions[action]
+        robot_pos = (int(state[0]), int(state[1]))
+        next_robot_pos = (int(next_state[0]), int(next_state[1]))
+        intended_pos = (robot_pos[0] + row_delta, robot_pos[1] + col_delta)
+        return intended_pos in self.walls and next_robot_pos == robot_pos
 
-        return (
-            episode_failed_tags,
-            episode_obstacle_collisions,
-            episode_dangerous_area_steps,
-            episode_obstacle_collisions + episode_dangerous_area_steps,
-        )
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the LaserTag metrics derived from the per-step channels.
 
-    def _collect_episode_data(self, histories: List[History]) -> Tuple:
-        episode_lengths = []
-        success_indicators = []
-        goal_reached_indicators = []
-        failed_tags_per_episode = []
-        obstacle_collisions_per_episode = []
-        dangerous_area_steps_per_episode = []
-        all_dangerous_encounters_per_episode = []
-
-        action_dirs = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
-
-        for history in histories:
-            episode_length = len(history.history)
-            episode_lengths.append(episode_length)
-
-            episode_successful = (
-                history.history
-                and history.history[-1].reward is not None
-                and history.history[-1].reward > 0
-            )
-            success_indicators.append(1 if episode_successful else 0)
-
-            # Check if goal was reached (opponent was tagged) by checking if any step reached terminal state
-            goal_reached = False
-            for step in history.history:
-                if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                    if bool(step.state[4]):  # Terminal flag is set when tag is successful
-                        goal_reached = True
-                        break
-            goal_reached_indicators.append(1 if goal_reached else 0)
-
-            (
-                episode_failed_tags,
-                episode_obstacle_collisions,
-                episode_dangerous_area_steps,
-                episode_all_dangerous_encounters,
-            ) = self._count_episode_metrics(history, action_dirs)
-
-            failed_tags_per_episode.append(episode_failed_tags)
-            obstacle_collisions_per_episode.append(episode_obstacle_collisions)
-            dangerous_area_steps_per_episode.append(episode_dangerous_area_steps)
-            all_dangerous_encounters_per_episode.append(episode_all_dangerous_encounters)
-
-        return (
-            episode_lengths,
-            success_indicators,
-            goal_reached_indicators,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
-        )
-
-    def _calculate_confidence_intervals(
-        self,
-        total_episodes: int,
-        success_indicators: List[int],
-        goal_reached_indicators: List[int],
-        episode_lengths: List[int],
-        failed_tags_per_episode: List[int],
-        obstacle_collisions_per_episode: List[int],
-        dangerous_area_steps_per_episode: List[int],
-        all_dangerous_encounters_per_episode: List[int],
-    ) -> Tuple:
-        if total_episodes >= 2:
-            success_ci = confidence_interval(data=success_indicators, confidence=0.95)
-            goal_reached_ci = confidence_interval(data=goal_reached_indicators, confidence=0.95)
-            episode_length_ci = confidence_interval(data=episode_lengths, confidence=0.95)
-            failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
-            obstacle_collisions_ci = confidence_interval(
-                data=obstacle_collisions_per_episode, confidence=0.95
-            )
-            dangerous_area_steps_ci = confidence_interval(
-                data=dangerous_area_steps_per_episode, confidence=0.95
-            )
-            all_dangerous_encounters_ci = confidence_interval(
-                data=all_dangerous_encounters_per_episode, confidence=0.95
-            )
-        else:
-            success_ci = (-np.inf, np.inf)
-            goal_reached_ci = (-np.inf, np.inf)
-            episode_length_ci = (-np.inf, np.inf)
-            failed_tags_ci = (-np.inf, np.inf)
-            obstacle_collisions_ci = (-np.inf, np.inf)
-            dangerous_area_steps_ci = (-np.inf, np.inf)
-            all_dangerous_encounters_ci = (-np.inf, np.inf)
-
-        return (
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        )
+        Returns:
+            Specs for the five state- and transition-derived metrics, in the
+            same order the enum declares them. The two reward-derived metrics
+            are absent here and produced by :meth:`compute_metrics`.
+        """
+        return [
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.TASK_COMPLETION_RATE.value,
+                channel=LaserTagStepChannel.TAGGED.value,
+                per_episode=EpisodeReduction.ANY,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
+                channel=LaserTagStepChannel.RECORDED_STEP.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_COLLISIONS.value,
+                channel=LaserTagStepChannel.OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=LaserTagStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
+                channel=LaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+        ]
 
     def get_metric_names(self) -> List[str]:
         """Get names of LaserTag POMDP specific metrics.
 
         Returns:
-            List containing metric names: tag_success_rate, average_episode_length,
-            average_failed_tag_attempts, average_obstacle_collisions,
-            average_dangerous_area_steps, and average_all_dangerous_encounters
+            All seven metric names in enum order: the five derived from per-step
+            channels plus the two reward-derived ones.
         """
         return [metric.value for metric in LaserTagPOMDPMetrics]
 
-    def _build_metric_values(
-        self,
-        success_rate: float,
-        goal_reaching_rate: float,
-        avg_episode_length: float,
-        avg_failed_tags: float,
-        avg_obstacle_collisions: float,
-        avg_dangerous_area_steps: float,
-        avg_all_dangerous_encounters: float,
-        success_ci: Tuple[float, float],
-        goal_reached_ci: Tuple[float, float],
-        episode_length_ci: Tuple[float, float],
-        failed_tags_ci: Tuple[float, float],
-        obstacle_collisions_ci: Tuple[float, float],
-        dangerous_area_steps_ci: Tuple[float, float],
-        all_dangerous_encounters_ci: Tuple[float, float],
-    ) -> List[MetricValue]:
+    def _reward_derived_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Both of these are defined in terms of the realised reward recorded on
+        # the step, which the per-step channel cannot carry.
+        success_indicators: List[int] = []
+        failed_tags_per_episode: List[int] = []
+        for history in histories:
+            steps = history.history
+            # The last recorded step of a terminated episode is the terminal
+            # bookkeeping step, whose reward is None -- so such an episode has
+            # never counted as a success. Preserved deliberately.
+            successful = bool(steps) and steps[-1].reward is not None and steps[-1].reward > 0
+            success_indicators.append(1 if successful else 0)
+            failed_tags_per_episode.append(
+                sum(
+                    1
+                    for step in steps
+                    if step.action == TAG_ACTION and step.reward is not None and step.reward < 0
+                )
+            )
+
         return [
-            MetricValue(
-                name=LaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value,
-                value=success_rate,
-                lower_confidence_bound=success_ci[0],
-                upper_confidence_bound=success_ci[1],
+            self._metric_from_samples(
+                LaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value, success_indicators
             ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
-                value=goal_reaching_rate,
-                lower_confidence_bound=goal_reached_ci[0],
-                upper_confidence_bound=goal_reached_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
-                value=avg_episode_length,
-                lower_confidence_bound=episode_length_ci[0],
-                upper_confidence_bound=episode_length_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value,
-                value=avg_failed_tags,
-                lower_confidence_bound=failed_tags_ci[0],
-                upper_confidence_bound=failed_tags_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
-                value=avg_obstacle_collisions,
-                lower_confidence_bound=obstacle_collisions_ci[0],
-                upper_confidence_bound=obstacle_collisions_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
-                value=avg_dangerous_area_steps,
-                lower_confidence_bound=dangerous_area_steps_ci[0],
-                upper_confidence_bound=dangerous_area_steps_ci[1],
-            ),
-            MetricValue(
-                name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
-                value=avg_all_dangerous_encounters,
-                lower_confidence_bound=all_dangerous_encounters_ci[0],
-                upper_confidence_bound=all_dangerous_encounters_ci[1],
+            self._metric_from_samples(
+                LaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value, failed_tags_per_episode
             ),
         ]
 
+    @staticmethod
+    def _metric_from_samples(name: str, samples: List[int]) -> MetricValue:
+        mean_value = float(np.mean(samples))
+        if len(samples) >= 2:
+            lower, upper = confidence_interval(data=samples, confidence=0.95)
+        else:
+            lower, upper = (-np.inf, np.inf)
+        return MetricValue(
+            name=name,
+            value=mean_value,
+            lower_confidence_bound=float(lower),
+            upper_confidence_bound=float(upper),
+        )
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute LaserTag POMDP specific metrics from simulation histories."""
-        total_episodes = len(histories)
-        if total_episodes == 0:
-            return []
-
-        (
-            episode_lengths,
-            success_indicators,
-            goal_reached_indicators,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
-        ) = self._collect_episode_data(histories)
-
-        successful_tags = sum(success_indicators)
-        success_rate = successful_tags / total_episodes
-        goals_reached = sum(goal_reached_indicators)
-        goal_reaching_rate = goals_reached / total_episodes
-        avg_episode_length = float(np.mean(episode_lengths))
-        avg_failed_tags = float(np.mean(failed_tags_per_episode))
-        avg_obstacle_collisions = float(np.mean(obstacle_collisions_per_episode))
-        avg_dangerous_area_steps = float(np.mean(dangerous_area_steps_per_episode))
-        avg_all_dangerous_encounters = float(np.mean(all_dangerous_encounters_per_episode))
-
-        (
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        ) = self._calculate_confidence_intervals(
-            total_episodes,
-            success_indicators,
-            goal_reached_indicators,
-            episode_lengths,
-            failed_tags_per_episode,
-            obstacle_collisions_per_episode,
-            dangerous_area_steps_per_episode,
-            all_dangerous_encounters_per_episode,
-        )
-
-        return self._build_metric_values(
-            success_rate,
-            goal_reaching_rate,
-            avg_episode_length,
-            avg_failed_tags,
-            avg_obstacle_collisions,
-            avg_dangerous_area_steps,
-            avg_all_dangerous_encounters,
-            success_ci,
-            goal_reached_ci,
-            episode_length_ci,
-            failed_tags_ci,
-            obstacle_collisions_ci,
-            dangerous_area_steps_ci,
-            all_dangerous_encounters_ci,
-        )
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache visualization of the LaserTag episode as an animated GIF.
-
-        Creates an animated visualization showing:
-        - Robot movement (red circle)
-        - Opponent movement (blue circle)
-        - Walls (black squares)
-        - Dangerous areas (red circles)
-        - Action arrows showing robot's intended movement
-        - Laser measurements (green rays from robot position)
-        - Belief particles (if available) showing robot's belief about opponent location
-        - Grid boundaries and coordinate system
+        """Compute LaserTag POMDP specific metrics from simulation histories.
 
         Args:
-            history: The history of states, actions, and observations from an episode
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
+            histories: List of simulation histories.
+
+        Returns:
+            All seven metrics in declaration order.
 
         Raises:
-            ValueError: If history is empty or contains invalid data
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
         """
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        # Lazy import to avoid circular dependency
-        visualizer = LaserTagVisualizer(
-            floor_shape=self.floor_shape,
-            walls=self.walls,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_area_radius=self.dangerous_area_radius,
+        computed = list(super().compute_metrics(histories)) + self._reward_derived_metrics(
+            histories
         )
-        visualizer.create_visualization(history, cache_path)
-        self.logger.info("Saved LaserTag visualization to %s", cache_path)
+        # Ordered and gap-filled rather than concatenated: the declared name list
+        # is a fixed contract, and the aggregator drops a metric whose channel no
+        # episode reported.
+        return order_and_fill_metrics(self.get_metric_names(), computed)
+
+    def episode_visualizer(self) -> "LaserTagVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+            LaserTagVisualizer,
+        )
+
+        return LaserTagVisualizer(self)

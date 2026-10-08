@@ -10,9 +10,10 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
     HyperParameterFeature,
     NumericalHyperParameter,
+    EarlyStoppingConfig,
     ParallelizationLevel,
 )
-from POMDPPlanners.core.simulation.metrics import MetricValue
+from POMDPPlanners.core.simulation.metrics import CommonMetricName, MetricValue
 from POMDPPlanners.core.simulation.simulation_configs import (
     EnvironmentRunParams,
     HyperParameterRunParams,
@@ -23,15 +24,44 @@ from POMDPPlanners.core.simulation.tasks import (
     TaskManager,
     TaskManagerExternalDB,
 )
+from POMDPPlanners.core.simulation.belief_payloads import (
+    MAX_PAYLOAD_PARTICLES,
+    BeliefPayloadKind,
+    belief_to_payload,
+)
+from POMDPPlanners.core.simulation.traces import (
+    ArtifactKind,
+    EpisodeTrace,
+    TraceStep,
+    TRACE_SCHEMA_VERSION,
+    envelope_steps,
+    to_jsonable,
+)
+from POMDPPlanners.core.simulation.episode_visualizers import (
+    EpisodeVisualizer,
+    TraceVisualizer,
+    VideoVisualizer,
+)
 from POMDPPlanners.core.simulation.visualizers import ExperimentVisualizer
 
 __all__ = [
+    "ArtifactKind",
+    "BeliefPayloadKind",
+    "MAX_PAYLOAD_PARTICLES",
+    "belief_to_payload",
+    "EpisodeTrace",
+    "TraceStep",
+    "TRACE_SCHEMA_VERSION",
+    "envelope_steps",
+    "to_jsonable",
     "StepData",
     "History",
     "CategoricalHyperParameter",
     "NumericalHyperParameter",
     "HyperParameterFeature",
+    "EarlyStoppingConfig",
     "ParallelizationLevel",
+    "CommonMetricName",
     "MetricValue",
     "EnvironmentRunParams",
     "HyperParameterRunParams",
@@ -40,5 +70,8 @@ __all__ = [
     "TaskManager",
     "TaskManagerExternalDB",
     "ExperimentVisualizer",
+    "EpisodeVisualizer",
+    "TraceVisualizer",
+    "VideoVisualizer",
     "history_to_discounted_return_value",
 ]

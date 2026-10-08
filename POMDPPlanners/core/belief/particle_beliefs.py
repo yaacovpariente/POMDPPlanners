@@ -735,7 +735,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
     For particles with the same state value, the probability is proportional to
     their count:
 
-    P(s) = count(s) / N = |{i: s_i = s}| / |particles|
+    ``P(s) = count(s) / N = |{i: s_i = s}| / |particles|``
 
     This makes it ideal for discrete observation models where observations either
     match a state (probability 1) or don't match (probability 0).

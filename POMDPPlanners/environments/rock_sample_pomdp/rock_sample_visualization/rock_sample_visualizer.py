@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: MIT
+
+"""RockSample episode visualizer.
+
+Writes an episode as a trace, which ``rock_sample.scene.js`` beside this
+module replays in the browser. Nothing here is re-derived: every number written comes from the recorded episode or from the
+environment instance the episode ran on.
+
+The belief is not serialized here. It is a core abstraction with a closed
+family of implementations, so
+:func:`~POMDPPlanners.core.simulation.belief_payloads.belief_to_payload` writes
+it for every environment, and this visualizer is left with what is genuinely
+RockSample's: the grid, the rocks, the hazard, the rover's cells, and which
+rock each check was aimed at.
+
+That last field is the reason this payload is more than a position list. A
+RockSample belief is per-rock — the probability each rock is good — and it
+moves only when a ``check_rock_i`` action returns a reading. The viewer draws
+that update as an event, so it needs to know which rock was checked and what
+came back. Both are already in the episode: the action names the rock, the
+observation is the reading. They are pulled out here, once, using the
+environment's own action layout, rather than left for a reader to reconstruct
+from an integer whose meaning depends on how many rocks the run was configured
+with.
+
+The per-rock posterior itself is *not* written. It is a marginal of the belief
+core already serialized, and a viewer computes it by summing the weights of the
+particles in which that rock is good. Writing it here as well would create a
+second number that could disagree with the belief it claims to summarise.
+"""
+
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+
+from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.core.simulation.belief_payloads import belief_to_payload
+from POMDPPlanners.core.simulation.episode_visualizers import TraceVisualizer
+from POMDPPlanners.core.simulation.traces import to_jsonable
+
+# Payload version, independent of the envelope's. Bump it when the meaning of
+# a payload field changes, so a viewer can refuse a file it would misdraw.
+ROCK_SAMPLE_PAYLOAD_KIND = "rock_sample.v1"
+
+# Actions 0..4 are sample and the four moves; every later action checks one
+# rock. Written into the payload rather than hard-coded in the viewer, because
+# the index of the first check action is a property of this environment.
+FIRST_CHECK_ACTION = 5
+
+
+def _check_of(action: Any, observation: Any, num_rocks: int) -> Optional[Dict[str, Any]]:
+    """Describe the sensor check a step made, if it made one.
+
+    Args:
+        action: The action recorded on the step. ``None`` on the terminal
+            bookkeeping step, which took no action.
+        observation: The observation recorded on the step: ``"good"`` or
+            ``"bad"`` after a check, ``"none"`` otherwise.
+        num_rocks: How many rocks the environment has, so an action beyond the
+            check block is reported as no check rather than as rock 97.
+
+    Returns:
+        ``{"rock": index, "observation": reading}`` for a check step, and
+        ``None`` for every other step.
+    """
+    if action is None:
+        return None
+    try:
+        index = int(action) - FIRST_CHECK_ACTION
+    except (TypeError, ValueError):
+        return None
+    if index < 0 or index >= num_rocks:
+        return None
+    return {"rock": index, "observation": to_jsonable(observation)}
+
+
+class RockSampleVisualizer(TraceVisualizer):
+    """Writes RockSample episodes as ``rock_sample.v1`` traces.
+
+    The grid, rocks, hazard and reward constants are copied into the payload's
+    ``world`` block so a viewer can build the scene without importing Python.
+    """
+
+    payload_kind = ROCK_SAMPLE_PAYLOAD_KIND
+
+    def build_payload(self, history: List[StepData]) -> Dict[str, Any]:
+        """Build the RockSample half of the trace.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            The ``rock_sample.v1`` payload.
+        """
+        # Typed as Any: the attributes read below belong to this environment
+        # class, not to the base Environment the visualizer is typed against.
+        environment: Any = self.environment
+
+        num_rocks = len(environment.rock_positions)
+
+        states: List[List[int]] = []
+        rock_truth: List[List[bool]] = []
+        observations: List[Any] = []
+        checks: List[Optional[Dict[str, Any]]] = []
+        beliefs: List[Dict[str, Any]] = []
+
+        for step in history:
+            state = np.asarray(step.state, dtype=float).reshape(-1)
+            # The exit is recorded as the (-1, -1) sentinel, and it is written
+            # through unchanged: it is where the episode says the rover went. The
+            # viewer decides how to draw a rover that has left the grid; turning
+            # the sentinel into a cell here would invent a position the run never
+            # had.
+            states.append([int(state[0]), int(state[1])])
+            # The true rock qualities live in the state. The rover never observes
+            # them, and the viewer draws them apart from the belief for exactly
+            # that reason — the two are supposed to be able to disagree.
+            rock_truth.append([bool(value > 0.5) for value in state[2 : 2 + num_rocks]])
+            observations.append(to_jsonable(step.observation))
+            checks.append(_check_of(step.action, step.observation, num_rocks))
+            beliefs.append(belief_to_payload(step.belief))
+
+        return {
+            # Everything a viewer needs to build the world, taken from the
+            # environment instance the episode actually ran on — not from the
+            # class defaults, which a configured run may not be using.
+            "world": {
+                "map_size": [int(environment.map_size[0]), int(environment.map_size[1])],
+                "rock_positions": [[int(r), int(c)] for r, c in environment.rock_positions],
+                "init_pos": [int(environment.init_pos[0]), int(environment.init_pos[1])],
+                "sensor_efficiency": float(environment.sensor_efficiency),
+                # Which accuracy law the run used. Version 2 is Smith & Simmons'
+                # ``(1 + 2 ** (-d / efficiency)) / 2``; version 1 was a decaying
+                # exponential that fell below a coin flip. A viewer that prints
+                # P(correct) has to know which one it is quoting.
+                "sensor_contract_version": int(getattr(environment, "sensor_contract_version", 1)),
+                "good_rock_reward": float(environment.good_rock_reward),
+                "bad_rock_penalty": float(environment.bad_rock_penalty),
+                "exit_reward": float(environment.exit_reward),
+                "step_penalty": float(environment.step_penalty),
+                "sensor_use_penalty": float(environment.sensor_use_penalty),
+                "dangerous_areas": [[int(r), int(c)] for r, c in environment.dangerous_areas],
+                "dangerous_area_radius": float(environment.dangerous_area_radius),
+                "dangerous_area_penalty": float(environment.dangerous_area_penalty),
+                "dangerous_area_hit_probability": float(environment.dangerous_area_hit_probability),
+                "action_names": [str(name) for name in environment.action_names],
+                "first_check_action": FIRST_CHECK_ACTION,
+            },
+            "ended_in_danger_zone": self._ended_in_danger_zone(history),
+            "states": states,
+            "rock_truth": rock_truth,
+            "observations": observations,
+            "checks": checks,
+            "beliefs": beliefs,
+        }
+
+    def _ended_in_danger_zone(self, history: List[StepData]) -> bool:
+        """Whether the episode ended because the rover was hit in a hazard.
+
+        With the hazard-terminal flag on, the state carries a trailing terminal
+        slot that only a hazard hit sets. Exiting east ends the episode through
+        the ``(-1, -1)`` sentinel instead and leaves the slot at 0.
+
+        Args:
+            history: The episode's ``StepData`` records, in order.
+
+        Returns:
+            ``True`` only for an episode a hazard ended.
+        """
+        environment: Any = self.environment
+        if not environment.is_dangerous_area_hit_terminal:
+            return False
+        final = np.asarray(history[-1].state, dtype=float).reshape(-1)
+        if final.shape[0] != 2 + len(environment.rock_positions) + 1:
+            return False
+        return int(final[0]) != -1 and float(final[-1]) > 0.5

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "POMDPPlanners"
-version = "0.5.0"
+version = "0.6.0"
 description = "A Python package for POMDP planning algorithms and environments"
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,10 @@ dependencies = [
     "ray>=2.0.0",
     "pandas>=1.3.0",
     "matplotlib>=3.4.0",
+    # The Light-Dark renderer draws its frames directly with Pillow and needs
+    # ImageFont.load_default(size=...), added in Pillow 10.1. Pillow used to
+    # arrive only transitively through matplotlib, which accepts pillow>=8.
+    "pillow>=10.1.0",
     "scipy>=1.7.0",
     "gymnasium>=0.29.0",
     "anytree>=2.8.0",
@@ -71,6 +75,10 @@ dev = [
     "pytest-benchmark>=4.0.0",
     "pybind11>=2.12",
     "build>=1.0.0",
+    # Racetrack POMDP backend. Test-only on purpose: the environment imports it
+    # lazily, so a runtime install never loads it, but CI must have it because
+    # the racetrack tests exercise the real simulator rather than a stand-in.
+    "highway-env>=1.12.1",
 ]
 docs = [
     "sphinx>=5.0.0",
@@ -78,6 +86,12 @@ docs = [
     "sphinx-autodoc-typehints>=1.17.0",
     "myst-parser>=0.18.0",
 ]
+
+[project.scripts]
+# The results site. A server command rather than a static export: a browser
+# refuses to let a file:// page fetch its sibling trace.json, and a run
+# directory of episode video is streamed from where it is rather than copied.
+pomdp-report = "POMDPPlanners.reporting.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/yaacovpariente/POMDPPlanners"
@@ -90,14 +104,17 @@ where = ["."]
 include = ["POMDPPlanners*"]
 
 [tool.setuptools.package-data]
-# PacMan visualizer loads these sprites at runtime via
-# pacman_visualizer.py: `sprite_dir / "<file>"`. Bundle them so PyPI
-# installs include the assets, not just the .py files.
-"POMDPPlanners.environments.pacman_pomdp" = ["img/*"]
-# Golden visualization GIFs used by the bundled test suite to validate
-# environment renderings. ~1.2MB total; ships so installed-package smoke
-# tests can run without re-downloading fixtures.
-"POMDPPlanners.tests.test_environments" = ["golden_visualizations/*"]
+# The results site serves these itself; the vendored three.js build is why
+# the viewer works with no network.
+"POMDPPlanners.reporting" = [
+    "static/*.css",
+    "static/*.js",
+    "static/vendor/*.js",
+    "static/viewer/*.js",
+]
+# Each environment's three.js scene lives next to the visualizer that writes
+# its traces; the results site finds them by this suffix.
+"*" = ["*.scene.js"]
 
 # ---------------------------------------------------------------------------
 # Tool configuration
@@ -106,7 +123,7 @@ include = ["POMDPPlanners*"]
 [tool.black]
 line-length = 100
 target-version = ["py310", "py311", "py312"]
-include = '\\.(py|pyi)$'
+include = '\.(py|pyi)$'
 exclude = '''
 (
   /(
@@ -139,6 +156,7 @@ ignore = "CVS"
 persistent = true
 extension-pkg-allow-list = [
     "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.battleship_pomdp._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
@@ -146,7 +164,12 @@ extension-pkg-allow-list = [
     "POMDPPlanners.environments.push_pomdp._native",
     "POMDPPlanners.environments.pacman_pomdp._native",
     "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.maze_pomdp._native",
     "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+    "POMDPPlanners.environments.capture_the_flag_pomdp._native",
+    "POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+    "POMDPPlanners.environments.firefighting_pomdp._native",
+    "POMDPPlanners.environments.snake_pomdp._native",
 ]
 
 [tool.pylint.messages_control]
@@ -213,7 +236,9 @@ ignored-modules = [
     "cvxopt",
     "carla",
     "nuplan",
+    "highway_env",
     "POMDPPlanners.core._native",
+    "POMDPPlanners.environments.battleship_pomdp._native",
     "POMDPPlanners.environments.mountain_car_pomdp._native",
     "POMDPPlanners.environments.cartpole_pomdp._native",
     "POMDPPlanners.environments.light_dark_pomdp._native",
@@ -221,7 +246,12 @@ ignored-modules = [
     "POMDPPlanners.environments.push_pomdp._native",
     "POMDPPlanners.environments.pacman_pomdp._native",
     "POMDPPlanners.environments.rock_sample_pomdp._native",
+    "POMDPPlanners.environments.maze_pomdp._native",
     "POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
+    "POMDPPlanners.environments.capture_the_flag_pomdp._native",
+    "POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+    "POMDPPlanners.environments.firefighting_pomdp._native",
+    "POMDPPlanners.environments.snake_pomdp._native",
 ]
 ignored-classes = ["SQLObject"]
 

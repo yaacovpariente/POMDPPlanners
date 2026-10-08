@@ -1,0 +1,995 @@
+/* SPDX-License-Identifier: MIT
+ *
+ * Shared renderer core for every POMDPPlanners episode viewer.
+ *
+ * Everything here is environment-agnostic: the physically-correct lighting,
+ * the half-float bright/blur/ACES composite stack, the camera rig and the
+ * playback clock. A scene module supplies the world and reads one sample per
+ * frame; it never touches the pipeline. That split is what lets the other
+ * fifteen environments reuse this file instead of forking it.
+ *
+ * Four things in here are tuned, not arbitrary, and each cost real time to
+ * find (see VIEWER_BRIEF):
+ *
+ *  1. Exposure. The lamps carry real lumens, so the camera has to stop down.
+ *     The composite's `exposure` uniform is the single number that sets the
+ *     mood; a scene tunes it, it does not remove it.
+ *  2. Colour space. The renderer is linear until the composite encodes it, so
+ *     every sRGB hex must be converted on the way in. `linearize()` does that
+ *     for standard materials and deliberately skips emitters, whose colours
+ *     are above 1.0 and are radiance, not paint.
+ *  3. Shadow acne. One narrow-coned shadow caster with `normalBias`, not a
+ *     large negative `bias`.
+ *  4. Depth precision. The scene render target's depth buffer is 16-bit, so
+ *     `camera.near` stays at 0.6 and coplanar surfaces need `polygonOffset`.
+ */
+(function (global) {
+  "use strict";
+
+  var THREE = global.THREE;
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  /** Deterministic PRNG, so a scene's scatter is identical on every load. */
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  /** A soft radial sprite: light pools, belief particles, dust, contact shadows. */
+  function radialTexture(inner, falloff) {
+    var s = 128;
+    var cv = document.createElement("canvas");
+    cv.width = cv.height = s;
+    var g = cv.getContext("2d");
+    var grad = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+    grad.addColorStop(0, "rgba(255,255,255," + inner + ")");
+    grad.addColorStop(falloff, "rgba(255,255,255," + (inner * 0.32) + ")");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, s, s);
+    return new THREE.CanvasTexture(cv);
+  }
+
+  /** Sobel over a canvas's luminance. Turns a painted floor into ground. */
+  function normalMapFrom(renderer, cv, strength) {
+    var s = cv.width;
+    var soft = document.createElement("canvas");
+    soft.width = soft.height = s;
+    var sctx = soft.getContext("2d");
+    sctx.filter = "blur(2px)";
+    sctx.drawImage(cv, 0, 0);
+    sctx.filter = "none";
+    var data = sctx.getImageData(0, 0, s, s).data;
+    var dst = document.createElement("canvas");
+    dst.width = dst.height = s;
+    var dctx = dst.getContext("2d");
+    var img = dctx.createImageData(s, s);
+    var o = img.data;
+    function h(x, y) {
+      x = (x + s) % s; y = (y + s) % s;
+      var i = (y * s + x) * 4;
+      return (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) / 255;
+    }
+    for (var y = 0; y < s; y++) {
+      for (var x = 0; x < s; x++) {
+        var nx = -(h(x + 1, y) - h(x - 1, y)) * strength;
+        var ny = -(h(x, y + 1) - h(x, y - 1)) * strength;
+        var len = Math.sqrt(nx * nx + ny * ny + 1);
+        var i = (y * s + x) * 4;
+        o[i] = (nx / len * 0.5 + 0.5) * 255;
+        o[i + 1] = (ny / len * 0.5 + 0.5) * 255;
+        o[i + 2] = (1 / len * 0.5 + 0.5) * 255;
+        o[i + 3] = 255;
+      }
+    }
+    dctx.putImageData(img, 0, 0);
+    var tex = new THREE.CanvasTexture(dst);
+    tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return tex;
+  }
+
+  /* Multisample count for the scene pass. Four is the point on this curve
+     where the cost stops buying much: it removes the staircase on a lane
+     marking and a car's roofline, and eight costs another whole scene pass
+     worth of bandwidth to remove very little more. */
+  var MSAA_SAMPLES = 4;
+
+  /**
+   * A box with its edges taken off.
+   *
+   * Nothing manufactured has a zero-radius edge, and the eye reads one as
+   * unreal before it reads anything else about the material: a sharp edge
+   * catches no highlight, so a box under a lamp is a flat shape with a hard
+   * seam, while the same box with a two-millimetre round is a solid with a
+   * line of light along it. Every prop in these scenes was a `BoxGeometry`,
+   * which is why they read as blocks.
+   *
+   * Outer dimensions are preserved, so this is a drop-in for `BoxGeometry`
+   * and nothing it replaces moves or changes size.
+   *
+   * @param {number} w  Width, along x.
+   * @param {number} h  Height, along y.
+   * @param {number} d  Depth, along z.
+   * @param {number} [radius]  Edge radius. Defaults to a twelfth of the
+   *   smallest side, which is a machined-looking round at any scale, and is
+   *   clamped so it can never eat the object.
+   * @param {number} [segments]  Bevel segments; 2 is enough to catch a
+   *   highlight and 3 is already invisible.
+   */
+  function roundedBox(w, h, d, radius, segments) {
+    var r = radius === undefined ? Math.min(w, h, d) / 12 : radius;
+    r = Math.max(1e-4, Math.min(r, Math.min(w, h, d) / 2.05));
+    var steps = segments === undefined ? 2 : segments;
+    // The shape is the face inset by the radius; the bevel puts the radius
+    // back on, which is what keeps the outer size equal to the box's.
+    var innerW = Math.max(1e-4, w - r * 2);
+    var innerH = Math.max(1e-4, h - r * 2);
+    var shape = new THREE.Shape();
+    shape.moveTo(-innerW / 2, -innerH / 2);
+    shape.lineTo(innerW / 2, -innerH / 2);
+    shape.lineTo(innerW / 2, innerH / 2);
+    shape.lineTo(-innerW / 2, innerH / 2);
+    shape.closePath();
+    var geometry = new THREE.ExtrudeGeometry(shape, {
+      depth: Math.max(1e-4, d - r * 2),
+      bevelEnabled: true,
+      bevelThickness: r,
+      bevelSize: r,
+      bevelOffset: 0,
+      bevelSegments: steps,
+      curveSegments: 1
+    });
+    // ExtrudeGeometry grows along +z from the shape's plane; recentre so the
+    // result sits where the box it replaces sat.
+    geometry.translate(0, 0, -(d - r * 2) / 2);
+    geometry.computeVertexNormals();
+    return geometry;
+  }
+
+  var VERT = [
+    "varying vec2 vUv;",
+    "void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }"
+  ].join("\n");
+
+  var BRIGHT_FRAG = [
+    "varying vec2 vUv;",
+    "uniform sampler2D tex;",
+    "uniform float threshold; uniform float knee;",
+    "void main() {",
+    "  vec3 c = texture2D(tex, vUv).rgb;",
+    "  float l = dot(c, vec3(0.2126, 0.7152, 0.0722));",
+    // Soft knee, so a lamp edge ramps into the bloom instead of cutting.
+    "  float w = clamp((l - threshold) / max(knee, 1e-4), 0.0, 1.0);",
+    "  gl_FragColor = vec4(c * w * w, 1.0);",
+    "}"
+  ].join("\n");
+
+  var BLUR_FRAG = [
+    "varying vec2 vUv;",
+    "uniform sampler2D tex; uniform vec2 dir; uniform vec2 texel;",
+    "void main() {",
+    "  vec3 sum = texture2D(tex, vUv).rgb * 0.2270270270;",
+    "  vec2 o1 = dir * texel * 1.3846153846;",
+    "  vec2 o2 = dir * texel * 3.2307692308;",
+    "  sum += (texture2D(tex, vUv + o1).rgb + texture2D(tex, vUv - o1).rgb) * 0.3162162162;",
+    "  sum += (texture2D(tex, vUv + o2).rgb + texture2D(tex, vUv - o2).rgb) * 0.0702702703;",
+    "  gl_FragColor = vec4(sum, 1.0);",
+    "}"
+  ].join("\n");
+
+  /* Screen-space ambient occlusion.
+   *
+   * The one cue these scenes were missing that no amount of lamp tuning
+   * supplies: where two surfaces meet, less of the sky reaches the crease, so
+   * it is darker. Without it a wheel sits on the road like a sticker and a
+   * post meets the ground with a visible seam of nothing. It is computed from
+   * depth alone — no normal buffer — by reconstructing view position and
+   * taking the plane through it, which is enough at this contact scale and
+   * costs one extra geometry pass instead of two.
+   */
+  var AO_FRAG = [
+    "varying vec2 vUv;",
+    "uniform sampler2D depthTex;",
+    "uniform vec2 texel;",
+    "uniform mat4 projection; uniform mat4 inverseProjection;",
+    "uniform float near; uniform float far;",
+    "uniform float radius; uniform float bias; uniform float intensity;",
+    // three packs depth into RGBA so this works without a depth-texture
+    // extension, and so it keeps working on the multisampled colour target.
+    "const float UnpackDownscale = 255.0 / 256.0;",
+    "const vec3 PackFactors = vec3(256.0 * 256.0 * 256.0, 256.0 * 256.0, 256.0);",
+    "const vec4 UnpackFactors = UnpackDownscale / vec4(PackFactors, 1.0);",
+    "float unpackDepth(const in vec4 v) { return dot(v, UnpackFactors); }",
+    "float viewZ(float d) { return (near * far) / ((far - near) * d - far); }",
+    // Depth at the far plane is the background: it has no surface and must not
+    // occlude anything, or every silhouette grows a dark halo.
+    "bool isBackground(float d) { return d >= 0.9999; }",
+    "vec3 viewPos(vec2 uv, float d) {",
+    "  vec4 clip = vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);",
+    "  vec4 view = inverseProjection * clip;",
+    "  return view.xyz / view.w;",
+    "}",
+    "float hash(vec2 p) {",
+    "  vec3 p3 = fract(vec3(p.xyx) * 0.1031);",
+    "  p3 += dot(p3, p3.yzx + 33.33);",
+    "  return fract((p3.x + p3.y) * p3.z);",
+    "}",
+    "void main() {",
+    "  float d = unpackDepth(texture2D(depthTex, vUv));",
+    "  if (isBackground(d)) { gl_FragColor = vec4(1.0); return; }",
+    "  vec3 origin = viewPos(vUv, d);",
+    // The surface plane from screen-space derivatives. Cheaper and steadier
+    // than a normal buffer, and at contact scale the difference does not show.
+    "  vec3 normal = normalize(cross(dFdx(origin), dFdy(origin)));",
+    "  float angle = hash(vUv * 1024.0) * 6.2831853;",
+    "  float occlusion = 0.0;",
+    "  const int SAMPLES = 12;",
+    "  for (int i = 0; i < SAMPLES; i++) {",
+    "    float step = (float(i) + 0.5) / float(SAMPLES);",
+    // A spiral, so twelve taps cover the disc evenly instead of clumping.
+    "    float a = angle + step * 6.2831853 * 3.0;",
+    "    float r = radius * sqrt(step);",
+    "    vec3 offset = vec3(cos(a) * r, sin(a) * r, 0.0);",
+    "    if (dot(offset, normal) < 0.0) offset = -offset;",
+    "    vec3 samplePos = origin + offset + normal * bias;",
+    "    vec4 clip = projection * vec4(samplePos, 1.0);",
+    "    vec2 sampleUv = (clip.xy / clip.w) * 0.5 + 0.5;",
+    "    if (sampleUv.x < 0.0 || sampleUv.x > 1.0 || sampleUv.y < 0.0 || sampleUv.y > 1.0) continue;",
+    "    float sceneD = unpackDepth(texture2D(depthTex, sampleUv));",
+    "    if (isBackground(sceneD)) continue;",
+    "    float sceneZ = viewZ(sceneD);",
+    "    float delta = sceneZ - samplePos.z;",
+    // A surface far in front of the sample is a different object, not a
+    // crease; without this an foreground edge darkens the wall behind it.
+    "    float rangeFade = smoothstep(0.0, 1.0, radius / max(abs(delta), 1e-4));",
+    "    if (delta > bias) occlusion += rangeFade;",
+    "  }",
+    "  float ao = 1.0 - (occlusion / float(SAMPLES)) * intensity;",
+    "  gl_FragColor = vec4(vec3(clamp(ao, 0.0, 1.0)), 1.0);",
+    "}"
+  ].join("\n");
+
+  var COMPOSITE_FRAG = [
+    "varying vec2 vUv;",
+    "uniform sampler2D tex; uniform sampler2D bloom;",
+    "uniform sampler2D ao; uniform float aoStrength;",
+    "uniform float bloomStrength; uniform float exposure; uniform float time;",
+    "uniform float grain; uniform float aberration; uniform float sharpen;",
+    "uniform vec2 texel;",
+    // Narkowicz's ACES fit: holds highlights without Reinhard's flat white
+    // clip, and keeps warm lamps warm.
+    "vec3 aces(vec3 x) {",
+    "  const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;",
+    "  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);",
+    "}",
+    // A sin-based hash bands badly on software GL. This one does not.
+    "float hash(vec2 p) {",
+    "  vec3 p3 = fract(vec3(p.xyx) * 0.1031);",
+    "  p3 += dot(p3, p3.yzx + 33.33);",
+    "  return fract((p3.x + p3.y) * p3.z);",
+    "}",
+    "void main() {",
+    "  vec2 d = vUv - 0.5;",
+    "  float r2 = dot(d, d);",
+    "  vec2 off = d * r2 * aberration * 4.0;",
+    "  vec3 col;",
+    "  col.r = texture2D(tex, vUv + off).r;",
+    "  col.g = texture2D(tex, vUv).g;",
+    "  col.b = texture2D(tex, vUv - off).b;",
+    /* Unsharp mask, before tone mapping. The composite resamples a half-float
+       target through several passes and the result reads a touch soft; this
+       puts back the edge contrast that costs, without the ringing a large
+       radius would add. */
+    "  if (sharpen > 0.0) {",
+    "    vec3 blurred = (",
+    "      texture2D(tex, vUv + vec2(texel.x, 0.0)).rgb +",
+    "      texture2D(tex, vUv - vec2(texel.x, 0.0)).rgb +",
+    "      texture2D(tex, vUv + vec2(0.0, texel.y)).rgb +",
+    "      texture2D(tex, vUv - vec2(0.0, texel.y)).rgb) * 0.25;",
+    "    col += (col - blurred) * sharpen;",
+    "  }",
+    /* Occlusion darkens the surface, never the light. It is applied before
+       bloom is added so a lamp in a corner still blooms: a crease receives
+       less sky, but a lamp sitting in one is not itself dimmer. */
+    "  col *= mix(1.0, texture2D(ao, vUv).r, aoStrength);",
+    "  col += texture2D(bloom, vUv).rgb * bloomStrength;",
+    "  col *= exposure;",
+    "  col = aces(col);",
+    "  col *= smoothstep(0.92, 0.18, r2);",
+    "  float g = hash(vUv * 1024.0 + fract(time) * 137.0) - 0.5;",
+    "  float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));",
+    "  g *= 0.15 + 0.85 * smoothstep(0.0, 0.35, luma);",
+    "  col += g * grain;",
+    "  col = pow(max(col, 0.0), vec3(1.0 / 2.2));",
+    "  gl_FragColor = vec4(col, 1.0);",
+    "}"
+  ].join("\n");
+
+  /**
+   * Build the renderer, the scene, the camera and the post stack.
+   *
+   * @param {Object} options
+   * @param {HTMLCanvasElement} options.canvas  Canvas to render into.
+   * @param {HTMLElement} options.stage         Element whose size the canvas follows.
+   * @param {number} [options.exposure]         Composite exposure. Real lumens
+   *   blow out instantly, so this is how the camera stops down.
+   * @returns {Object|null} The core, or null when WebGL is unavailable.
+   */
+  function createCore(options) {
+    var canvas = options.canvas;
+    var stage = options.stage;
+    var renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        // A thumbnail is copied out of the canvas after the frame is drawn,
+        // which needs the buffer to survive the draw call.
+        preserveDrawingBuffer: !!options.preserveDrawingBuffer
+      });
+    } catch (e) {
+      return null;
+    }
+
+    /* Draw at the display's own density, up to 2. The cap was 1.75, which on
+       a 2x display renders below the panel and then scales up — the one thing
+       guaranteed to look soft no matter what else is fixed. Past 2 the cost
+       grows with the square and nobody can see it. */
+    renderer.setPixelRatio(Math.min(global.devicePixelRatio || 1, 2));
+    // The scene renders linear into a float buffer; tone mapping, bloom and
+    // grain all happen in the composite. three must not touch either on the way in.
+    renderer.outputEncoding = THREE.LinearEncoding;
+    renderer.toneMapping = THREE.NoToneMapping;
+    // Real inverse-square falloff with lamp power in lumens. This is what
+    // makes a dark scene dark: a 780 lm lamp cannot light the far corner.
+    renderer.physicallyCorrectLights = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    var scene = new THREE.Scene();
+    // A longer lens than a game camera: less edge stretch, which is most of
+    // what makes a render read as a photograph. near stays at 0.6 because the
+    // render target's depth buffer is only 16-bit.
+    var camera = new THREE.PerspectiveCamera(36, 16 / 9, 0.6, 90);
+
+    var quadScene = new THREE.Scene();
+    var quadCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    var quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
+    quadScene.add(quadMesh);
+
+    var brightMat = new THREE.ShaderMaterial({
+      uniforms: { tex: { value: null }, threshold: { value: 0.85 }, knee: { value: 0.45 } },
+      vertexShader: VERT, fragmentShader: BRIGHT_FRAG
+    });
+    var blurMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tex: { value: null },
+        dir: { value: new THREE.Vector2(1, 0) },
+        texel: { value: new THREE.Vector2(1, 1) }
+      },
+      vertexShader: VERT, fragmentShader: BLUR_FRAG
+    });
+    var compositeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tex: { value: null },
+        bloom: { value: null },
+        ao: { value: null },
+        aoStrength: { value: 1.0 },
+        texel: { value: new THREE.Vector2(1, 1) },
+        sharpen: { value: 0.22 },
+        bloomStrength: { value: 0.55 },
+        exposure: { value: options.exposure === undefined ? 0.155 : options.exposure },
+        time: { value: 0 },
+        grain: { value: 0.018 },
+        aberration: { value: 0.0016 }
+      },
+      vertexShader: VERT, fragmentShader: COMPOSITE_FRAG
+    });
+
+    var aoMat = new THREE.ShaderMaterial({
+      uniforms: {
+        depthTex: { value: null },
+        texel: { value: new THREE.Vector2(1, 1) },
+        projection: { value: new THREE.Matrix4() },
+        inverseProjection: { value: new THREE.Matrix4() },
+        near: { value: 0.6 },
+        far: { value: 90 },
+        // View-space units. These worlds are built at roughly one unit per
+        // board cell, so a third of a unit is the scale of a contact — a wheel
+        // on a road, a post in the ground — and not a whole-object shadow.
+        radius: { value: 0.34 },
+        bias: { value: 0.022 },
+        intensity: { value: 0.85 }
+      },
+      vertexShader: VERT, fragmentShader: AO_FRAG,
+      // The surface plane comes from screen-space derivatives, which are core
+      // in WebGL 2 and an extension in WebGL 1.
+      extensions: { derivatives: true }
+    });
+
+    /* Depth is rendered as a separate pass with an override material rather
+       than read back from the scene target. The scene target is multisampled
+       now, and a multisampled depth attachment cannot be sampled as a texture;
+       packing depth into an ordinary colour target sidesteps that and works on
+       WebGL 1 too. These worlds are a few hundred objects, so a second pass
+       over them is cheaper than the bandwidth of resolving depth would be. */
+    var depthMat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+
+    var sceneRT = null, brightRT = null, blurA = null, blurB = null;
+    var depthRT = null, aoRT = null, aoBlur = null;
+
+    function makeTargets(w, h) {
+      [sceneRT, brightRT, blurA, blurB].forEach(function (rt) { if (rt) rt.dispose(); });
+      var opts = {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+        // Lamps go far above 1.0 and the bright pass needs that range.
+        type: THREE.HalfFloatType,
+        encoding: THREE.LinearEncoding,
+        depthBuffer: true,
+        stencilBuffer: false
+      };
+      /* Multisampled, where the context allows it. `antialias: true` on the
+         renderer only ever applied to the default framebuffer, and the scene
+         has never been drawn there — it is drawn into this target and then
+         composited from it as a texture. So the renderer's antialiasing was
+         silently doing nothing, and every edge in every scene was drawn
+         hard-aliased. WebGL 1 has no multisampled target, so it keeps the
+         plain one and keeps the jaggies rather than losing the picture. */
+      sceneRT = renderer.capabilities.isWebGL2 && THREE.WebGLMultisampleRenderTarget
+        ? new THREE.WebGLMultisampleRenderTarget(w, h, opts)
+        : new THREE.WebGLRenderTarget(w, h, opts);
+      if (sceneRT.samples !== undefined) sceneRT.samples = MSAA_SAMPLES;
+      var bw = Math.max(2, Math.floor(w / 2)), bh = Math.max(2, Math.floor(h / 2));
+      var half = Object.assign({}, opts, { depthBuffer: false });
+      brightRT = new THREE.WebGLRenderTarget(bw, bh, half);
+      blurA = new THREE.WebGLRenderTarget(bw, bh, half);
+      blurB = new THREE.WebGLRenderTarget(bw, bh, half);
+      blurMat.uniforms.texel.value.set(1 / bw, 1 / bh);
+
+      [depthRT, aoRT, aoBlur].forEach(function (rt) { if (rt) rt.dispose(); });
+      /* Depth is packed into eight-bit channels, so this target is a plain
+         byte target and must not be filtered: interpolating between two packed
+         depths produces a depth that is neither. */
+      depthRT = new THREE.WebGLRenderTarget(w, h, {
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
+        depthBuffer: true,
+        stencilBuffer: false
+      });
+      // Occlusion is low-frequency, so it is computed at half resolution and
+      // blurred; at full resolution it costs four times as much to look the same.
+      var ao = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat, type: THREE.UnsignedByteType, depthBuffer: false };
+      aoRT = new THREE.WebGLRenderTarget(bw, bh, ao);
+      aoBlur = new THREE.WebGLRenderTarget(bw, bh, ao);
+      aoMat.uniforms.texel.value.set(1 / w, 1 / h);
+      compositeMat.uniforms.texel.value.set(1 / w, 1 / h);
+    }
+
+    /* Objects the depth pass must not draw.
+     *
+     * An override material replaces every material, so a belief cloud, a light
+     * beam or a range ring — all additive, none of them solid — would be
+     * written into depth as if it were a wall, and the occlusion would then
+     * darken whatever was behind it. These are the things a viewer draws to
+     * show information rather than matter, and none of them occludes anything.
+     */
+    function occludesLight(object) {
+      if (object.isPoints || object.isLine || object.isSprite) return false;
+      var material = object.material;
+      if (!material) return true;
+      if (Array.isArray(material)) material = material[0];
+      return !(material.transparent || material.blending === THREE.AdditiveBlending);
+    }
+
+    var hidden = [];
+    function renderDepth() {
+      hidden.length = 0;
+      scene.traverse(function (object) {
+        if ((object.isMesh || object.isPoints || object.isLine || object.isSprite)
+          && object.visible && !occludesLight(object)) {
+          object.visible = false;
+          hidden.push(object);
+        }
+      });
+      scene.overrideMaterial = depthMat;
+      renderer.setRenderTarget(depthRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+      scene.overrideMaterial = null;
+      for (var i = 0; i < hidden.length; i++) hidden[i].visible = true;
+    }
+
+    function blit(material, target) {
+      quadMesh.material = material;
+      renderer.setRenderTarget(target || null);
+      renderer.clear();
+      renderer.render(quadScene, quadCam);
+    }
+
+    function renderComposite(elapsed) {
+      renderer.setRenderTarget(sceneRT);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      if (compositeMat.uniforms.aoStrength.value > 0) {
+        renderDepth();
+        aoMat.uniforms.depthTex.value = depthRT.texture;
+        aoMat.uniforms.near.value = camera.near;
+        aoMat.uniforms.far.value = camera.far;
+        aoMat.uniforms.projection.value.copy(camera.projectionMatrix);
+        aoMat.uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse);
+        blit(aoMat, aoRT);
+        // Twelve taps are noisy on their own; the blur is what turns them into
+        // a shadow rather than a stipple.
+        blurMat.uniforms.tex.value = aoRT.texture;
+        blurMat.uniforms.dir.value.set(1, 0);
+        blit(blurMat, aoBlur);
+        blurMat.uniforms.tex.value = aoBlur.texture;
+        blurMat.uniforms.dir.value.set(0, 1);
+        blit(blurMat, aoRT);
+        compositeMat.uniforms.ao.value = aoRT.texture;
+      }
+
+      brightMat.uniforms.tex.value = sceneRT.texture;
+      blit(brightMat, brightRT);
+
+      var src = brightRT;
+      for (var i = 0; i < 2; i++) {
+        blurMat.uniforms.tex.value = src.texture;
+        blurMat.uniforms.dir.value.set(1, 0);
+        blit(blurMat, blurA);
+        blurMat.uniforms.tex.value = blurA.texture;
+        blurMat.uniforms.dir.value.set(0, 1);
+        blit(blurMat, blurB);
+        src = blurB;
+      }
+
+      compositeMat.uniforms.tex.value = sceneRT.texture;
+      compositeMat.uniforms.bloom.value = blurB.texture;
+      compositeMat.uniforms.time.value = elapsed;
+      blit(compositeMat, null);
+    }
+
+    function resize() {
+      var w = stage.clientWidth, h = stage.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      var pr = renderer.getPixelRatio();
+      makeTargets(Math.floor(w * pr), Math.floor(h * pr));
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    }
+
+    /* Whether this mesh's box can be swapped for a rounded one.
+     *
+     * The rounded box is an extrusion, and an extrusion's UVs are not a box's,
+     * so anything carrying a texture keeps its sharp edges rather than having
+     * its map rearranged. Everything else — the painted props these scenes are
+     * mostly built from — is safe, because a solid colour does not care how
+     * the surface is parameterised.
+     */
+    function canRound(mesh) {
+      var geometry = mesh.geometry;
+      if (!geometry || geometry.type !== "BoxGeometry" || !geometry.parameters) return false;
+      var p = geometry.parameters;
+      if (!p.width || !p.height || !p.depth) return false;
+      var mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      // A multi-material box assigns one material per face by index, which the
+      // extrusion's groups do not reproduce.
+      if (mats.length !== 1) return false;
+      var m = mats[0];
+      if (!m) return false;
+      return !(m.map || m.normalMap || m.aoMap || m.roughnessMap || m.metalnessMap ||
+        m.emissiveMap || m.alphaMap || m.bumpMap || m.displacementMap);
+    }
+
+    /* Colour space, and the edges.
+     *
+     * Every scene calls this once after it has finished building, which makes
+     * it the one place that can improve all of them without eighteen separate
+     * edits.
+     *
+     * Colour: every PBR surface is written with an sRGB hex, which is how a
+     * person reads a colour, but the shader needs linear. Emitters are skipped
+     * on purpose — their colours are already above 1.0 and are radiance, not
+     * paint.
+     *
+     * Edges: every untextured box gets its edges rounded. Nothing real has a
+     * zero-radius edge, and the eye reads one as unreal before it reads
+     * anything else: a sharp edge catches no highlight, so a box under a lamp
+     * is a flat shape with a hard seam. The outer dimensions are unchanged, so
+     * nothing moves or resizes; only the corner catches light now.
+     */
+    function linearize() {
+      scene.traverse(function (obj) {
+        var mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : [];
+        mats.forEach(function (m) {
+          if (!m || m.__linearized || !m.isMeshStandardMaterial) return;
+          m.__linearized = true;
+          if (m.color) m.color.convertSRGBToLinear();
+          if (m.emissive) m.emissive.convertSRGBToLinear();
+        });
+
+        if (obj.isMesh && !obj.geometry.__rounded && canRound(obj)) {
+          var p = obj.geometry.parameters;
+          var rounded = roundedBox(p.width, p.height, p.depth);
+          rounded.__rounded = true;
+          obj.geometry.dispose();
+          obj.geometry = rounded;
+        }
+      });
+    }
+
+    /* A night sky to reflect. Without an environment map, PBR metal has
+       nothing to mirror and reads as flat grey plastic. */
+    function buildNightEnvironment(stops) {
+      var cv = document.createElement("canvas");
+      cv.width = 256; cv.height = 128;
+      var g = cv.getContext("2d");
+      var grad = g.createLinearGradient(0, 0, 0, 128);
+      (stops || [[0.0, "#0A1020"], [0.45, "#141A28"], [0.55, "#2A2418"], [1.0, "#060505"]])
+        .forEach(function (s) { grad.addColorStop(s[0], s[1]); });
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 256, 128);
+      var rnd = mulberry(99);
+      for (var i = 0; i < 260; i++) {
+        g.fillStyle = "rgba(200,214,255," + (0.2 + rnd() * 0.7).toFixed(2) + ")";
+        g.fillRect(rnd() * 256, rnd() * 58, 1, 1);
+      }
+      var tex = new THREE.CanvasTexture(cv);
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.encoding = THREE.sRGBEncoding;
+      var pmrem = new THREE.PMREMGenerator(renderer);
+      pmrem.compileEquirectangularShader();
+      scene.environment = pmrem.fromEquirectangular(tex).texture;
+      pmrem.dispose();
+      tex.dispose();
+    }
+
+    return {
+      THREE: THREE,
+      renderer: renderer,
+      scene: scene,
+      camera: camera,
+      composite: compositeMat,
+      // Exposed for the same reason `composite` is: a scene may need to tune
+      // the contact scale to its own world, or switch occlusion off for a
+      // world that is all flat board and has no contacts to darken.
+      ao: aoMat,
+      renderComposite: renderComposite,
+      resize: resize,
+      linearize: linearize,
+      buildNightEnvironment: buildNightEnvironment
+    };
+  }
+
+  /**
+   * The camera rig: Board / Top-down / Chase / Orbit, plus drag and wheel.
+   *
+   * @param {Object} core     A core from createCore.
+   * @param {HTMLElement} canvas
+   * @param {Object} [config] Board and top-down distances, in world units.
+   */
+  function createCameraRig(core, canvas, config) {
+    var THREE = core.THREE;
+    var cfg = config || {};
+    var boardPos = cfg.board || [0, 12.9, 11.8];
+    var topPos = cfg.top || [0, 16.0, 0.01];
+    var state = { mode: "board", orbit: { theta: 0, phi: 0.83, dist: 15.6 } };
+    var camPos = new THREE.Vector3(boardPos[0], boardPos[1], boardPos[2]);
+    var camLook = new THREE.Vector3(0, 0, 0);
+    var tmp = new THREE.Vector3();
+
+    function boardCamera() {
+      // The 36 mm lens needs more distance when the stage is taller than wide.
+      var k = core.camera.aspect < 1 ? 1.34 : 1.0;
+      return new THREE.Vector3(boardPos[0], boardPos[1] * k, boardPos[2] * k);
+    }
+    function topCamera() {
+      var k = core.camera.aspect < 1 ? 1.3 : 1.0;
+      return new THREE.Vector3(topPos[0], topPos[1] * k, topPos[2]);
+    }
+
+    var dragging = false, lastX = 0, lastY = 0;
+    canvas.addEventListener("pointerdown", function (e) {
+      dragging = true; lastX = e.clientX; lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+      // Grabbing the scene is a request to orbit it.
+      if (state.mode !== "orbit") rig.setMode("orbit");
+    });
+    canvas.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      state.orbit.theta -= (e.clientX - lastX) * 0.006;
+      state.orbit.phi = clamp(state.orbit.phi + (e.clientY - lastY) * 0.005, 0.16, 1.45);
+      lastX = e.clientX; lastY = e.clientY;
+    });
+    canvas.addEventListener("pointerup", function (e) {
+      dragging = false;
+      if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    });
+    canvas.addEventListener("wheel", function (e) {
+      if (state.mode !== "orbit") return;
+      e.preventDefault();
+      state.orbit.dist = clamp(state.orbit.dist + e.deltaY * 0.012, 5, 26);
+    }, { passive: false });
+
+    var rig = {
+      state: state,
+      setMode: function (mode) {
+        state.mode = mode;
+        if (rig.onModeChange) rig.onModeChange(mode);
+      },
+      /**
+       * Move the camera one frame.
+       * @param {number} dt      Seconds since the last frame.
+       * @param {Object} follow  {x, z, heading} of whatever chase follows.
+       */
+      update: function (dt, follow) {
+        /* A scene may own a mode outright. Three environments needed this and
+           each reached for a different workaround — one wrapped this factory,
+           one wrapped renderComposite — because a vertical playfield, a
+           two-body contact shot and a multi-agent crew chase cannot be
+           expressed by a single followed point at a fixed standoff. A scene
+           passes `modes: {chase: fn}` and owns that mode; everything it does
+           not name stays the rig's. */
+        var own = cfg.modes && cfg.modes[state.mode];
+        if (own) {
+          own({ dt: dt, follow: follow, camera: core.camera, pos: camPos, look: camLook, THREE: THREE });
+          core.camera.position.copy(camPos);
+          core.camera.lookAt(camLook);
+          return;
+        }
+        if (state.mode === "board") {
+          camPos.lerp(boardCamera(), clamp(dt * 3, 0, 1));
+          camLook.lerp(new THREE.Vector3(0, 0.3, 0), clamp(dt * 3, 0, 1));
+        } else if (state.mode === "overhead") {
+          camPos.lerp(topCamera(), clamp(dt * 3, 0, 1));
+          camLook.lerp(new THREE.Vector3(0, 0, 0), clamp(dt * 3, 0, 1));
+        } else if (state.mode === "chase" && follow) {
+          tmp.set(Math.cos(follow.heading), 0, Math.sin(follow.heading));
+          // A scene that knows its own scale may set these; 2.9 / 1.75 suits a
+          // single body on a board this size and stays the default.
+          var back = follow.distance === undefined ? 2.9 : follow.distance;
+          var high = follow.height === undefined ? 1.75 : follow.height;
+          camPos.lerp(
+            new THREE.Vector3(follow.x - tmp.x * back, high, follow.z - tmp.z * back),
+            clamp(dt * 3.2, 0, 1)
+          );
+          camLook.lerp(
+            new THREE.Vector3(follow.x + tmp.x * 1.6, 0.35, follow.z + tmp.z * 1.6),
+            clamp(dt * 4.5, 0, 1)
+          );
+        } else {
+          var o = state.orbit;
+          camPos.lerp(new THREE.Vector3(
+            Math.sin(o.theta) * Math.cos(o.phi) * o.dist,
+            Math.sin(o.phi) * o.dist,
+            Math.cos(o.theta) * Math.cos(o.phi) * o.dist
+          ), clamp(dt * 4, 0, 1));
+          camLook.lerp(new THREE.Vector3(0, 0.4, 0), clamp(dt * 4, 0, 1));
+        }
+        core.camera.position.copy(camPos);
+        core.camera.lookAt(camLook);
+      }
+    };
+    return rig;
+  }
+
+  /**
+   * The playback clock.
+   *
+   * It owns `t`, a continuous step index, and the transport state. It does not
+   * own the scene: every frame it hands `t` back to `onFrame`. Note that it
+   * always drives a requestAnimationFrame loop — a viewer that only renders on
+   * demand looks perfect in a still and ships frozen.
+   *
+   * @param {Object} options
+   * @param {number} options.steps        Number of steps in the trace.
+   * @param {Function} options.onFrame    (t, dt, elapsed) => void
+   * @param {number} [options.stepsPerSecond]
+   */
+  function createPlayer(options) {
+    var reduceMotion = global.matchMedia
+      ? global.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false;
+    var state = {
+      t: 0,
+      steps: options.steps,
+      playing: !reduceMotion,
+      speed: 1,
+      rate: options.stepsPerSecond || 1.6
+    };
+    var last = (global.performance || Date).now();
+    var running = false;
+
+    function frame(now) {
+      /* Floored at zero as well as capped. `last` is seeded from now() while
+         this script is still running, but requestAnimationFrame reports the
+         time its frame BEGAN, which on a page that spent a second building a
+         scene is earlier — a measured first dt of -0.82 s. A negative dt drives
+         state.t below zero, and a scene that indexes a step directly then reads
+         steps[-1] and throws, killing the loop on frame one. */
+      var dt = Math.min(Math.max((now - last) / 1000, 0), 0.05);
+      last = now;
+      var elapsed = now / 1000;
+      if (state.playing && state.steps > 1) {
+        state.t += dt * state.rate * state.speed;
+        if (state.t < 0) state.t = 0;      // belt and braces: never index below zero
+        if (state.t >= state.steps - 1) {
+          state.t = state.steps - 1;
+          state.playing = false;
+          if (player.onEnd) player.onEnd();
+        }
+      }
+      options.onFrame(state.t, dt, elapsed);
+      global.requestAnimationFrame(frame);
+    }
+
+    var player = {
+      state: state,
+      play: function () {
+        if (state.t >= state.steps - 1) state.t = 0;
+        state.playing = true;
+      },
+      pause: function () { state.playing = false; },
+      toggle: function () { if (state.playing) player.pause(); else player.play(); },
+      seek: function (t) { state.t = clamp(t, 0, state.steps - 1); },
+      setSpeed: function (speed) { state.speed = speed; },
+      start: function () {
+        if (running) return;
+        running = true;
+        last = (global.performance || Date).now();
+        global.requestAnimationFrame(frame);
+      },
+      reduceMotion: reduceMotion
+    };
+    return player;
+  }
+
+  /* A lumpy puff: overlapping soft blobs, so a sprite reads as smoke rather
+     than as a disc. Seeded, so every page draws the same puff. */
+  function smokeTexture() {
+    var s = 128;
+    var cv = document.createElement("canvas");
+    cv.width = cv.height = s;
+    var g = cv.getContext("2d");
+    var rnd = mulberry(4093);
+    for (var i = 0; i < 9; i++) {
+      var a = rnd() * Math.PI * 2, d = rnd() * s * 0.16;
+      var x = s / 2 + Math.cos(a) * d, y = s / 2 + Math.sin(a) * d;
+      var r = s * (0.20 + rnd() * 0.16);
+      var grad = g.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, "rgba(255,255,255,0.42)");
+      grad.addColorStop(0.55, "rgba(255,255,255,0.16)");
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, s, s);
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+
+  /**
+   * Smoke pouring off a wrecked body: soft puffs that rise, swell and thin
+   * out, and a few embers flickering where it comes from.
+   *
+   * Every puff is a pure function of the wall clock, so the plume needs no
+   * per-frame state, looks the same however the replay is scrubbed, and keeps
+   * rising after the player stops on the final frame — which is exactly when
+   * it is on screen.
+   *
+   * The composite multiplies the whole frame by the scene's exposure, and a
+   * sprite is unlit, so its colour is given in display terms and divided by
+   * the exposure here; the same grey then reads the same in every scene.
+   *
+   * @param {Object} options
+   * @param {number} options.exposure   The scene's composite exposure.
+   * @param {number} [options.scale]    World size of the plume, 1 at a ~0.6 m body.
+   * @param {number} [options.base]     Height the smoke leaves the body at.
+   * @param {number} [options.tone]     Smoke brightness, 1 for a night scene;
+   *   lower it on a bright floor, where pale smoke would vanish into the ground.
+   * @param {number} [options.seed]
+   * @returns {{group: THREE.Group, update: function(number, number)}}
+   *   Add `group` to the scene and move it onto the body each frame; call
+   *   `update(elapsed, intensity)` with intensity 0 (no smoke) to 1 (full plume).
+   */
+  function createSmoke(options) {
+    var exposure = options.exposure;
+    var scale = options.scale || 1;
+    var base = options.base === undefined ? 0.4 : options.base;
+    var COUNT = 34, EMBERS = 7, LIFE = 3.4;
+    var rnd = mulberry(options.seed || 9071);
+    var group = new THREE.Group();
+    group.visible = false;
+
+    var puffTex = smokeTexture();
+    var tone = options.tone || 1;
+    var soot = new THREE.Color(0.10, 0.095, 0.09).multiplyScalar(tone / exposure);
+    var ash = new THREE.Color(0.42, 0.41, 0.40).multiplyScalar(tone / exposure);
+    var puffs = [];
+    for (var i = 0; i < COUNT; i++) {
+      var mat = new THREE.SpriteMaterial({
+        map: puffTex, color: soot.clone(), transparent: true, opacity: 0,
+        depthWrite: false, fog: false
+      });
+      var sprite = new THREE.Sprite(mat);
+      sprite.renderOrder = 5;
+      group.add(sprite);
+      puffs.push({
+        sprite: sprite, phase: i / COUNT + rnd() * 0.03, angle: rnd() * Math.PI * 2,
+        swirl: 0.6 + rnd() * 1.2, spin: (rnd() - 0.5) * 0.8, size: 0.75 + rnd() * 0.5
+      });
+    }
+
+    var emberTex = radialTexture(1, 0.3);
+    var embers = [];
+    for (var e = 0; e < EMBERS; e++) {
+      var em = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: emberTex, color: new THREE.Color(1.0, 0.36, 0.08).multiplyScalar(1.6 / exposure),
+        transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false
+      }));
+      em.scale.setScalar(0.07 * scale);
+      group.add(em);
+      embers.push({
+        sprite: em, x: (rnd() - 0.5) * 0.36, z: (rnd() - 0.5) * 0.30,
+        y: 0.12 + rnd() * 0.22, rate: 7 + rnd() * 9, phase: rnd() * 6.3
+      });
+    }
+
+    function update(elapsed, intensity) {
+      if (!(intensity > 0.001)) { group.visible = false; return; }
+      group.visible = true;
+      for (var i = 0; i < puffs.length; i++) {
+        var p = puffs[i];
+        var age = (elapsed / LIFE + p.phase) % 1;
+        // Rises fast off the body and slows as it cools; swirls and leans downwind.
+        var rise = 1 - (1 - age) * (1 - age);
+        var radius = (0.06 + 0.42 * age) * scale;
+        var a = p.angle + age * p.swirl * 2.4;
+        p.sprite.position.set(
+          Math.cos(a) * radius + 0.55 * age * age * scale,
+          base + 2.1 * rise * scale,
+          Math.sin(a) * radius * 0.8 + 0.2 * age * age * scale
+        );
+        p.sprite.scale.setScalar((0.22 + 1.05 * age) * p.size * scale);
+        // Thick and sooty at the source, thinning to pale ash as it spreads.
+        var fadeIn = Math.min(1, age / 0.08);
+        p.sprite.material.opacity = intensity * 0.85 * fadeIn * Math.pow(1 - age, 1.25);
+        p.sprite.material.color.copy(soot).lerp(ash, Math.min(1, age * 1.6));
+        p.sprite.material.rotation = p.phase * 6.28 + elapsed * p.spin;
+      }
+      for (var k = 0; k < embers.length; k++) {
+        var m = embers[k];
+        var flick = 0.5 + 0.5 * Math.sin(elapsed * m.rate + m.phase);
+        m.sprite.position.set(m.x * scale, m.y * scale, m.z * scale);
+        m.sprite.material.opacity = intensity * flick * flick;
+      }
+    }
+
+    return { group: group, update: update };
+  }
+
+  global.POMDPViewer = {
+    clamp: clamp,
+    lerp: lerp,
+    mulberry: mulberry,
+    roundedBox: roundedBox,
+    radialTexture: radialTexture,
+    normalMapFrom: normalMapFrom,
+    createCore: createCore,
+    createCameraRig: createCameraRig,
+    createPlayer: createPlayer,
+    createSmoke: createSmoke,
+    scenes: {}
+  };
+})(window);

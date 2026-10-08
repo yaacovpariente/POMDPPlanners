@@ -1,0 +1,561 @@
+Chicheck Invaders
+=================
+
+.. episode-viewer:: traces/chicheck_invaders.json
+
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+``ChicheckInvadersPOMDP`` is an arcade shooter written as a POMDP. A ship on row 0
+of a grid has to clear a flock of chickens before one of them reaches it.
+
+Each chicken is either patrolling or diving, and which it is stays hidden. Two
+noisy sensors each report only half of a chicken's position, so the ship has to
+aim, move and decide when to shoot from a belief about where the flock is and
+which birds are about to dive.
+
+What the agent sees and does
+----------------------------
+
+- **State** — one ``float64`` vector of length ``4 + 5 * num_chickens``: step,
+  ship column, cooldown, ship-hit flag, then ``(column, row, direction, mode,
+  alive)`` per chicken, with direction ``-1``/``+1`` and mode ``0`` patrol or
+  ``1`` dive. Length 24 at the defaults.
+- **Actions** (discrete) — the ints ``0`` stay, ``1`` left, ``2`` right,
+  ``3`` fire.
+- **Observations** (discrete) — one ``float64`` vector of length
+  ``1 + 5 * num_chickens``: a noisy reading of the ship's column, then
+  ``(camera reported, camera offset, radar reported, radar rows, radar drop)``
+  per chicken. Every value is an integer; masked fields are ``0.0``. With
+  ``observation_mode="full"`` the observation is the state.
+
+Formal definition
+-----------------
+
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
+\rangle`.
+
+**State space.** The field has :math:`W` = ``num_columns`` columns and
+:math:`H` = ``num_rows`` rows; row :math:`0` is the ship's row and rows count
+upward. There are :math:`N` = ``num_chickens`` chickens. The state is the
+ship's block, then one fixed slot per chicken — dead slots are carried for
+the whole episode, so the vector length never changes:
+
+.. math::
+
+   s = \big(t,\; x,\; \text{cool},\; \mathrm{hit},\;
+   (u_i,\, v_i,\, d_i,\, \text{mode}_i,\, \text{alive}_i)_{i=1}^{N}\big)
+
+.. math::
+
+   S = \;&\mathbb{Z}_{\geq 0} \times \{0..W{-}1\} \times \mathbb{Z}_{\geq 0}
+   \times \{0,1\} \\
+   &\times \big(\{0..W{-}1\} \times \{0..H{-}1\} \times \{-1, +1\}
+   \times \{\textsf{patrol}, \textsf{dive}\} \times \{0,1\}\big)^{N}
+
+with:
+
+- :math:`t` the step count;
+- :math:`x` the ship column;
+- :math:`\text{cool}` the steps left before the gun can fire again;
+- :math:`\mathrm{hit} = 1` once the ship is destroyed;
+- :math:`u_i, v_i` chicken :math:`i`'s column and row;
+- :math:`d_i` its patrol direction (:math:`-1` toward lower columns,
+  :math:`+1` toward higher);
+- :math:`\text{mode}_i` whether it patrols or dives;
+- :math:`\text{alive}_i = 1` while it is alive.
+
+**Action space**
+
+.. math::
+
+   A = \{\textsf{stay},\; \textsf{left},\; \textsf{right},\; \textsf{fire}\}
+     = \{0, 1, 2, 3\}
+
+- :math:`0` stay — the ship holds its column;
+- :math:`1` left — the ship moves one column down, :math:`x - 1`, clamped at
+  the wall;
+- :math:`2` right — the ship moves one column up, :math:`x + 1`, clamped at
+  the wall;
+- :math:`3` fire — the ship shoots straight up its column if the gun is
+  ready; otherwise it does what stay does.
+
+**Observation space.** In ``ObservationMode.FULL`` the observation is the
+state, :math:`Z = S`, and the problem is an MDP. In the default
+``ObservationMode.PARTIAL`` every reading is an integer, and a masked field
+reads :math:`0`:
+
+.. math::
+
+   Z = \mathbb{Z} \times \big(\{0,1\} \times \mathbb{Z} \times \{0,1\}
+   \times \mathbb{Z} \times \{-1, 0\}\big)^{N}
+
+with these components, in order:
+
+- :math:`\hat x` — a noisy reading of the ship's column;
+- per chicken :math:`i`:
+
+  - :math:`c_i \in \{0,1\}` — :math:`1` if the camera reported it;
+  - :math:`\hat e_i` — a noisy reading of its column minus the ship's column;
+  - :math:`r_i \in \{0,1\}` — :math:`1` if the radar reported it;
+  - :math:`\hat n_i` — a noisy reading of its row;
+  - :math:`\hat f_i \in \{-1, 0\}` — :math:`-1` if the radar reports it
+    diving, :math:`0` otherwise.
+
+A field whose sensor did not report reads :math:`0`.
+
+**Transition model.** One step resolves in this order:
+
+1. **Ship moves.** :math:`x' = \mathrm{clip}(x + \Delta_a,\, 0,\, W{-}1)`,
+   with :math:`\Delta = -1, +1` for left, right and :math:`0` otherwise.
+2. **Shot resolves.** The gun discharges iff :math:`a = \textsf{fire}` and
+   :math:`\text{cool} \leq 0`; the cooldown is the *only* thing that can block it.
+   A discharge is hitscan and kills
+
+   .. math::
+
+      i^\star(s) = \arg\min_{i} \{v_i : \text{alive}_i = 1,\; u_i = x',\; v_i \geq 1\}
+
+   the lowest live chicken in the ship's column (ties to the lower slot),
+   setting :math:`\text{alive}_{i^\star} \leftarrow 0`; :math:`i^\star = \emptyset` means
+   the shot misses. Then :math:`\text{cool}' = \texttt{fire\_cooldown}` if it fired,
+   else :math:`\max(\text{cool} - 1, 0)`.
+3. **Dive coins.** One Bernoulli per slot, alive or not, so the number of
+   random draws a step consumes never depends on how the episode is going:
+
+   .. math::
+
+      \Pr[\text{mode}'_i = \textsf{dive} \mid \text{mode}_i = \textsf{patrol},\, \text{alive}'_i = 1]
+      = p_d = \texttt{dive\_probability}
+
+   A dive is absorbing until the chicken pulls up. This is the only
+   stochastic part of :math:`T`.
+4. **Flock moves.** A diving chicken descends, :math:`v'_i = v_i - 1`. A
+   patrolling one walks sideways and bounces off the walls, reversing *and
+   then* stepping, so it never stands still against a wall:
+
+   .. math::
+
+      d'_i = \begin{cases}
+        -d_i & u_i + d_i \notin \{0..W{-}1\} \\
+        d_i & \text{otherwise}
+      \end{cases}, \qquad u'_i = u_i + d'_i
+
+5. **Arrivals settle.** A live chicken at :math:`v'_i = 0` in the ship's
+   column destroys it (:math:`\mathrm{hit}' = 1`); anywhere else it pulls up
+   to :math:`v'_i = H - 1` and returns to :math:`\textsf{patrol}`.
+
+Finally :math:`t' = t + 1`.
+
+**Observation model.** In the default ``ObservationMode.PARTIAL``:
+
+.. math::
+
+   o = \big(\hat{x},\;
+   (\,c_i,\, \hat{e}_i,\; r_i,\, \hat{n}_i,\, \hat{f}_i\,)_{i=1}^{N}\big)
+
+with:
+
+- :math:`c_i, r_i \in \{0,1\}` the camera and radar report flags;
+- :math:`e_i = u_i - x'` the column offset;
+- :math:`n_i = v_i` the row distance.
+
+Every numeric channel is a **rounded** Gaussian,
+
+.. math::
+
+   G_\sigma(k; m) = F_{\mathcal{N}}\!\Big(\frac{k + \tfrac{1}{2} - m}{\sigma}\Big)
+   - F_{\mathcal{N}}\!\Big(\frac{k - \tfrac{1}{2} - m}{\sigma}\Big)
+
+with :math:`F_{\mathcal{N}}` the standard normal CDF, so the readings are
+integers, not reals. The ship reads its own column as
+:math:`\hat{x} \sim G_{\sigma_x}(\cdot\,; x')`, :math:`\sigma_x` =
+``ship_column_noise_std`` — redundant evidence, since the
+ship's column is decided by its own actions, present so the observation
+reports the ship as well as the chickens.
+
+Each chicken is reported through two sensors with disjoint geometry. Dead
+chickens are inside neither reach, so a cleared slot is never reported and its
+silence has likelihood 1 rather than a sensor's miss chance:
+
+.. math::
+
+   \text{camera reach}_i &\iff \text{alive}_i = 1 \;\wedge\;
+     |e_i| \leq \texttt{camera\_slope} \cdot n_i \\
+   \text{radar reach}_i &\iff \text{alive}_i = 1 \;\wedge\;
+     e_i^2 + n_i^2 \leq \texttt{radar\_radius}^2
+
+Inside reach, each sensor fires independently with its detection probability,
+and its reading has noise:
+
+- **Camera.** Detection probability :math:`p_{\text{cam}}` =
+  ``camera_detection_probability``, noise :math:`\sigma_e` =
+  ``camera_offset_noise_std``.
+- **Radar.** Detection probability :math:`p_{\text{rad}}` =
+  ``radar_detection_probability``, noise :math:`\sigma_n` =
+  ``radar_range_noise_std``.
+
+.. math::
+
+   \Pr[c_i = 1] &= p_{\text{cam}} \cdot
+     \mathbb{1}[\text{camera reach}_i],
+     &\hat{e}_i &\sim G_{\sigma_e}(\cdot\,; e_i) \\
+   \Pr[r_i = 1] &= p_{\text{rad}} \cdot
+     \mathbb{1}[\text{radar reach}_i],
+     &\hat{n}_i &\sim G_{\sigma_n}(\cdot\,; n_i)
+
+A firing radar also returns a dropping flag, the **only** channel that reports
+the hidden mode at all, inverted with probability :math:`p_f` =
+``drop_flag_error_probability``:
+
+.. math::
+
+   \hat{f}_i = \begin{cases}
+     f_i & \text{w.p. } 1 - p_f \\
+     -1 - f_i & \text{w.p. } p_f
+   \end{cases}, \qquad
+   f_i = -\mathbb{1}[\text{mode}_i = \textsf{dive}]
+
+A silent slot (:math:`c_i = r_i = 0`) contributes its own likelihood factor —
+the probability of *not* being reported — so silence is evidence too.
+:math:`O` depends on :math:`s'` only, never on the action that produced it.
+
+**Reward function.**
+
+.. math::
+
+   R(s, a, s') = \;&-\texttt{step\_cost}
+   \;-\; \texttt{shot\_cost}\cdot\mathbb{1}[\text{gun discharged}] \\
+   &+\; \texttt{kill\_reward} \cdot (n_{\text{live}}(s) - n_{\text{live}}(s')) \\
+   &-\; \texttt{ship\_hit\_penalty} \cdot
+     \mathbb{1}[\mathrm{hit}' = 1 \wedge \mathrm{hit} = 0] \\
+   &+\; \texttt{clear\_reward} \cdot
+     \mathbb{1}[n_{\text{live}}(s') = 0 \wedge n_{\text{live}}(s) > 0]
+
+where :math:`n_{\text{live}}(s) = \sum_i \text{alive}_i` is the number of live
+chickens and the gun discharges when :math:`a = \textsf{fire}` and
+:math:`\text{cool} = 0`. A ``FIRE`` the cooldown blocks costs nothing — the gun never discharged. A
+shot into an empty column does discharge, misses, and is charged. The ship-hit
+penalty is billed on the step the ship is lost, not on every step after it:
+the flag stays set, and a driver that kept stepping a terminal state would
+otherwise charge it repeatedly.
+
+.. note::
+
+   Called without :math:`s'`, every term except the ship-hit penalty is still
+   **exact**, because a hitscan shot resolves before the dive coins are
+   flipped. The missing term is deliberately not replaced by its expectation:
+   a planner comparing actions at a belief node then sees the exact value of a
+   shot that connects, and the risk it took is charged on the step the flock
+   gets through.
+
+**Initial belief.** The ship starts centred with an empty cooldown; the flock
+is drawn uniformly without replacement from the cells above row 0, with
+independent directions and modes:
+
+.. math::
+
+   (u_i, v_i)_{i=1}^{N} &\sim \mathrm{Unif}\big(\text{$N$-subsets of }
+     \{0..W{-}1\} \times \{1..H{-}1\}\big) \\
+   d_i &\sim \mathrm{Unif}\{-1, +1\}, \qquad
+   \Pr[\text{mode}_i = \textsf{dive}] = \texttt{initial\_dive\_probability}
+
+At the default :math:`\texttt{initial\_dive\_probability} = 0` every episode
+opens with the whole flock patrolling. The opening observation is a sentinel —
+the ship's known column, every chicken slot silent — taken before any sensor
+has run, and the belief never weights particles with it.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.95`.
+
+**Terminal set.** An episode ends when:
+
+- the ship is hit;
+- every chicken is dead (:math:`n_{\text{live}}(s) = \sum_i \text{alive}_i = 0`);
+- or the step count reaches ``max_steps``:
+
+.. math::
+
+   S_T = \{s : \mathrm{hit} = 1\} \cup \{s : n_{\text{live}}(s) = 0\}
+   \cup \{s : t \geq \texttt{max\_steps}\}
+
+Dynamics
+~~~~~~~~
+
+Actions are stay, left, right and fire, in that index order. A move is clamped
+at the walls. ``FIRE`` discharges only when the cooldown has expired; otherwise
+it behaves exactly like ``STAY`` and costs nothing, because nothing left the
+ship.
+
+**The gun is hitscan.** A shot resolves inside the step that fired it, killing
+the lowest live chicken in the ship's column over rows 1 to ``num_rows - 1``, at
+unlimited range. A shot into a column with no live chicken misses and is charged
+the shot cost alone. ``fire_cooldown`` is the only rate limiter.
+
+The shot is resolved **before** the dive coins are flipped and before the flock
+moves, for this reason. The ship picks its action from an observation of where the chickens are *now*, so it
+has to be able to hit what it aimed at. An earlier version fired a bolt that
+climbed one row per step; against chickens stepping sideways every step it was
+dodged by accident rather than by any decision the flock made, so aiming
+collapsed into waiting and most shots missed for reasons the ship could not have
+reasoned about.
+
+One consequence: a chicken shot this step never gets to dive, so
+firing also removes a chicken that could have dived at the ship.
+
+A chicken is either patrolling or diving, and which it is stays hidden. A
+patrolling chicken steps one column along its direction and reverses at a wall;
+a diving chicken drops one row. Each step every surviving patrolling chicken
+switches into a dive with probability ``dive_probability``. The coin is flipped
+after the shot but *before* the chickens move, so a chicken that switches this
+step also drops this step.
+
+A chicken that reaches row 0 in the ship's column destroys it and ends the
+episode. One that reaches row 0 anywhere else **pulls up**: it goes back to
+patrolling at the top row, keeping its column and direction. That rule is an
+addition to the original design proposal, which left the case open. Without it a
+dive would either carry the chicken off the grid -- letting the flock clear
+itself and making the completion bonus free -- or park it on row 0, below the
+rows the gun covers, which is unwinnable.
+
+State and observation contract
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The state is ``[step, ship column, cooldown, ship hit, (column, row, direction,
+mode, alive) per chicken]``, so its length is ``4 + 5 * num_chickens``. A dead
+chicken keeps its slot. Nothing records a shot: a hitscan shot never survives
+the step that fired it, so there is nothing in flight for the state to carry and
+the only thing the gun leaves behind is the cooldown.
+
+An observation is ``[own-column reading, (camera reported, camera offset, radar
+reported, radar rows, radar drop) per chicken]``, of length
+``1 + 5 * num_chickens``. Every masked field is written as ``0.0``, so two
+readings that report the same things compare equal and hash alike; the two
+``reported`` flags are what separate a masked zero from a sensor reading of
+zero.
+
+The two sensors each give half an answer:
+
+* the **camera** covers a cone opening upward from the ship, with half-slope
+  ``camera_slope``. It reports a chicken's *column* offset and says nothing
+  about its row.
+* the **radar** covers a disc of radius ``radar_radius``. It reports a chicken's
+  *row* distance and whether it is dropping, and says nothing about its column.
+
+A chicken inside a sensor's reach is reported with probability
+``camera_detection_probability`` or ``radar_detection_probability``; a dead one
+or one outside the reach is never reported. Every integer reading is drawn from
+a rounded Gaussian
+
+.. math::
+
+   G_\sigma(k; m) = F_{\mathcal{N}}\!\left(\frac{k + 1/2 - m}{\sigma}\right)
+                    - F_{\mathcal{N}}\!\left(\frac{k - 1/2 - m}{\sigma}\right),
+   \qquad k \in \mathbb{Z},
+
+which is the law of ``round(m + sigma * w)``. It is not truncated at the grid
+edge, so its masses sum to one over all integers and a reading may name a column
+that does not exist. Truncating would make the normaliser depend on the hidden
+quantity being inferred and would change every likelihood ratio in the belief
+update for no gain in realism. ``sigma = 0`` collapses the law to a point mass.
+
+The likelihood multiplies in one factor for **every** chicken slot, not only the
+reported ones:
+
+.. math::
+
+   O(o \mid s') = G_{\sigma_c}(\hat c; c')
+                  \prod_{i=1}^{N} q_i^{\text{cam}} \, q_i^{\text{rad}},
+
+where a chicken:
+
+- in reach and reported contributes its detection probability times the
+  noise mass;
+- in reach and silent contributes the miss chance;
+- out of reach and silent contributes 1;
+- out of reach but reported contributes 0.
+
+Silence is therefore evidence: a chicken that a particle places
+well inside both sensors, on a step where neither reported it, costs that
+particle a factor of ``0.1 * 0.1``. Everything is computed in log space, with an
+impossible reading floored rather than set to negative infinity, because
+``0 * -inf`` becomes a NaN inside weight normalisation.
+
+Rewards
+-------
+
+The reward terms:
+
+- +10 per chicken killed;
+- -1 per shot fired (a ``FIRE`` the cooldown blocks is free);
+- -0.1 every step;
+- -50 when a chicken reaches the ship;
+- +50 when the last chicken dies.
+
+A shot that connects
+therefore pays ``-0.1 - 1 + 10`` on the step it was fired.
+
+The declared reward range is enumerated rather than estimated. A step kills at
+most one chicken, and a kill can only happen on a step that fired, so the best
+step is the shot that takes the last chicken and collects the bonus with it:
+``kill_reward + clear_reward - step_cost - shot_cost``.
+
+The declared minimum stacks the step cost, the shot cost and the ship-hit
+penalty, and that sum is deliberately **not reachable**. The gun kills the
+lowest chicken in the ship's column, and a chicken can only reach the ship by
+diving down that same column, so any step that could be overrun gave the shot a
+target and the kill reward comes back; firing into an empty column
+cannot be overrun at all. The worst a run can score is being overrun
+without firing, exactly one shot cost above the bound. The wider bound is kept
+because it costs nothing and survives a change to the gun's reach, where a tight
+one derived from that argument would not.
+
+``reward_requires_next_state`` is ``True``, but only because of the ship hit.
+Under hitscan the kill and the completion bonus are functions of
+``(state, action)`` alone -- the shot resolves before anything random happens --
+so a call without a successor returns everything except the ``-50``. That
+missing term is deliberately not replaced by its expectation: a planner
+comparing actions at a belief node sees the exact value of a shot that connects,
+and the risk it took is charged on the step the flock gets through.
+
+An episode ends:
+
+- when the flock is cleared;
+- when a chicken reaches the ship;
+- or at ``max_steps``.
+
+Key settings
+------------
+
+The default world is 8 columns by 7 rows with 4 chickens and a 60-step budget.
+The ship starts in the middle column with an empty sky.
+
+``observation_mode="full"`` makes the observation the state itself, for a fully
+observable control baseline on identical dynamics and reward.
+``noiseless_preset()`` returns the constructor keywords that make every sensor
+always report, add no noise and never invert the drop flag, so the observation
+becomes a deterministic function of the successor. The transition is untouched:
+dives are still drawn, which is what keeps the preset a POMDP whose only
+certainty is the reading.
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.chicheck_invaders_pomdp import (
+       ChicheckInvadersPOMDP,
+       noiseless_preset,
+   )
+
+   deterministic_sensors = ChicheckInvadersPOMDP(**noiseless_preset())
+   fully_observable = ChicheckInvadersPOMDP(observation_mode="full")
+
+Metrics
+~~~~~~~
+
+- ``task_completion_rate`` is the fraction of episodes that cleared the flock,
+  reduced with ``ANY`` -- clearing happens once and ends the episode.
+- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
+  ``ended_by_timeout_rate`` reduce with ``LAST`` and sum to one per episode.
+- ``average_episode_length``, ``average_chickens_killed`` and
+  ``average_shots_fired`` are per-episode sums.
+
+The danger is a chicken getting close, reported both ways:
+``average_hits_taken`` counts the times the flock got through, and
+``max_chicken_encroachment_cells`` is the severity. The latter is reported as
+``max(num_columns - 1, num_rows - 1)`` minus the smallest Chebyshev distance
+from the ship to a live chicken, so larger means closer and the distance itself
+is recoverable by subtraction. It is reported this way round because the episode
+reduction available for a severity is ``MAX`` and there is no ``MIN``.
+
+``average_shot_accuracy`` is kills per shot, which under hitscan is hits per
+shot. It is the one metric that is not a channel
+reduction -- a ratio of two per-episode sums cannot be expressed as a reduction
+over a single channel, and a mean of per-step ratios is not the episode's ratio
+-- so it is computed in ``compute_metrics`` from the same two channels the
+counts are built from. Episodes that never fired are left out of the average
+rather than scored as zero.
+
+Visualization
+~~~~~~~~~~~~~
+
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
+
+Limits
+~~~~~~
+
+``ChicheckInvadersVectorizedModel`` is the torch model
+that VOPP plans on. It reads the grid, flock, sensor, reward and step-budget
+arguments from the environment and supports both observation modes, so it
+declines no configuration. Like the
+scalar environment, it keeps stepping a terminal state: the step counter
+advances and the flock moves.
+
+The model defaults to ``float32``. In ``float32`` a sensor reading whose
+rounded-Gaussian mass is below about ``1e-45`` (about 14 noise standard
+deviations off) scores the impossible floor ``-1e18``, where the scalar
+environment returns a finite log-probability below ``-103``. Build the model with ``dtype=torch.float64`` when the belief must
+rank such far-off readings. Scalar ``PFT_DPW`` also runs on the environment
+directly, and the QA gate uses it.
+
+The step, the sensor readings, their likelihood and the reward run in C++
+(``chicheck_invaders_pomdp/_native``), which draws from its own random number
+generator: ``np.random.seed`` does not reach it, and
+``_native.set_seed`` does.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``ChicheckInvadersPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Also supports
+     -
+   * - Native C++ backend
+     - ✔️
+   * - Vectorized (torch) model
+     - ✔️ ``ChicheckInvadersVectorizedModel`` (both observation modes)
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.chicheck_invaders_pomdp import ChicheckInvadersPOMDP
+   from POMDPPlanners.utils.belief_factory import create_environment_belief
+
+   env = ChicheckInvadersPOMDP()
+   belief = create_environment_belief(env, n_particles=200)
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP
+   :members:
+   :show-inheritance:
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.chicheck_invaders_pomdp.ChicheckInvadersPOMDP`
+- :doc:`base` — the full catalog and the environment interface.

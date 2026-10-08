@@ -36,13 +36,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
 )
+from POMDPPlanners.core.serialization import serialize_value
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
@@ -75,11 +78,11 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 class ContinuousLightDarkPOMDPMetrics(Enum):
     """Metric names for Continuous Light-Dark POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    OBSTACLE_HIT_RATE = "obstacle_hit_rate"
-    AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_HIGH_VARIANCE_STATES_COUNTER = "avg_high_variance_states_counter"
+    AVERAGE_HIGH_VARIANCE_STEPS = "average_high_variance_steps"
 
 
 class RewardModelType(Enum):
@@ -179,8 +182,30 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
         )
-        # Calculate reward range based on reward model type
-        # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
+        # ``reward_range`` is the bound over *in-grid* states — the space this
+        # environment models. The minimum below is the reward at the far corner
+        # of the grid, using the grid diagonal as the greatest in-grid distance
+        # to the goal; nothing inside the grid can score lower.
+        #
+        # Out-of-grid states are reachable, and a reward sampled from one can
+        # fall below this minimum. Leaving the grid is penalised but is *not*
+        # terminal (see is_terminal, which tests only the goal and the optional
+        # obstacle flag), and _sample_mvn deliberately does not clip samples to
+        # the grid — clipping the sampler while the observation PDF stays
+        # unclipped would break importance weights near the edges. So a state
+        # can drift arbitrarily far from the goal and the ``-dist_to_goal``
+        # term grows with it. Those states sit outside the region this bound is
+        # defined over, so a reward below the minimum is not the bound being
+        # wrong.
+        #
+        # test_declared_reward_range_bounds_observed_rewards in
+        # test_env_api_conformance.py rolls out far enough to reach one, and
+        # records that as an xfail(strict=True) naming this definition. Strict
+        # on purpose: clipping the sampler or widening this bound makes it pass
+        # unexpectedly and brings the choice back into view rather than letting
+        # it be re-decided silently.
+        #
+        # Maximum distance to goal is the diagonal of the grid: sqrt(2) * grid_size
         max_distance_to_goal = np.sqrt(2) * grid_size
 
         if reward_model_type == RewardModelType.CONSTANT_HAZARD_PENALTY:
@@ -238,6 +263,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.beacon_radius = beacon_radius
         self.observation_model_type = observation_model_type
         self.penalty_decay = penalty_decay
+        # Private on purpose: ``config_id`` hashes the public attributes, and a
+        # new public one would change the id of every existing configuration.
+        # ``to_dict`` writes it out by hand.
+        self._reward_model_type = reward_model_type
         self._configure_hazard_terminal(is_obstacle_hit_terminal, reward_model_type)
 
         # Create distributions with pre-computed Cholesky decomposition
@@ -372,10 +401,21 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return self._hazard_terminal_enabled
 
     def initial_state_dist(self) -> Distribution:
-        if not self._hazard_terminal_enabled:
-            return super().initial_state_dist()
+        # float64 with or without the terminal slot. Every transitioned state
+        # is float64, and a belief takes its particle array's dtype from the
+        # initial state: an integer ``start_state`` handed through unchanged
+        # gave an int64 array that truncated the states written into it.
         padded = self._pad_terminal_slot(np.asarray(self.start_state, dtype=np.float64))
         return DiscreteDistribution(values=[padded], probs=np.array([1.0]))
+
+    def to_dict(self) -> Dict[str, Any]:
+        # The base ``to_dict`` writes the constructor parameters it finds as
+        # public attributes. The reward model type is not one (see
+        # ``__init__``), and without it ``from_dict`` rebuilds the env with the
+        # default constant-penalty reward model.
+        data = super().to_dict()
+        data["params"]["reward_model_type"] = serialize_value(self._reward_model_type)
+        return data
 
     def _pad_terminal_slot(self, state: np.ndarray) -> np.ndarray:
         # Append a live (0.0) terminal slot to a 2-D state when the env carries
@@ -731,9 +771,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     ) -> np.ndarray:
         if self.observation_model_type != ObservationModelType.NORMAL_NOISE:
             # NoObsInDark and DistanceBased models lack a native batch kernel;
-            # fall back to the base-class per-state Python loop.
-            return super().observation_log_probability_per_state(
-                next_states=next_states, action=action, observation=observation
+            # loop over the states in Python. ``action`` is the move vector
+            # here, so the loop calls this class's vector-taking likelihood by
+            # name: the base-class loop would go through
+            # ``self.observation_log_probability``, which in the discrete-action
+            # subclass takes a label and would convert the vector a second time.
+            return np.asarray(
+                [
+                    ContinuousLightDarkPOMDP.observation_log_probability(
+                        self, next_state=next_state, action=action, observations=[observation]
+                    )[0]
+                    for next_state in next_states
+                ]
             )
         next_states_array = np.ascontiguousarray(np.asarray(next_states, dtype=np.float64))
         if next_states_array.ndim == 1:
@@ -882,12 +931,13 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         """Get names of Continuous Light-Dark POMDP specific metrics.
 
         Returns:
-            List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
+            List containing metric names: task_completion_rate, collision_rate,
+            average_collisions, out_of_grid_rate, and average_high_variance_steps
         """
         return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        require_non_empty_histories(histories, type(self).__name__)
         goal_reached = []
         obstacle_hits = []
         obstacle_hit_counter = []
@@ -931,9 +981,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         avg_goal_reached = float(np.mean(goal_reached))
         avg_obstacle_hits = float(np.mean(obstacle_hits))
-        avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
+        average_collisions = float(np.mean(obstacle_hit_counter))
         avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
+        average_high_variance_steps = float(np.mean(high_variance_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
@@ -944,20 +994,20 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         return [
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=ContinuousLightDarkPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 value=avg_goal_reached,
                 lower_confidence_bound=goal_reached_ci[0],
                 upper_confidence_bound=goal_reached_ci[1],
             ),
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.OBSTACLE_HIT_RATE.value,
+                name=ContinuousLightDarkPOMDPMetrics.COLLISION_RATE.value,
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],
             ),
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_OBSTACLE_HIT_COUNTER.value,
-                value=avg_obstacle_hit_counter,
+                name=ContinuousLightDarkPOMDPMetrics.AVERAGE_COLLISIONS.value,
+                value=average_collisions,
                 lower_confidence_bound=obstacle_hit_counter_ci[0],
                 upper_confidence_bound=obstacle_hit_counter_ci[1],
             ),
@@ -968,8 +1018,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=ContinuousLightDarkPOMDPMetrics.AVG_HIGH_VARIANCE_STATES_COUNTER.value,
-                value=avg_high_variance_states_counter,
+                name=ContinuousLightDarkPOMDPMetrics.AVERAGE_HIGH_VARIANCE_STEPS.value,
+                value=average_high_variance_steps,
                 lower_confidence_bound=high_variance_states_counter_ci[0],
                 upper_confidence_bound=high_variance_states_counter_ci[1],
             ),
@@ -988,23 +1038,16 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         vars(self).update(state)
         self._trans_kernel_cache = {}
         self._obs_kernel_cache = {}
-
-    def __eq__(self, other):
-        if not isinstance(other, ContinuousLightDarkPOMDP):
-            return False
-
-        if not super().__eq__(other):
-            return False
-
-        return (
-            np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
-            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
-            and self.goal_state_radius == other.goal_state_radius
-            and self.beacon_radius == other.beacon_radius
-            and self.obstacle_radius == other.obstacle_radius
-            and self.observation_model_type == other.observation_model_type
-            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
-        )
+        if "_reward_model_type" not in state:
+            # Pickled before the attribute existed (a joblib cache entry, say).
+            # Recover the type from the variant code such a pickle does carry;
+            # ``to_dict`` reads it.
+            code = state["_reward_variant_code"]
+            self._reward_model_type = next(
+                reward_type
+                for reward_type, variant_code in _REWARD_VARIANT_CODE_BY_TYPE.items()
+                if variant_code == code
+            )
 
     def hash_action(self, action: Any) -> Hashable:
         # Continuous actions are ndarray; bytes match np.array_equal semantics
@@ -1256,36 +1299,6 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             reward_variant_code=self._reward_variant_code,
             penalty_decay=float(self.penalty_decay),
             covariance=self._trans_cov_view,
-        )
-
-    def __eq__(self, other):
-        if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):
-            return False
-        # Compare only configuration parameters, ignoring internal objects like reward_model
-        return (
-            self.discount_factor == other.discount_factor
-            and np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
-            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
-            and np.array_equal(self.beacons, other.beacons)
-            and np.array_equal(self.goal_state, other.goal_state)
-            and np.array_equal(self.start_state, other.start_state)
-            and np.array_equal(self.obstacles, other.obstacles)
-            and self.obstacle_hit_probability == other.obstacle_hit_probability
-            and self.obstacle_reward == other.obstacle_reward
-            and self.goal_reward == other.goal_reward
-            and self.fuel_cost == other.fuel_cost
-            and self.grid_size == other.grid_size
-            and self.goal_state_radius == other.goal_state_radius
-            and self.beacon_radius == other.beacon_radius
-            and self.obstacle_radius == other.obstacle_radius
-            and self.observation_model_type == other.observation_model_type
-            and self.penalty_decay == other.penalty_decay
-            and self.is_obstacle_hit_terminal == other.is_obstacle_hit_terminal
-            and self.actions == other.actions
-            and all(
-                np.array_equal(value, other.action_to_vector[k])
-                for k, value in self.action_to_vector.items()
-            )
         )
 
     def hash_action(self, action: Any) -> Hashable:

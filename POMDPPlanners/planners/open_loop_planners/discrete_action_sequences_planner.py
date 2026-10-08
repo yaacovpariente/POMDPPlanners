@@ -20,16 +20,26 @@ class DiscreteActionSequencesPlanner(Policy):
     problems with small action spaces and short planning horizons.
 
     The algorithm works by:
+
     1. Generating all possible action sequences of the specified depth
     2. For each sequence, estimating the expected return through Monte Carlo sampling
     3. Selecting the sequence with the maximum expected return
-    4. Returning the first action in the optimal sequence
+    4. Returning the whole optimal sequence, which the episode runner then
+       executes in order without replanning
+
+    The last point is what makes this planner open-loop, and it is a contract:
+    :meth:`action` returns every action in the chosen sequence, and
+    ``EpisodeRunner`` executes each one in turn (subject to the episode's
+    remaining step budget) before asking for another decision. A caller that
+    used only ``actions[0]`` would be running a different, closed-loop
+    algorithm on this planner's plan.
 
     **Open-Loop vs Closed-Loop Planning:**
+
     - **Open-loop**: Plans a complete action sequence without considering future observations
     - **Closed-loop**: Re-plans at each step based on new observations (like MCTS algorithms)
 
-    This approach is computationally intensive (O(|A|^depth)) but provides optimal
+    This approach is computationally intensive (``O(|A|^depth)``) but provides optimal
     solutions for the open-loop setting when the action space is manageable.
 
     Args:

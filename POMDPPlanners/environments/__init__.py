@@ -18,6 +18,12 @@ Available Environments:
     ContinuousLightDarkPOMDP: Continuous light-dark navigation problem
     LaserTagPOMDP: Pursuit-evasion problem with robot tagging opponent
     RockSamplePOMDP: Rock sampling problem with sensor-based rock quality evaluation
+    DiscreteMazePOMDP: Seeded maze memory task with cell actions
+    ContinuousMazePOMDP: The same maze with real displacement actions
+    TMazePOMDP: Compatibility class for the original T-shaped layout
+    ChicheckInvadersPOMDP: Arcade shooter with a split camera/radar observation
+    FirefightingPOMDP: Several firefighters fighting a wind-driven grid fire
+    CaptureTheFlagPOMDP: Two teams racing to carry the other side's flag home
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -25,7 +31,11 @@ Factory Functions:
 
 from typing import Any, Dict, Type
 
+from POMDPPlanners.environments.capture_the_flag_pomdp import CaptureTheFlagPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_pomdp import (
+    ChicheckInvadersPOMDP,
+)
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_pomdp import (
     ContinuousLaserTagPOMDP,
@@ -39,6 +49,9 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
     DiscreteLightDarkPOMDP,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.firefighting_pomdp.firefighting_pomdp import (
+    FirefightingPOMDP,
+)
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
@@ -46,41 +59,59 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.maze_pomdp import (
+    ContinuousMazePOMDP,
+    DiscreteMazePOMDP,
+    TMazePOMDP,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 __all__ = [
-    "PushPOMDP",
-    "SafeAntVelocityPOMDP",
-    "DiscreteLightDarkPOMDP",
-    "ContinuousLightDarkPOMDP",
-    "ContinuousLightDarkPOMDPDiscreteActions",
-    "TigerPOMDP",
-    "SanityPOMDP",
+    "CaptureTheFlagPOMDP",
     "CartPolePOMDP",
-    "MountainCarPOMDP",
-    "LaserTagPOMDP",
+    "ChicheckInvadersPOMDP",
     "ContinuousLaserTagPOMDP",
     "ContinuousLaserTagPOMDPDiscreteActions",
-    "RockSamplePOMDP",
+    "ContinuousLightDarkPOMDP",
+    "ContinuousLightDarkPOMDPDiscreteActions",
+    "ContinuousMazePOMDP",
+    "DiscreteLightDarkPOMDP",
+    "DiscreteMazePOMDP",
+    "FirefightingPOMDP",
+    "LaserTagPOMDP",
+    "MountainCarPOMDP",
     "PacManPOMDP",
+    "PushPOMDP",
+    "RockSamplePOMDP",
+    "SafeAntVelocityPOMDP",
+    "SanityPOMDP",
+    "TMazePOMDP",
+    "TigerPOMDP",
 ]
 
 # Registry of available environments
 ENVIRONMENT_REGISTRY: Dict[str, Type] = {
+    "CaptureTheFlagPOMDP": CaptureTheFlagPOMDP,
     "CartPolePOMDP": CartPolePOMDP,
-    "MountainCarPOMDP": MountainCarPOMDP,
-    "TigerPOMDP": TigerPOMDP,
-    "PushPOMDP": PushPOMDP,
-    "SanityPOMDP": SanityPOMDP,
-    "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
-    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
-    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
-    "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
-    "LaserTagPOMDP": LaserTagPOMDP,
+    "ChicheckInvadersPOMDP": ChicheckInvadersPOMDP,
     "ContinuousLaserTagPOMDP": ContinuousLaserTagPOMDP,
     "ContinuousLaserTagPOMDPDiscreteActions": ContinuousLaserTagPOMDPDiscreteActions,
-    "RockSamplePOMDP": RockSamplePOMDP,
+    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
+    "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
+    "ContinuousMazePOMDP": ContinuousMazePOMDP,
+    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
+    "DiscreteMazePOMDP": DiscreteMazePOMDP,
+    "FirefightingPOMDP": FirefightingPOMDP,
+    "LaserTagPOMDP": LaserTagPOMDP,
+    "MountainCarPOMDP": MountainCarPOMDP,
     "PacManPOMDP": PacManPOMDP,
+    "PushPOMDP": PushPOMDP,
+    "RockSamplePOMDP": RockSamplePOMDP,
+    "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
+    "SanityPOMDP": SanityPOMDP,
+    # Compatibility name for saved configurations using the original T layout.
+    "TMazePOMDP": TMazePOMDP,
+    "TigerPOMDP": TigerPOMDP,
 }
 
 

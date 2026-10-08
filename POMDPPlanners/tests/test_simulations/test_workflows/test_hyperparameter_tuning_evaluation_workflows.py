@@ -18,6 +18,7 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from mlflow.tracking import MlflowClient
 
 from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationLocalWorkflow,
@@ -596,9 +597,9 @@ class TestWorkflowValidation:
     def test_validate_configs_valid_environment_specific_metric(self, temp_cache_dir):
         """Test that valid environment-specific metric passes validation at workflow level.
 
-        Purpose: Validates that environment-specific metrics (like TigerPOMDP's success_rate) are accepted
+        Purpose: Validates that environment-specific metrics (like TigerPOMDP's task_completion_rate) are accepted
 
-        Given: TigerPOMDP environment and config with "success_rate" metric
+        Given: TigerPOMDP environment and config with "task_completion_rate" metric
         When: _validate_configs is called
         Then: No exception is raised
 
@@ -633,7 +634,7 @@ class TestWorkflowValidation:
             n_trials=5,
             parameters_to_optimize=[
                 (
-                    "success_rate",
+                    "task_completion_rate",
                     HyperParameterOptimizationDirection.MAXIMIZE,
                 )  # TigerPOMDP-specific
             ],
@@ -952,3 +953,74 @@ class TestWorkflowOptimizedConfigUsage:
         assert evaluated_policy_2 is optimized_policy_2
         for param_name, param_value in optimization_result_2.chosen_hyper_parameters.items():
             assert getattr(evaluated_policy_2, param_name) == param_value
+
+
+class TestEvaluationRunIsLinkedToTheStudy:
+    """The fresh evaluation is filed under the study whose planners it ran."""
+
+    def test_evaluation_run_is_a_child_of_the_study_and_named_by_each_config_run(
+        self, temp_cache_dir
+    ):
+        """The evaluation run is nested under the study run and tagged from the config run.
+
+        Purpose: The evaluation used to be a top-level run with no parent, so
+        nothing tied it to the study, and the results site could not show a
+        tuned planner beside its evaluation.
+
+        Given: A small Tiger study with one configuration, run end to end.
+        When: The experiment's runs are read back.
+        Then: The evaluation run's parent is the study run, it is tagged as an
+            evaluation, and the config run names it in its evaluation tag.
+        """
+        # pylint: disable=import-outside-toplevel
+        import mlflow
+
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.core.simulation import tuning_run_layout as layout
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterOptimizationDirection,
+            HyperParameterRunParams,
+        )
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
+            SparseSamplingDiscreteActionsPlanner,
+        )
+
+        env = TigerPOMDP(discount_factor=0.95)
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=get_initial_belief(env, n_particles=10),
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=SparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[NumericalHyperParameter(1, 2, "depth")],
+                constant_parameters={"branching_factor": 1},
+            ),
+            num_episodes=2,
+            num_steps=2,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Linked_Evaluation_Test",
+            optimization_n_jobs=1,
+            evaluation_episodes=2,
+            evaluation_steps=2,
+            cache_visualizations=False,
+        )
+
+        workflow.optimize_and_evaluate([config])
+
+        client = MlflowClient(tracking_uri=f"file://{(temp_cache_dir / 'mlruns').absolute()}")
+        experiment = client.get_experiment_by_name("Linked_Evaluation_Test")
+        runs = {run.info.run_name: run for run in client.search_runs([experiment.experiment_id])}
+        study = runs["optimize_batch_1_configs"]
+        evaluation = runs["environment_policy_comparison"]
+        config_run = next(r for name, r in runs.items() if name.startswith("config_1_"))
+
+        assert evaluation.data.tags["mlflow.parentRunId"] == study.info.run_id
+        assert evaluation.data.tags[layout.RUN_KIND_TAG] == layout.RUN_KIND_EVALUATION
+        assert config_run.data.tags[layout.EVALUATION_RUN_ID_TAG] == evaluation.info.run_id
+        assert study.info.status == "FINISHED"

@@ -1,0 +1,162 @@
+Sanity
+======
+
+Two states, two actions, perfect observations, no terminal state. Action ``0``
+moves to the "good" state and pays ``1.0``; action ``1`` moves to "bad" and pays
+``0.0``.
+
+There is no partial observability and nothing to plan around. It exists to expose
+planner bugs: if a planner does not converge to always taking action ``0``, the bug is
+in the planner, not in the problem. Run it first when a planner produces
+nonsense somewhere else.
+
+What the agent sees and does
+----------------------------
+
+- **State** — an ``int``: ``0`` (good) or ``1`` (bad).
+- **Actions** (discrete) — the ints ``0`` (go to good) and ``1`` (go to bad).
+- **Observations** (discrete) — an ``int`` equal to the new state, always.
+
+Formal definition
+-----------------
+
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
+\rangle`.
+
+**State space**
+
+.. math::
+
+   S = \{0, 1\}
+
+The state is the last action taken.
+
+**Action space**
+
+.. math::
+
+   A = \{0, 1\}
+
+Action :math:`a` moves the agent to state :math:`a`; action :math:`0` is the
+rewarded one.
+
+**Observation space**
+
+.. math::
+
+   Z = \{0, 1\}
+
+The observation is the state itself.
+
+**Transition model.** Deterministic, and independent of the current state:
+
+.. math::
+
+   T(s' \mid s, a) = \mathbb{1}[s' = a]
+
+**Observation model**
+
+.. math::
+
+   O(o \mid s', a) = \mathbb{1}[o = s']
+
+**Reward function**
+
+.. math::
+
+   R(s, a) = \mathbb{1}[a = 0]
+
+with :math:`R \in [0, 1]`.
+
+**Initial belief.** The start is fixed rather than drawn:
+
+.. math::
+
+   b_0(0) = 1, \qquad o_0 = 0
+
+**Discount.** :math:`\gamma` defaults to :math:`0.95`.
+
+**Terminal set.** :math:`S_T = \emptyset`.
+
+Because :math:`O` is the identity, the belief collapses to a point mass after
+one step — this is an MDP behind the POMDP interface, so a failure on it
+points at the planner, not at belief tracking.
+
+Rewards
+-------
+
+======================  =========
+Event                   Reward
+======================  =========
+Action ``0``            1.0
+Action ``1``            0.0
+======================  =========
+
+``reward_range`` is ``(0.0, 1.0)``.
+
+Key settings
+------------
+
+``discount_factor`` (default ``0.95``) is the only constructor argument that
+changes the problem. An episode never ends on its own: ``is_terminal`` always
+returns ``False``, so episode length comes from the horizon the caller sets.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``SanityPOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Also supports
+     -
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ✔️ ``SanityVectorizedModel``
+   * - In the ``get_environment`` registry
+     - ✔️
+   * - Optional dependencies
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+
+   env = SanityPOMDP(discount_factor=0.95)
+   state = env.initial_state_dist().sample(1)[0]
+   print(env.reward(state, 0), env.reward(state, 1))
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.sanity_pomdp.SanityPOMDP
+   :members:
+   :show-inheritance:
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.sanity_pomdp.SanityPOMDP`
+- :doc:`mountain_car` — a two-variable continuous-state control task.
+- :doc:`base` — the full catalog and the environment interface.

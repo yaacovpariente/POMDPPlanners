@@ -26,10 +26,11 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -37,7 +38,13 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    extract_episode_step_infos,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.push_pomdp import _native
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.environments.push_pomdp.continuous_push_geometry import (
@@ -53,23 +60,35 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp_utils.push_reward_models i
 )
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
-from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp_visualizer import (  # pylint: disable=import-outside-toplevel
-    ContinuousPushPOMDPVisualizer,
-)
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualizer import (
+        PushVisualizer,
+    )
+
+
+class ContinuousPushStepChannel(Enum):
+    """Per-step channels reported by :meth:`ContinuousPushPOMDP.step_info`."""
+
+    GOAL_REACHED = "goal_reached"
+    ROBOT_OBSTACLE_COLLISION = "robot_obstacle_collision"
+    OBJECT_OBSTACLE_COLLISION = "object_obstacle_collision"
+    ANY_OBSTACLE_COLLISION = "any_obstacle_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
 
 
 class ContinuousPushPOMDPMetrics(Enum):
     """Metric names for Continuous Push POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    ROBOT_OBSTACLE_COLLISION_RATE = "robot_obstacle_collision_rate"
-    OBJECT_OBSTACLE_COLLISION_RATE = "object_obstacle_collision_rate"
-    TOTAL_OBSTACLE_COLLISION_RATE = "total_obstacle_collision_rate"
-    TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
-    TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
-    TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    ROBOT_COLLISION_RATE = "robot_collision_rate"
+    OBJECT_COLLISION_RATE = "object_collision_rate"
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
+    AVERAGE_ROBOT_COLLISIONS = "average_robot_collisions"
+    AVERAGE_OBJECT_COLLISIONS = "average_object_collisions"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
     DANGEROUS_AREA_RATE = "dangerous_area_rate"
-    TOTAL_DANGEROUS_AREA_STEPS = "total_dangerous_area_steps"
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
 
 
 class _FixedStateDistribution(Distribution):
@@ -117,7 +136,7 @@ class _RandomInitialStateDistribution(Distribution):
     # pylint: enable=protected-access
 
 
-class ContinuousPushPOMDP(Environment):
+class ContinuousPushPOMDP(Environment):  # pylint: disable=too-many-public-methods
     """Continuous-action Push POMDP environment.
 
     A robot (circle) must push an object (point) to a target location on
@@ -229,9 +248,7 @@ class ContinuousPushPOMDP(Environment):
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self._initial_state = initial_state
 
-        self._obstacle_tuples: List[Tuple[float, float, float]] = (
-            obstacles if obstacles is not None else []
-        )
+        self._obstacle_tuples = self._normalize_obstacle_tuples(obstacles)
         self.obstacles = self._build_obstacle_array(self._obstacle_tuples)
 
         self.dangerous_areas: List[Tuple[float, float]] = (
@@ -270,8 +287,18 @@ class ContinuousPushPOMDP(Environment):
         # ndarray object repeatedly (typical for the DiscreteActions wrapper
         # where each action label maps to a single ndarray), id() lookup
         # avoids np.ascontiguousarray + tobytes hashing per call.
+        #
+        # Only action arrays this env itself owns are eligible, and they are
+        # registered through _pin_action_vectors. An id() is only a valid key
+        # while the object it names is alive: CPython hands the same id to the
+        # next object allocated at that address, so caching a transient action
+        # array by id lets an unrelated later array collide with its entry and
+        # be simulated with the wrong action's kernel. Pinning keeps a strong
+        # reference for the env's lifetime, which is what makes the id stable.
         self._trans_kernel_id_cache: Dict[int, Any] = {}
         self._obs_kernel_id_cache: Dict[int, Any] = {}
+        self._pinned_actions: Tuple[np.ndarray, ...] = ()
+        self._pinned_action_ids: FrozenSet[int] = frozenset()
 
         # Cached (N_actions, 2) float64 array used by simulate_random_rollout.
         # Built lazily on first rollout call; reset to None on pickle round-trips.
@@ -355,6 +382,37 @@ class ContinuousPushPOMDP(Environment):
             )
         raise ValueError(f"Unknown reward model type: {self.reward_model_type}")
 
+    @staticmethod
+    def _normalize_obstacle_tuples(obstacles: Any) -> List[Tuple[float, float, float]]:
+        """Coerce the ``obstacles`` argument to the canonical tuple list.
+
+        ``self.obstacles`` holds the derived ``(N, 4)`` corner array rather
+        than the constructor argument, and :meth:`to_dict` serializes
+        attributes by constructor-parameter name. A ``to_dict``/``from_dict``
+        round trip therefore hands that array straight back in, so the
+        constructor has to accept it as well as the documented list of
+        ``(cx, cy, half_size)`` tuples.
+
+        Args:
+            obstacles: ``None``, a sequence of ``(cx, cy, half_size)``
+                tuples, or an ``(N, 4)`` array of ``(cx, cy, hx, hy)`` rows
+                as produced by :meth:`_build_obstacle_array`.
+
+        Returns:
+            The obstacles as a list of ``(cx, cy, half_size)`` tuples.
+        """
+        if obstacles is None:
+            return []
+        array = np.asarray(obstacles, dtype=float)
+        if array.size == 0:
+            return []
+        if array.ndim != 2 or array.shape[1] not in (3, 4):
+            raise ValueError(
+                "obstacles must be a sequence of (cx, cy, half_size) tuples or an "
+                f"(N, 4) corner array; got shape {array.shape}"
+            )
+        return [(float(row[0]), float(row[1]), float(row[2])) for row in array]
+
     def _build_obstacle_array(
         self, obstacle_tuples: List[Tuple[float, float, float]]
     ) -> np.ndarray:
@@ -395,12 +453,35 @@ class ContinuousPushPOMDP(Environment):
     # set_next_state. The C++ RNG state lives on the kernel, so each
     # cached kernel maintains a single RNG stream per (env, action).
 
+    def _pin_action_vectors(self, actions: Sequence[np.ndarray]) -> None:
+        """Declare action arrays this env owns as eligible for id() caching.
+
+        The id() shortcut in :meth:`_get_trans_kernel` and
+        :meth:`_get_obs_kernel` is only sound for objects that outlive the
+        cache entry naming them. Pinning stores a strong reference here, so
+        the id stays bound to that array for as long as the env lives and can
+        never be handed to a later, unrelated action array.
+
+        Args:
+            actions: The env-owned action vectors (e.g. the DiscreteActions
+                wrapper's one ndarray per action label).
+        """
+        # Drop entries keyed by the previously pinned arrays first. Replacing
+        # the tuple releases the only strong reference to them, so their ids
+        # become recyclable — a stale entry left behind would be exactly the
+        # collision this pinning exists to prevent.
+        self._trans_kernel_id_cache.clear()
+        self._obs_kernel_id_cache.clear()
+        self._pinned_actions = tuple(actions)
+        self._pinned_action_ids = frozenset(id(a) for a in self._pinned_actions)
+
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
-        # Fast path: when ``action`` is the same Python object as a previously-
-        # seen call (typical for DiscreteActions, which maps each action label
-        # to a single cached ndarray), id-based lookup skips
+        # Fast path: when ``action`` is one of the env's own pinned action
+        # arrays (the DiscreteActions wrapper maps each action label to a
+        # single cached ndarray), id-based lookup skips
         # ``np.ascontiguousarray`` + ``tobytes`` and the resulting bytes-key
-        # dict probe entirely.
+        # dict probe entirely. Transient action arrays are never cached by id
+        # -- see the note in __init__ on id reuse.
         cached_id = self._trans_kernel_id_cache.get(id(action))
         if cached_id is not None:
             return cached_id
@@ -410,7 +491,7 @@ class ContinuousPushPOMDP(Environment):
         if kernel is None:
             kernel = self._build_trans_kernel(action_arr)
             self._trans_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -465,7 +546,7 @@ class ContinuousPushPOMDP(Environment):
                 grid_size=float(self.grid_size),
             )
             self._obs_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -641,6 +722,12 @@ class ContinuousPushPOMDP(Environment):
         self._trans_kernel_id_cache = {}
         self._obs_kernel_id_cache = {}
         self._rollout_actions_array = None
+        # Unpickling rebuilds the pinned arrays as new objects, so the ids
+        # recorded before the round trip name nothing here (and could collide
+        # with an unrelated later array). Re-derive them from the arrays that
+        # actually came back; pickle memoization keeps these the same objects
+        # the discrete wrapper's label map now holds.
+        self._pin_action_vectors(getattr(self, "_pinned_actions", ()))
 
     def _build_rollout_actions_array(self) -> Optional[np.ndarray]:
         action_to_vector: Optional[Dict[str, np.ndarray]] = getattr(self, "action_to_vector", None)
@@ -772,26 +859,16 @@ class ContinuousPushPOMDP(Environment):
         # np.array_equal semantics for arrays of identical shape and dtype.
         return np.ascontiguousarray(action, dtype=np.float64).tobytes()
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache animated visualization of the continuous push episode.
+    def episode_visualizer(self) -> "PushVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.push_pomdp.push_visualization.push_visualizer import (
+            PushVisualizer,
+        )
 
-        Creates an animated GIF showing the robot pushing the object toward
-        the target, with rectangular obstacles, collision detection, distance
-        indicators, and success feedback.
-
-        Args:
-            history: Episode history containing states, actions, and rewards.
-            output_dir: Directory into which the ``.gif`` visualization is written.
-            episode_index: Zero-based episode index, used to name the file.
-
-        Raises:
-            ValueError: If history is empty.
-        """
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = ContinuousPushPOMDPVisualizer(self)
-        visualizer.create_visualization(history, cache_path)
+        return PushVisualizer(self)
 
     # ------------------------------------------------------------------
     # Collision helpers
@@ -832,128 +909,143 @@ class ContinuousPushPOMDP(Environment):
         """
         return [m.value for m in ContinuousPushPOMDPMetrics]
 
-    def compute_metrics(  # pylint: disable=too-many-locals
-        self, histories: List[History]
-    ) -> List[MetricValue]:
-        goal_reached_list: List[int] = []
-        robot_col_list: List[int] = []
-        obj_col_list: List[int] = []
-        total_col_list: List[int] = []
-        dangerous_steps_list: List[int] = []
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report obstacle contact and hazard exposure for this step's state.
 
-        for history in histories:
-            goal_hit = False
-            r_cols = 0
-            o_cols = 0
-            d_steps = 0
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; every channel here is a property of the state.
+            next_state: Unused; each state is scored when it is recorded.
 
-            for step in history.history:
-                if self.is_terminal(step.state):
-                    goal_hit = True
-                if self._is_circle_colliding_with_obstacle(step.state[:2], self.robot_radius):
-                    r_cols += 1
-                if self._is_point_colliding_with_obstacle(step.state[2:4]):
-                    o_cols += 1
-                if self._is_robot_in_dangerous_area(step.state[:2]):
-                    d_steps += 1
-
-            goal_reached_list.append(1 if goal_hit else 0)
-            robot_col_list.append(r_cols)
-            obj_col_list.append(o_cols)
-            total_col_list.append(r_cols + o_cols)
-            dangerous_steps_list.append(d_steps)
-
-        total_steps = sum(len(h.history) for h in histories)
-        avg_r = sum(robot_col_list) / total_steps if total_steps > 0 else 0
-        avg_o = sum(obj_col_list) / total_steps if total_steps > 0 else 0
-        avg_t = sum(total_col_list) / total_steps if total_steps > 0 else 0
-        avg_d = sum(dangerous_steps_list) / total_steps if total_steps > 0 else 0
-
-        r_rates = [c / len(h.history) for c, h in zip(robot_col_list, histories) if len(h.history)]
-        o_rates = [c / len(h.history) for c, h in zip(obj_col_list, histories) if len(h.history)]
-        t_rates = [c / len(h.history) for c, h in zip(total_col_list, histories) if len(h.history)]
-        d_rates = [
-            c / len(h.history) for c, h in zip(dangerous_steps_list, histories) if len(h.history)
-        ]
-
-        r_ci = confidence_interval(data=r_rates, confidence=0.95) if r_rates else (0, 0)
-        o_ci = confidence_interval(data=o_rates, confidence=0.95) if o_rates else (0, 0)
-        t_ci = confidence_interval(data=t_rates, confidence=0.95) if t_rates else (0, 0)
-        d_ci = confidence_interval(data=d_rates, confidence=0.95) if d_rates else (0, 0)
-
-        tr_ci = (
-            confidence_interval(data=robot_col_list, confidence=0.95) if robot_col_list else (0, 0)
+        Returns:
+            The robot / object collision indicators, their sum, and the
+            dangerous-area indicator.
+        """
+        del action, next_state
+        robot_pos = state[:2]
+        robot_collision = float(
+            self._is_circle_colliding_with_obstacle(robot_pos, self.robot_radius)
         )
-        to_ci = confidence_interval(data=obj_col_list, confidence=0.95) if obj_col_list else (0, 0)
-        ta_ci = (
-            confidence_interval(data=total_col_list, confidence=0.95) if total_col_list else (0, 0)
-        )
-        td_ci = (
-            confidence_interval(data=dangerous_steps_list, confidence=0.95)
-            if dangerous_steps_list
-            else (0, 0)
-        )
+        object_collision = float(self._is_point_colliding_with_obstacle(state[2:4]))
+        return {
+            ContinuousPushStepChannel.GOAL_REACHED.value: float(self.is_terminal(state)),
+            ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value: robot_collision,
+            ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value: object_collision,
+            # Own channel: the aggregator reduces one channel at a time and
+            # cannot add two. A step where both collide counts twice, as before.
+            ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value: (
+                robot_collision + object_collision
+            ),
+            ContinuousPushStepChannel.IN_DANGEROUS_AREA.value: float(
+                self._is_robot_in_dangerous_area(robot_pos)
+            ),
+        }
 
-        avg_goal = float(np.mean(goal_reached_list)) if goal_reached_list else 0.0
-        g_ci = (
-            confidence_interval(data=goal_reached_list, confidence=0.95)
-            if goal_reached_list
-            else (0, 0)
-        )
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the metrics derived from the per-step channels.
 
+        Returns:
+            Specs for the goal rate and the four per-episode totals. The four
+            ``*_rate`` metrics are pooled across episodes and cannot be expressed
+            as a per-episode reduction, so :meth:`compute_metrics` produces them.
+        """
         return [
-            MetricValue(
-                ContinuousPushPOMDPMetrics.GOAL_REACHING_RATE.value, avg_goal, g_ci[0], g_ci[1]
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.TASK_COMPLETION_RATE.value,
+                channel=ContinuousPushStepChannel.GOAL_REACHED.value,
+                per_episode=EpisodeReduction.ANY,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.ROBOT_OBSTACLE_COLLISION_RATE.value,
-                avg_r,
-                r_ci[0],
-                r_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.AVERAGE_ROBOT_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.OBJECT_OBSTACLE_COLLISION_RATE.value,
-                avg_o,
-                o_ci[0],
-                o_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.AVERAGE_OBJECT_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_OBSTACLE_COLLISION_RATE.value,
-                avg_t,
-                t_ci[0],
-                t_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.AVERAGE_COLLISIONS.value,
+                channel=ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
             ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
-                float(np.mean(robot_col_list)) if robot_col_list else 0.0,
-                tr_ci[0],
-                tr_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
-                float(np.mean(obj_col_list)) if obj_col_list else 0.0,
-                to_ci[0],
-                to_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
-                float(np.mean(total_col_list)) if total_col_list else 0.0,
-                ta_ci[0],
-                ta_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.DANGEROUS_AREA_RATE.value,
-                avg_d,
-                d_ci[0],
-                d_ci[1],
-            ),
-            MetricValue(
-                ContinuousPushPOMDPMetrics.TOTAL_DANGEROUS_AREA_STEPS.value,
-                float(np.mean(dangerous_steps_list)) if dangerous_steps_list else 0.0,
-                td_ci[0],
-                td_ci[1],
+            StepInfoMetric(
+                name=ContinuousPushPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=ContinuousPushStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
             ),
         ]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute all nine metrics, in declaration order.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        computed = list(super().compute_metrics(histories)) + self._pooled_rate_metrics(histories)
+        return order_and_fill_metrics(self.get_metric_names(), computed)
+
+    def _pooled_rate_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Pooled over all steps of all episodes -- sum(counts) / sum(lengths) --
+        # which is not the mean of per-episode values unless every episode has
+        # the same length, so the shared aggregator cannot express these. Their
+        # confidence intervals come from per-episode rates while their point
+        # estimates are the pooled ratio; that predates this migration and is
+        # preserved rather than quietly fixed.
+        counts = self._per_episode_counts(histories)
+        total_steps = sum(len(history.history) for history in histories)
+
+        metrics: List[MetricValue] = []
+        for name, key in (
+            (ContinuousPushPOMDPMetrics.ROBOT_COLLISION_RATE.value, "robot"),
+            (ContinuousPushPOMDPMetrics.OBJECT_COLLISION_RATE.value, "object"),
+            (ContinuousPushPOMDPMetrics.COLLISION_RATE.value, "total"),
+            (ContinuousPushPOMDPMetrics.DANGEROUS_AREA_RATE.value, "dangerous"),
+        ):
+            episode_counts = counts[key]
+            value = sum(episode_counts) / total_steps if total_steps > 0 else 0
+            rates = [
+                count / len(history.history)
+                for count, history in zip(episode_counts, histories)
+                if len(history.history)
+            ]
+            lower, upper = confidence_interval(data=rates, confidence=0.95) if rates else (0, 0)
+            metrics.append(
+                MetricValue(
+                    name=name,
+                    value=value,
+                    lower_confidence_bound=lower,
+                    upper_confidence_bound=upper,
+                )
+            )
+        return metrics
+
+    def _per_episode_counts(self, histories: List[History]) -> Dict[str, List[float]]:
+        # Read back the same channels the specs consume, so a pooled rate and its
+        # matching total can never be computed from different measurements. Every
+        # episode contributes an entry, including one with no steps, matching the
+        # historical unconditional append.
+        counts: Dict[str, List[float]] = {"robot": [], "object": [], "total": [], "dangerous": []}
+        channels = {
+            "robot": ContinuousPushStepChannel.ROBOT_OBSTACLE_COLLISION.value,
+            "object": ContinuousPushStepChannel.OBJECT_OBSTACLE_COLLISION.value,
+            "total": ContinuousPushStepChannel.ANY_OBSTACLE_COLLISION.value,
+            "dangerous": ContinuousPushStepChannel.IN_DANGEROUS_AREA.value,
+        }
+        for episode in extract_episode_step_infos(histories):
+            for key, channel in channels.items():
+                counts[key].append(sum(step_info.get(channel, 0.0) for step_info in episode))
+        return counts
 
 
 class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnvironment):
@@ -1046,6 +1138,9 @@ class ContinuousPushPOMDPDiscreteActions(ContinuousPushPOMDP, DiscreteActionsEnv
             "right": np.ascontiguousarray([1.0, 0.0], dtype=np.float64),
             "left": np.ascontiguousarray([-1.0, 0.0], dtype=np.float64),
         }
+        # These four arrays live as long as the env, so the per-action kernel
+        # caches may key them by id().
+        self._pin_action_vectors(list(self.action_to_vector.values()))
 
     def get_actions(self) -> List[str]:
         return self.actions

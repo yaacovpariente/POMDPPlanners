@@ -1,0 +1,410 @@
+Snake
+=====
+
+.. episode-viewer:: traces/snake.json
+
+   One recorded episode planned by PFT-DPW, replayed in 3D. Drag to orbit, scroll
+   to zoom, and use the bar to play, scrub and switch camera.
+
+``SnakePOMDP`` is the arcade game with the food hidden. The snake observes its
+own body exactly and has to find food it cannot see, using a short-range vision
+window and a noisy directional scent. The task is to grow to ``target_length``
+without hitting a wall, hitting itself, or going too long without eating.
+
+Ported from the MDP version in `snake-rl
+<https://github.com/DragonWarrior15/snake-rl>`_, which is fully observable and
+rewards the same events.
+
+What the agent sees and does
+----------------------------
+
+- **State** — a ``float64`` vector of length ``5 + 2 * target_length``: status,
+  length, steps since food, food row and column, then the body cells head
+  first, with ``-1`` in unused slots. The heading is not stored; it is the
+  direction from the second body cell to the head.
+- **Actions** (discrete) — ``0`` turn left, ``1`` go straight, ``2`` turn
+  right, relative to the current heading. There is no reversing action,
+  because a snake that turned back on itself would walk into its own neck
+  every time.
+- **Observations** (discrete) — a flat tuple of integers,
+  ``(1, scent, seen_row, seen_col, r0, c0, r1, c1, ...)``, with three parts:
+
+  * the **body**, reported exactly, head first. The body update is
+    deterministic, so this tells the agent nothing it could not have computed
+    — it is there so the state is fully recoverable from the observation
+    history;
+  * **seen**, the food's exact cell when the food is inside the vision window
+    (a square of Chebyshev radius ``window_radius``, clipped to the grid) and
+    the window fires, which happens with probability
+    ``detection_probability``; ``-1, -1`` otherwise. There are no false
+    positives, so a sighting is conclusive;
+  * **scent**, one of four diagonal quadrants relative to the head, correct
+    with probability ``scent_accuracy``. Food that shares the head's row or
+    column is compatible with two quadrants, which split that probability
+    between them.
+
+  Every terminal state emits one fixed reading, ``(0,)``, instead, so a win
+  and a wall hit are indistinguishable through the sensor.
+
+Formal definition
+-----------------
+
+The environment is the POMDP :math:`\langle S, A, Z, T, O, R, b_0, \gamma
+\rangle`.
+
+**State space.** Let:
+
+- :math:`n` = ``grid_size``;
+- :math:`G = \{0..n{-}1\}^2` the playable cells, each written (row, column);
+- :math:`L` = ``target_length``;
+- :math:`K` = ``starvation_limit`` (default :math:`2n^2`).
+
+A state is a body (head first), a food cell, a starvation counter and a
+status tag:
+
+.. math::
+
+   s = \big(\mathrm{status},\; \mathbf{z},\; f,\; m\big), \qquad
+   S = \mathcal{T} \times G^{\leq L} \times (G \cup \{\varnothing\})
+   \times \{0..K\}
+
+with:
+
+- :math:`\mathbf{z} = (z_1, \dots, z_\ell)` the occupied cells;
+- :math:`f` the food (:math:`\varnothing` if none);
+- :math:`m` steps since food;
+- the status :math:`\textsf{RUNNING}` while alive, or why the episode
+  ended — head off the grid, head into the body, target length reached, or
+  :math:`K` steps without food:
+
+.. math::
+
+   \mathcal{T} = \{\textsf{RUNNING}, \textsf{WALL}, \textsf{SELF},
+   \textsf{WIN}, \textsf{STARVATION}\}
+
+The heading is not stored — it is recovered as :math:`z_1 - z_2`, so the body
+alone determines where the snake can go next.
+
+**Action space.** Relative to the heading, so reversing is unrepresentable:
+
+.. math::
+
+   A = \{\textsf{turn\_left},\; \textsf{straight},\; \textsf{turn\_right}\}
+     = \{0, 1, 2\}
+
+- :math:`0` turns the heading 90° counter-clockwise;
+- :math:`1` keeps it;
+- :math:`2` turns it 90° clockwise.
+
+Then the head moves one cell along the new heading.
+
+**Observation space.** The sentinel :math:`\textsf{TERM}` from a terminal
+state, or a :math:`\textsf{LIVE}` reading with three components:
+
+- a scent quadrant in :math:`\{0,1,2,3\}` — the food's direction from the
+  head: :math:`0` north-east, :math:`1` north-west, :math:`2` south-east,
+  :math:`3` south-west (north is row :math:`-1`, east is column :math:`+1`);
+- the food's cell if it was sighted, :math:`\varnothing` if not;
+- the body, head first.
+
+.. math::
+
+   Z = \{\textsf{TERM}\} \;\cup\; \{\textsf{LIVE}\} \times \{0,1,2,3\}
+   \times (G \cup \{\varnothing\}) \times G^{\leq L}
+
+**Transition model.** Deterministic except for where the food respawns.
+The model uses:
+
+- **Heading.** :math:`h = z_1 - z_2`, one of north :math:`(-1, 0)`, east
+  :math:`(0, 1)`, south :math:`(1, 0)`, west :math:`(0, -1)`.
+- **Rotation.** :math:`\mathcal{R}_a` rotates it as action :math:`a` says.
+
+Rotate the heading, step, then resolve:
+
+.. math::
+
+   h' = \mathcal{R}_a(h), \qquad z'_1 = z_1 + h'
+
+.. math::
+
+   \mathbf{z}' = \begin{cases}
+     (z'_1, z_1, \dots, z_\ell) & z'_1 = f \quad (\text{eat: tail held}) \\
+     (z'_1, z_1, \dots, z_{\ell-1}) & \text{otherwise} \quad (\text{tail released})
+   \end{cases}
+
+Releasing the tail is what makes the cell it has just left safe to enter. The
+counter resets on a meal, :math:`m' = 0` if eating else :math:`m + 1`, and
+the status is decided in this order:
+
+.. math::
+
+   \mathrm{status}' = \begin{cases}
+     \textsf{WALL} & z'_1 \notin G \\
+     \textsf{SELF} & z'_1 \in \{z'_2, \dots\} \\
+     \textsf{WIN} & |\mathbf{z}'| \geq L \\
+     \textsf{STARVATION} & m' \geq K \\
+     \textsf{RUNNING} & \text{otherwise}
+   \end{cases}
+
+Wall and self are checked *first*: a snake that reaches its target length by
+walking into a wall has still hit the wall. The only randomness is the
+respawn, uniform over the cells the new body leaves free:
+
+.. math::
+
+   \Pr[f' = k] = \frac{1}{|G \setminus \mathbf{z}'|},
+   \qquad k \in G \setminus \mathbf{z}'
+
+and only when the step ate and did not win; otherwise :math:`f' = f`.
+
+**Observation model.** A terminal state emits the sentinel
+:math:`\textsf{TERM}`. Otherwise the snake sees its own body exactly, a
+scent quadrant :math:`q` and a possible sighting :math:`\hat f` of the food:
+
+.. math::
+
+   o = \big(\textsf{LIVE},\; q,\; \hat{f},\; \mathbf{z}'\big)
+
+*Sighting.* The food is reported only when it is inside the Chebyshev window
+of radius :math:`r` = ``window_radius`` (default 2) around the head, and then
+only with probability :math:`p_{\text{det}}` =
+``detection_probability``:
+
+.. math::
+
+   \Pr[\hat{f} = f'] = p_{\text{det}} \cdot
+   \mathbb{1}\big[\lVert f' - z'_1 \rVert_\infty \leq r\big],
+   \qquad \hat{f} = \varnothing \text{ otherwise}
+
+With :math:`p_{\text{det}} < 1` a silent window is not proof the food is
+elsewhere — absence of evidence stays weak evidence rather than a certainty.
+
+*Scent.* A noisy quadrant reading, with these quadrants of the head:
+
+- :math:`0` north-east;
+- :math:`1` north-west;
+- :math:`2` south-east;
+- :math:`3` south-west.
+
+Let :math:`Q(f' - z'_1) \subseteq \{0,1,2,3\}` be the quadrants compatible
+with the offset — two of them when the
+food shares the head's row or column, one otherwise. With :math:`p_{\text{scent}}` =
+``scent_accuracy``:
+
+.. math::
+
+   \Pr[q = k] = \begin{cases}
+     p_{\text{scent}} / |Q| & k \in Q \\
+     (1 - p_{\text{scent}}) / (4 - |Q|) & k \notin Q
+   \end{cases}
+
+which sums to one in the tie case too. At :math:`p_{\text{scent}} = 0.25` the scent is
+pure noise; at :math:`1.0` it localises the food to a quadrant in one step.
+The default :math:`0.7` makes several readings worth accumulating.
+
+**Reward function.** A pure function of :math:`(s, a)` — eating and dying are
+both settled by the deterministic half of the transition, and the respawn
+cannot change either:
+
+.. math::
+
+   R(s, a) = \begin{cases}
+     +1 & \text{the step eats} \\
+     -1 & \mathrm{status}' \in \{\textsf{WALL}, \textsf{SELF}, \textsf{STARVATION}\} \\
+     0 & \text{otherwise, and for terminal } s
+   \end{cases}
+
+so :math:`R \in [-1, 1]`. Note a :math:`\textsf{WIN}` pays nothing beyond the
+meal that caused it.
+
+**Initial belief.** A fixed three-cell snake,
+:math:`\mathbf{z}_0 = ((c, c), (c, c-1), (c, c-2))` with :math:`c =
+\lfloor n/2 \rfloor`, heading east, with the food uniform over every cell it
+leaves free:
+
+.. math::
+
+   b_0(s) = \mathbb{1}[\mathbf{z} = \mathbf{z}_0] \cdot
+   \frac{\mathbb{1}[f \in G \setminus \mathbf{z}_0]}{|G \setminus \mathbf{z}_0|} \cdot
+   \mathbb{1}[m = 0] \cdot \mathbb{1}[\mathrm{status} = \textsf{RUNNING}]
+
+The opening observation is the sentinel and nothing conditions on it: the
+belief starts from this prior, and the first sensor reading arrives after the
+first action.
+
+**Discount.** :math:`\gamma` = ``discount_factor``, default :math:`0.98`.
+Reaching the target takes hundreds of steps at :math:`n = 12`, so a shorter
+horizon would flatten the difference between finding food soon and finding it
+eventually.
+
+**Terminal set.** Anything but :math:`\textsf{RUNNING}`:
+
+.. math::
+
+   S_T = \{s : \mathrm{status} \neq \textsf{RUNNING}\}
+
+Dynamics
+~~~~~~~~
+
+The body update is deterministic. The action turns the heading, the head steps
+into the next cell, and the tail is released — unless the step ate the food, in
+which case the tail stays and the snake grows by one. That pair decides a rule
+that is easy to get wrong: stepping into the cell the tail has just left is
+legal, but stepping into the tail while eating is a self hit.
+
+The only random part of a transition is where the food respawns after it is
+eaten: uniformly over the cells the new body does not occupy.
+
+Wall and self hits are checked first, then the win, then starvation. A snake
+that reaches its target length by walking into a wall has still hit the wall.
+``starvation_limit`` defaults to ``2 * grid_size ** 2``.
+
+The playable area is ``grid_size`` by ``grid_size`` cells. The walls are not
+cells of the state: they sit just outside that area, so a head that steps off
+the grid has hit one. The renderer draws them as a border around the board.
+
+Rewards
+-------
+
+==========================================  =========
+Event                                       Reward
+==========================================  =========
+Eat the food (including the winning meal)   +1.0
+Die to a wall, to itself or to starvation   -1.0
+Anything else                               0.0
+==========================================  =========
+
+``reward_range`` is ``(-1.0, 1.0)``. Winning happens by eating, so it pays the
+same ``+1`` and nothing more. Eating and dying cannot both happen on one step:
+the food is never on a body cell, so the step that reaches it can be neither a
+wall nor a self hit.
+
+Key settings
+------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 20 50
+
+   * - Argument
+     - Default
+     - What it changes
+   * - ``grid_size``
+     - ``12``
+     - Side of the playable grid; must be at least 4.
+   * - ``target_length``
+     - ``10``
+     - Body length that ends the episode as a win.
+   * - ``window_radius``
+     - ``2``
+     - Chebyshev radius of the vision window (a 5×5 window by default).
+   * - ``detection_probability``
+     - ``0.9``
+     - Chance of reporting food inside the window.
+   * - ``scent_accuracy``
+     - ``0.7``
+     - Chance the scent names a quadrant compatible with the food.
+   * - ``starvation_limit``
+     - ``None`` (``2 * grid_size ** 2``)
+     - Steps without food before the snake starves.
+   * - ``discount_factor``
+     - ``0.98``
+     -
+
+Metrics
+~~~~~~~
+
+- ``task_completion_rate`` is the fraction of episodes that reached
+  ``target_length``.
+- ``ended_by_goal_rate``, ``ended_by_failure_rate`` and
+  ``ended_by_timeout_rate`` partition the episodes between winning, dying and
+  running out of the runner's steps.
+- ``wall_death_rate``, ``self_death_rate`` and ``starvation_death_rate`` say
+  which death it was, which matters because they call for opposite fixes — a
+  planner that walks into walls is searching badly, one that starves is not
+  searching at all.
+- ``max_steps_since_food`` reports how close an episode came to starving even
+  when it did not.
+
+Visualization
+~~~~~~~~~~~~~
+
+Runs write a trace of each episode through the environment's episode
+visualizer. The results site replays it in 3D, as the replay on this page does.
+
+Vectorized model
+~~~~~~~~~~~~~~~~
+
+``SnakeVectorizedModel`` is the torch generative model VOPP plans on. It
+supports every ``SnakePOMDP`` configuration, so it declines none.
+
+- **State rows** are the scalar state vectors unchanged. The body has
+  ``target_length`` slots with ``-1`` past the current length; a live snake is
+  shorter than ``target_length``, so the slots always suffice.
+- **Observation rows** are the scalar reading padded with ``-1`` to
+  ``4 + 2 * target_length`` columns. The terminal reading ``(0,)`` becomes
+  ``[0, -1, ..., -1]``.
+- **Conversions** between the two are ``snake_observation_to_row`` and
+  ``snake_row_to_observation``.
+- **Observation keys** pack the reading into one int64. The packing is one to
+  one while it fits in 63 bits (``target_length`` up to 22 on the default
+  12×12 grid). Past that the arithmetic wraps, and two readings can share a
+  search-tree node.
+
+Can I use?
+----------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 12 12
+
+   * - ``SnakePOMDP``
+     - Discrete
+     - Continuous
+   * - State
+     - ✔️
+     - ❌
+   * - Action
+     - ✔️
+     - ❌
+   * - Observation
+     - ✔️
+     - ❌
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30
+
+   * - Also supports
+     -
+   * - Native C++ backend
+     - ❌
+   * - Vectorized (torch) model
+     - ✔️ ``SnakeVectorizedModel`` (every configuration)
+   * - In the ``get_environment`` registry
+     - ❌ (import the class directly)
+   * - Optional dependencies
+     - None
+
+Example
+-------
+
+.. code-block:: python
+
+   from POMDPPlanners.environments.snake_pomdp import SnakePOMDP, SnakeBelief
+
+   env = SnakePOMDP(grid_size=12, target_length=10)
+   belief = SnakeBelief.from_environment(env, n_particles=200)
+
+Parameters
+----------
+
+.. autoclass:: POMDPPlanners.environments.snake_pomdp.SnakePOMDP
+   :members:
+   :show-inheritance:
+
+See also
+--------
+
+- :class:`POMDPPlanners.environments.snake_pomdp.SnakePOMDP`
+- :doc:`base` — the full catalog and the environment interface.

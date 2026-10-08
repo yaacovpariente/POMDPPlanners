@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, List, NamedTuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -13,12 +13,36 @@ if TYPE_CHECKING:
 
 
 class StepData(NamedTuple):
+    """One recorded interaction of an episode.
+
+    Attributes:
+        state: The state the step was taken from.
+        action: The action taken. ``None`` on the terminal bookkeeping step.
+        next_state: The realised successor state. ``None`` on the terminal step.
+        observation: The raw observation emitted by the world. ``None`` on the
+            terminal step.
+        reward: The realised reward. ``None`` on the terminal step.
+        belief: The belief held when the action was selected.
+        info: Optional auxiliary per-step measurements supplied by the
+            environment's
+            :meth:`~POMDPPlanners.core.environment.environment.Environment.step_info`
+            hook, as a flat mapping of channel name to scalar (e.g.
+            ``{"success": 1.0, "impact": 12.4}``).
+
+            This is the transport that lets an environment report a quantity it
+            can only measure *at step time* — a contact impulse, a termination
+            reason — to ``compute_metrics``, which runs later and in a different
+            process. Values must be plain picklable scalars so they survive every
+            task manager. ``None`` means the environment reported nothing.
+    """
+
     state: Any
     action: Any
     next_state: Any
     observation: Any
     reward: Union[float, None]
     belief: "Belief"
+    info: Optional[Dict[str, float]] = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +149,20 @@ class History:
             "average_reward_time": self.average_reward_time,
             "actual_num_steps": self.actual_num_steps,
             "reach_terminal_state": self.reach_terminal_state,
+            # ``from_dict`` has always read this key back; ``to_dict`` never
+            # wrote it, so a round trip silently dropped every planner metric
+            # the episode recorded. Written as a list to match the field's
+            # declared type (one entry per decision); ``from_dict`` still
+            # accepts the older single-dict shape.
+            "policy_run_data": [
+                {
+                    "info_variables": [
+                        {"name": variable.name, "value": variable.value}
+                        for variable in run_data.info_variables
+                    ]
+                }
+                for run_data in self.policy_run_data
+            ],
         }
 
     @classmethod
@@ -155,19 +193,30 @@ class History:
                     )
             history.append(StepData(**step_data))
 
-        # Handle policy_run_data deserialization
+        # Handle policy_run_data deserialization (local import breaks a cycle:
+        # core.policy imports from core.simulation).
+        # pylint: disable-next=import-outside-toplevel
         from POMDPPlanners.core.policy import (
             PolicyInfoVariable,
             PolicyRunData,
-        )  # pylint: disable=import-outside-toplevel
+        )
+
+        def _to_run_data(entry: Any) -> "PolicyRunData":
+            if isinstance(entry, PolicyRunData):
+                return entry
+            return PolicyRunData(
+                info_variables=[
+                    PolicyInfoVariable(name=iv["name"], value=iv["value"])
+                    for iv in entry.get("info_variables", [])
+                ]
+            )
 
         policy_run_data = data.get("policy_run_data", None)
         if isinstance(policy_run_data, dict):
-            info_variables = [
-                PolicyInfoVariable(name=iv["name"], value=iv["value"])
-                for iv in policy_run_data.get("info_variables", [])
-            ]
-            policy_run_data = [PolicyRunData(info_variables=info_variables)]
+            # Legacy shape: a single decision's run data, not a list.
+            policy_run_data = [_to_run_data(policy_run_data)]
+        elif isinstance(policy_run_data, list):
+            policy_run_data = [_to_run_data(entry) for entry in policy_run_data]
         elif policy_run_data is None:
             policy_run_data = []
 

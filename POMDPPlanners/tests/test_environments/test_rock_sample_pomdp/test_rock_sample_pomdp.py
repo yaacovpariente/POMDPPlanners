@@ -38,6 +38,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -82,35 +83,6 @@ class TestRockSampleState:
         # Numpy arrays are mutable, but we can verify the structure
         assert isinstance(state, np.ndarray)
         assert len(state) == 4  # 2 for robot pos + 2 for rocks
-
-    def test_state_validation_invalid_robot_pos(self):
-        """Test state validation with invalid robot position.
-
-        Purpose: Validates proper error handling for malformed robot positions
-
-        Given: Invalid robot position (not tuple of two integers)
-        When: create_rock_sample_state is called
-        Then: Function handles the input (numpy array creation doesn't validate types)
-
-        Test type: unit
-        """
-        # Numpy arrays accept various inputs, validation happens at usage level
-        # These no longer raise errors during creation
-        pass
-
-    def test_state_validation_invalid_rocks(self):
-        """Test state validation with invalid rock states.
-
-        Purpose: Validates proper error handling for malformed rock states
-
-        Given: Invalid rock states (not tuple)
-        When: create_rock_sample_state is called
-        Then: Function handles the input (numpy array creation doesn't validate types)
-
-        Test type: unit
-        """
-        # Numpy arrays accept various inputs, validation happens at usage level
-        pass
 
     def test_state_equality(self):
         """Test state equality comparison.
@@ -660,7 +632,7 @@ class TestObservationModel:
 
         Given: Robot far from rock with check action and very low sensor efficiency
         When: Observation probabilities are calculated via env.observation_log_probability
-        Then: Observation probabilities are closer to random
+        Then: The reading still favours the truth, but by less than at the rock
 
         Test type: unit
         """
@@ -676,10 +648,10 @@ class TestObservationModel:
         log_probs = pomdp.observation_log_probability(state, 6, ["good", "bad", "none"])
         probs = np.exp(log_probs)
         # Distance = sqrt((0-1)^2 + (0-2)^2) = sqrt(5) ≈ 2.24
-        # Efficiency = exp(-2.24/2.0) ≈ 0.33
-        # For bad rock: P(good) = 1-0.33 = 0.67, P(bad) = 0.33
-        assert 0.6 < probs[0] < 0.8  # P(good|bad_rock) should be high due to low efficiency
-        assert 0.2 < probs[1] < 0.4  # P(bad|bad_rock) should be low
+        # Accuracy = (1 + 2^(-2.24/2.0)) / 2 ≈ 0.73
+        # For a bad rock: P(bad) = 0.73, P(good) = 1 - 0.73 = 0.27
+        assert 0.2 < probs[0] < 0.35  # P(good|bad_rock) is the error rate, below half
+        assert 0.65 < probs[1] < 0.8  # P(bad|bad_rock) is the accuracy, above half
         assert probs[2] < 1e-200  # Effectively zero probability of "none"
 
     def test_observation_check_invalid_rock(self):
@@ -1248,17 +1220,19 @@ class TestMetricsComputation:
     def test_compute_metrics_empty_histories(self):
         """Test metrics computation with empty histories.
 
-        Purpose: Validates proper handling of empty history list
+        Purpose: Validates that an empty batch is rejected rather than scored. A
+            zero-valued average_rocks_sampled over no episodes is indistinguishable
+            from a run in which no rock was ever sampled
 
         Given: Empty list of histories
         When: compute_metrics() is called
-        Then: Returns empty list of metrics
+        Then: A ValueError naming the environment is raised
 
         Test type: unit
         """
         pomdp = RockSamplePOMDP(discount_factor=0.95, **rock_sample_pinned_kwargs())
-        metrics = pomdp.compute_metrics([])
-        assert metrics == []
+        with pytest.raises(ValueError, match="received no episode histories"):
+            pomdp.compute_metrics([])
 
     def test_compute_metrics_rocks_sampled(self):
         """Test computation of rocks sampled metric.
@@ -1305,10 +1279,10 @@ class TestMetricsComputation:
             history = build_test_history(steps=steps, reach_terminal=False)
             histories.append(history)
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find rocks sampled metric
-        rocks_metric = next((m for m in metrics if m.name == "avg_rocks_sampled"), None)
+        rocks_metric = next((m for m in metrics if m.name == "average_rocks_sampled"), None)
         assert rocks_metric is not None
         assert rocks_metric.value == 2.0  # (1+2+3)/3
 
@@ -1357,10 +1331,10 @@ class TestMetricsComputation:
         )
         histories.append(fail_history)
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
 
         # Find exit success rate metric
-        exit_metric = next((m for m in metrics if m.name == "exit_success_rate"), None)
+        exit_metric = next((m for m in metrics if m.name == "task_completion_rate"), None)
         assert exit_metric is not None
         assert exit_metric.value == 0.5  # 1/2 successful exits
 
@@ -1452,7 +1426,7 @@ class TestMetricsComputation:
             build_test_history(steps=sample_twice_steps, actual_num_steps=2, reach_terminal=False),
         ]
 
-        metrics = pomdp.compute_metrics(histories)
+        metrics = pomdp.compute_metrics(attach_step_info(pomdp, histories))
         verify_metrics_within_confidence_intervals(metrics)
         verify_metric_sanity(metrics, histories, pomdp)
         verify_history_returns_bounded(histories, pomdp)

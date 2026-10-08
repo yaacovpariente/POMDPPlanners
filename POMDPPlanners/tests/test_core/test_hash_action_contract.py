@@ -32,6 +32,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
+from POMDPPlanners.environments.maze_pomdp import (
+    ContinuousMazePOMDP,
+    DiscreteMazePOMDP,
+)
 from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManPOMDP
 from POMDPPlanners.environments.push_pomdp.continuous_push_pomdp import ContinuousPushPOMDP
@@ -48,8 +52,10 @@ from POMDPPlanners.tests.test_utils.env_pinned_kwargs import (
     continuous_laser_tag_pinned_kwargs,
     continuous_light_dark_discrete_actions_pinned_kwargs,
     continuous_light_dark_pinned_kwargs,
+    continuous_maze_pinned_kwargs,
     continuous_push_pinned_kwargs,
     discrete_light_dark_pinned_kwargs,
+    discrete_maze_pinned_kwargs,
     laser_tag_pinned_kwargs,
     mountain_car_pinned_kwargs,
     pacman_pinned_kwargs,
@@ -175,6 +181,18 @@ def _sanity_factory():
     return env, env.get_actions()
 
 
+def _discrete_maze_factory():
+    env = DiscreteMazePOMDP(discount_factor=0.95, **discrete_maze_pinned_kwargs())
+    return env, env.get_actions()
+
+
+def _continuous_maze_factory():
+    env = ContinuousMazePOMDP(discount_factor=0.95, **continuous_maze_pinned_kwargs())
+    # Two of the displacements a sampler actually produces, both inside the bound.
+    actions = [np.array([1.0, 0.0]), np.array([0.0, 1.0])]
+    return env, actions
+
+
 _ALL_ENV_FACTORIES: List[Callable[[], Any]] = [
     _continuous_light_dark_factory,
     _continuous_light_dark_discrete_factory,
@@ -191,6 +209,8 @@ _ALL_ENV_FACTORIES: List[Callable[[], Any]] = [
     _safety_ant_factory,
     _tiger_factory,
     _sanity_factory,
+    _discrete_maze_factory,
+    _continuous_maze_factory,
 ]
 
 
@@ -244,6 +264,7 @@ _DISCRETE_FACTORIES: List[Callable[[], Any]] = [
     _safety_ant_factory,
     _tiger_factory,
     _sanity_factory,
+    _discrete_maze_factory,
 ]
 
 
@@ -274,6 +295,7 @@ _NDARRAY_ACTION_FACTORIES: List[Callable[[], Any]] = [
     _continuous_light_dark_factory,
     _continuous_laser_tag_factory,
     _continuous_push_factory,
+    _continuous_maze_factory,
 ]
 
 

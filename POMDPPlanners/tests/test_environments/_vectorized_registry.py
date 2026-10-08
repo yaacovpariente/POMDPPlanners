@@ -1,0 +1,1492 @@
+# SPDX-License-Identifier: MIT
+
+"""Registry of every vectorized duplicate of an environment's logic.
+
+Most environments here are written more than once. The scalar
+:class:`~POMDPPlanners.core.environment.Environment` is the reference; a
+:class:`~POMDPPlanners.core.belief.vectorized_particle_belief_updater.VectorizedParticleBeliefUpdater`
+re-expresses its transition and observation model over a particle array for
+the belief, and a
+:class:`~POMDPPlanners.core.environment.vectorized_generative_model.VectorizedGenerativeModel`
+re-expresses the same kernels in torch for VOPP. Each copy is hand-written, so
+each is a place for the two to drift apart.
+
+This module lists every such copy with the few callbacks a generic test needs
+to compare it with its scalar environment, and nothing about what the
+environment does:
+
+* :data:`BELIEF_SPECS` -- one entry per environment variant with a vectorized
+  belief. The belief and its updater are built through the public
+  :func:`~POMDPPlanners.utils.belief_factory.create_environment_belief`, so the
+  test exercises exactly what a simulation runs. The per-environment
+  knowledge is how an observation is handed to the updater (mirroring the
+  belief's own ``update``), and flags saying which comparisons can be exact:
+  whether the batch and scalar paths share an RNG order, and whether the
+  belief's update is the plain reweighting algorithm.
+* :data:`MODEL_SPECS` -- one entry per vectorized generative model, with the
+  conversions between the model's tensors and the scalar environment's values
+  (action index to action, state row to state, observation row to
+  observation).
+
+:func:`discover_vectorized_classes` scans the source tree for every concrete
+updater, vectorized belief and generative model, and the coverage tests in
+``test_vectorized_belief_conformance.py`` and
+``test_vectorized_model_conformance.py`` require each one to be either
+registered here or on a commented exclusion list. A new vectorized copy cannot
+escape the conformance suite silently.
+
+Known disagreements are recorded on the allowlists below and run as
+``xfail(strict=True)``: the suite turns red the moment one is fixed, so the
+list cannot outlive the bug.
+"""
+
+import ast
+import importlib
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type
+
+import numpy as np
+
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.tests.test_environments._env_config_variants import base_id_of
+from POMDPPlanners.tests.test_environments.test_env_api_conformance import ENV_BUILDERS
+
+EnvBuilder = Callable[[], Environment]
+
+# A recorded disagreement: the reason, and the exception the failing test
+# raises. The exception type is passed to ``xfail(raises=...)`` so that an
+# unrelated new failure in the same test is not absorbed by an old entry.
+Disagreement = Tuple[str, Type[BaseException]]
+ObservationForUpdater = Callable[[Any], Any]
+
+_ENV_BUILDER_BY_ID: Dict[str, EnvBuilder] = dict(ENV_BUILDERS)
+
+
+# ---------------------------------------------------------------------------
+# Belief-side registry
+# ---------------------------------------------------------------------------
+
+
+def _float_array(observation: Any) -> np.ndarray:
+    """Default observation hand-off: what ``VectorizedWeightedParticleBelief.update`` does."""
+    return np.asarray(observation, dtype=float)
+
+
+def _raw(observation: Any) -> Any:
+    """Hand the observation over unchanged, for beliefs whose ``update`` does so."""
+    return observation
+
+
+def _rock_sample_observation(observation: Any) -> np.ndarray:
+    # Mirrors RockSampleVectorizedWeightedParticleBelief.update: the string
+    # reading is encoded to its integer label before it reaches the updater.
+    from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_beliefs import (
+        rocksample_belief_factory,
+    )
+
+    if isinstance(observation, str):
+        # pylint: disable-next=protected-access
+        observation = rocksample_belief_factory._OBS_ENCODING[observation]
+    return np.asarray(observation, dtype=float)
+
+
+def _maze_observation(observation: Any) -> np.ndarray:
+    # Mirrors MazeVectorizedWeightedParticleBelief.update.
+    from POMDPPlanners.environments.maze_pomdp.maze_pomdp_beliefs import maze_belief_factory
+
+    if isinstance(observation, str):
+        # pylint: disable-next=protected-access
+        observation = maze_belief_factory._OBS_ENCODING.get(
+            observation,
+            maze_belief_factory._UNKNOWN_OBSERVATION,  # pylint: disable=protected-access
+        )
+    return np.asarray(observation, dtype=np.float64)
+
+
+ReferenceBelief = Callable[[List[Any], np.ndarray], Any]
+
+
+@dataclass(frozen=True)
+class BeliefSpec:
+    """One environment variant whose belief has a vectorized implementation.
+
+    Attributes:
+        env_id: Test id. For variants in ``ENV_BUILDERS`` it is that registry's
+            id and the environment is built by its builder.
+        updater_class: Name of the updater class the belief factory must
+            return. Pinned so the coverage test can see which classes are
+            exercised, and so a factory that silently swaps updaters fails.
+        belief_class: Name of the vectorized belief class the factory returns.
+        observation_for_updater: Converts an environment observation into the
+            argument the belief's ``update`` passes to
+            ``batch_observation_log_likelihood``.
+        transition_shares_rng: ``True`` when ``batch_transition`` consumes the
+            seeded RNGs exactly as a loop over ``sample_next_state`` does, so the
+            two can be compared value for value. ``False`` means only the
+            distributions are comparable. This is a statement about RNG order,
+            not about correctness.
+        update_matches_reference: ``True`` when the vectorized ``update`` runs
+            the same algorithm as ``reference_belief`` -- so with a shared seed
+            and a shared RNG order the two produce the same particles and
+            weights. Beliefs that redraw, condition on part of the reading,
+            stratify resampling or reinvigorate are compared on the posterior
+            distribution only.
+        reference_belief: Builds the environment's own general (scalar)
+            belief from a particle list and log-weights, for environments whose
+            reading makes a plain particle filter degenerate. ``None`` means
+            ``WeightedParticleBelief`` in the seeded update check and a plain
+            particle filter on the scalar interface in the posterior check.
+        prior_holds_true_state: ``True`` puts the true state on half of the
+            prior's particles in the posterior check. Needed when the reading
+            is sharp relative to the prior: without it only a handful of
+            particles explain the reading, the reference posterior's effective
+            sample size is tiny, and the comparison has no power to fail (the
+            check asserts it has). Off by default, because it changes the
+            prior, and a belief that redraws from an exact posterior
+            (Battleship) ignores the prior's weights.
+        builder: Builds the environment when the variant is not in
+            ``ENV_BUILDERS``.
+    """
+
+    env_id: str
+    updater_class: str
+    belief_class: str
+    observation_for_updater: ObservationForUpdater = _float_array
+    transition_shares_rng: bool = True
+    update_matches_reference: bool = True
+    reference_belief: Optional[ReferenceBelief] = None
+    prior_holds_true_state: bool = False
+    builder: Optional[EnvBuilder] = None
+
+    def build_env(self) -> Environment:
+        """Build the scalar environment."""
+        if self.builder is not None:
+            return self.builder()
+        return _ENV_BUILDER_BY_ID[self.env_id]()
+
+
+_PLAIN = "VectorizedWeightedParticleBelief"
+
+
+# Continuous light-dark: position noise comes from the native RNG and the
+# obstacle-hit roll from numpy, in a different order than the scalar step.
+# Discrete light-dark: the batch path draws slips with random() + choice(), the
+# scalar step with one rand() and a searchsorted. Neither is a bug.
+_LIGHT_DARK_RNG = {"transition_shares_rng": False}
+
+# The reading is sharp relative to the prior (a precise range scan, a
+# low-noise position fix, a hundred noisy cells at once): see
+# BeliefSpec.prior_holds_true_state. Every entry whose reference posterior's
+# effective sample size fell below what the check needs on some seed has it.
+_SHARP_READING = {"prior_holds_true_state": True}
+
+# One entry per hand-written ENV_BUILDERS id with a vectorized belief. The
+# swept configuration variants are added below, in BELIEF_SPECS.
+_HAND_WRITTEN_BELIEF_SPECS: List[BeliefSpec] = [
+    BeliefSpec(
+        "BattleshipPOMDP",
+        "BattleshipVectorizedUpdater",
+        "BattleshipVectorizedWeightedParticleBelief",
+        # Redraws every particle from the exact posterior over legal layouts.
+        update_matches_reference=False,
+    ),
+    BeliefSpec(
+        "CaptureTheFlagPOMDP",
+        "CaptureTheFlagVectorizedUpdater",
+        "CaptureTheFlagVectorizedBelief",
+        # Both teams move stochastically; the draws are made in another order.
+        transition_shares_rng=False,
+        # Writes the exactly-observed components into the particles and
+        # resamples within each flag candidate.
+        update_matches_reference=False,
+        **_SHARP_READING,
+    ),
+    BeliefSpec("CartPolePOMDP", "CartPoleVectorizedUpdater", _PLAIN),
+    BeliefSpec(
+        "ChicheckInvadersPOMDP",
+        "ChicheckInvadersVectorizedUpdater",
+        "ChicheckInvadersVectorizedBelief",
+        # The batch path draws the dive coins from numpy; the scalar step draws
+        # them from the native RNG.
+        transition_shares_rng=False,
+        # Re-draws the unreported chickens of a fraction of the particles.
+        update_matches_reference=False,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "ChicheckInvadersPOMDP[fully_observable]",
+        "ChicheckInvadersVectorizedUpdater",
+        "ChicheckInvadersVectorizedBelief",
+        transition_shares_rng=False,
+        # Collapses onto the observed state.
+        update_matches_reference=False,
+        # The reading is the state itself.
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "ContinuousLaserTagPOMDP",
+        "ContinuousLaserTagVectorizedUpdater",
+        _PLAIN,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "ContinuousLaserTagPOMDPDiscreteActions",
+        "ContinuousLaserTagVectorizedUpdater",
+        _PLAIN,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "ContinuousLightDarkPOMDP",
+        "ContinuousLightDarkVectorizedUpdater",
+        _PLAIN,
+        **_LIGHT_DARK_RNG,
+    ),
+    BeliefSpec(
+        "ContinuousLightDarkPOMDPDiscreteActions",
+        "ContinuousLightDarkVectorizedUpdater",
+        _PLAIN,
+        **_LIGHT_DARK_RNG,
+    ),
+    BeliefSpec(
+        "ContinuousMazePOMDP",
+        "ContinuousMazeVectorizedUpdater",
+        "MazeVectorizedWeightedParticleBelief",
+        observation_for_updater=_maze_observation,
+    ),
+    BeliefSpec("ContinuousPushPOMDP", "ContinuousPushVectorizedUpdater", _PLAIN, **_SHARP_READING),
+    BeliefSpec(
+        "ContinuousPushPOMDPDiscreteActions",
+        "ContinuousPushVectorizedUpdater",
+        _PLAIN,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "DiscreteLightDarkPOMDP",
+        "DiscreteLightDarkVectorizedUpdater",
+        _PLAIN,
+        **_LIGHT_DARK_RNG,
+    ),
+    BeliefSpec(
+        "DiscreteMazePOMDP",
+        "DiscreteMazeVectorizedUpdater",
+        "MazeVectorizedWeightedParticleBelief",
+        observation_for_updater=_maze_observation,
+    ),
+    BeliefSpec(
+        "FirefightingPOMDP",
+        "FirefightingVectorizedUpdater",
+        "FirefightingVectorizedBelief",
+        # Slip, spread and burn-out are drawn in another order.
+        transition_shares_rng=False,
+        # Writes the noiseless firefighter fields into the particles and resamples
+        # within each wind value.
+        update_matches_reference=False,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "FirefightingPOMDP[3 firefighters]",
+        "FirefightingVectorizedUpdater",
+        "FirefightingVectorizedBelief",
+        transition_shares_rng=False,
+        update_matches_reference=False,
+        **_SHARP_READING,
+    ),
+    BeliefSpec(
+        "LaserTagPOMDP",
+        "LaserTagVectorizedUpdater",
+        _PLAIN,
+        # The batch path draws the opponent's move from the native RNG; the
+        # scalar step draws it from numpy.
+        transition_shares_rng=False,
+        **_SHARP_READING,
+    ),
+    BeliefSpec("MountainCarPOMDP", "MountainCarVectorizedUpdater", _PLAIN),
+    BeliefSpec("PacManPOMDP", "PacManVectorizedUpdater", _PLAIN),
+    BeliefSpec("PushPOMDP", "PushVectorizedUpdater", _PLAIN, **_SHARP_READING),
+    BeliefSpec(
+        "RockSamplePOMDP",
+        "RockSampleVectorizedUpdater",
+        "RockSampleVectorizedWeightedParticleBelief",
+        observation_for_updater=_rock_sample_observation,
+    ),
+    BeliefSpec(
+        "SafeAntVelocityPOMDP", "SafetyAntVelocityVectorizedUpdater", _PLAIN, **_SHARP_READING
+    ),
+    BeliefSpec(
+        "SnakePOMDP",
+        "SnakeVectorizedUpdater",
+        "SnakeVectorizedWeightedParticleBelief",
+        observation_for_updater=_raw,
+        # Food respawn is drawn with random() * count; the scalar step uses
+        # randint.
+        transition_shares_rng=False,
+        # Redraws the food when a reading rules out every particle.
+        update_matches_reference=False,
+        **_SHARP_READING,
+    ),
+]
+
+
+def _light_dark_reading_model(updater_class: str) -> Dict[str, Any]:
+    # Each light-dark observation model has its own updater class, which
+    # scores the env's "None" (no reading) label directly.
+    return {"updater_class": updater_class, "observation_for_updater": _raw}
+
+
+# Swept variants whose belief differs from their pinned configuration's, and
+# how. Every other variant inherits its pinned configuration's entry unchanged.
+VARIANT_BELIEF_OVERRIDES: Dict[str, Dict[str, Any]] = {
+    "ContinuousLightDarkPOMDP[observation_model_type=DISTANCE_BASED]": _light_dark_reading_model(
+        "ContinuousLightDarkDistanceBasedVectorizedUpdater"
+    ),
+    "ContinuousLightDarkPOMDP[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": (
+        _light_dark_reading_model("ContinuousLightDarkNoObsInDarkVectorizedUpdater")
+    ),
+    "ContinuousLightDarkPOMDPDiscreteActions[observation_model_type=DISTANCE_BASED]": (
+        _light_dark_reading_model("ContinuousLightDarkDistanceBasedVectorizedUpdater")
+    ),
+    "ContinuousLightDarkPOMDPDiscreteActions[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": (
+        _light_dark_reading_model("ContinuousLightDarkNoObsInDarkVectorizedUpdater")
+    ),
+    "DiscreteLightDarkPOMDP[observation_model_type=DISTANCE_BASED]": _light_dark_reading_model(
+        "DiscreteLightDarkDistanceBasedVectorizedUpdater"
+    ),
+    "DiscreteLightDarkPOMDP[observation_model_type=NO_OBS_IN_DARK]": _light_dark_reading_model(
+        "DiscreteLightDarkNoObsInDarkVectorizedUpdater"
+    ),
+    # The batch path draws the failed action from the native RNG; the scalar
+    # step draws it from numpy. The pinned Push never fails an action, so it
+    # draws nothing and shares the stream trivially.
+    "PushPOMDP[transition_error_prob=0.2]": {"transition_shares_rng": False},
+}
+
+
+def _with_variant_belief_specs(hand_written: List[BeliefSpec]) -> List[BeliefSpec]:
+    """Add one spec per swept variant of an environment that has a spec.
+
+    A variant is the same class as its pinned configuration, so it inherits
+    that entry -- the same belief classes, the same RNG and update flags --
+    unless ``VARIANT_BELIEF_OVERRIDES`` says otherwise.
+    """
+    by_id = {spec.env_id: spec for spec in hand_written}
+    specs = list(hand_written)
+    for env_id, _ in ENV_BUILDERS:
+        base = by_id.get(base_id_of(env_id))
+        if env_id in by_id or base is None:
+            continue
+        specs.append(replace(base, env_id=env_id, **VARIANT_BELIEF_OVERRIDES.get(env_id, {})))
+    return sorted(specs, key=lambda spec: spec.env_id)
+
+
+BELIEF_SPECS: List[BeliefSpec] = _with_variant_belief_specs(_HAND_WRITTEN_BELIEF_SPECS)
+
+
+# Environments in ENV_BUILDERS with no vectorized belief, and why. The belief
+# coverage test checks this list against the registry, so an environment that
+# gains a vectorized belief must move from here into BELIEF_SPECS.
+ENVS_WITHOUT_VECTORIZED_BELIEF: Dict[str, str] = {
+    "SanityPOMDP": "scalar int states; the generic WeightedParticleBelief is the belief",
+    "TMazePOMDP": "no vectorized updater written; the factory falls back to WeightedParticleBelief",
+    "TigerPOMDP": "string states; the generic WeightedParticleBelief is the belief",
+}
+
+
+# Concrete updater / belief classes found in the source tree that no
+# BeliefSpec exercises, and why. Each is a decision, not a gap.
+BELIEF_CLASS_EXCLUSIONS: Dict[str, str] = {
+    # Abstract: holds the shared maze kernels; both concrete subclasses are
+    # registered.
+    "BaseMazeVectorizedUpdater": "abstract base of the two registered maze updaters",
+}
+
+
+# ---------------------------------------------------------------------------
+# Belief-side known disagreements (xfail(strict=True)).
+#
+# Each entry is a real disagreement between a vectorized copy and the scalar
+# environment, found by this suite. The comment says what disagrees. Remove the
+# entry when the fix lands; strict xfail makes the test fail until you do.
+# ---------------------------------------------------------------------------
+
+OBSERVATION_LIKELIHOOD_DISAGREEMENTS: Dict[str, Disagreement] = {}
+
+# The light-dark "no reading" models emit the string "None" when the agent is
+# in the dark. Their updaters score "None" correctly, but the belief factory
+# wraps them in a plain VectorizedWeightedParticleBelief, whose update runs
+# np.asarray(observation, dtype=float) first and raises ValueError. A
+# simulation on either config with the default belief crashes on the first
+# dark step.
+_LIGHT_DARK_NONE_READING: Disagreement = (
+    "VectorizedWeightedParticleBelief.update converts the env's 'None' reading "
+    "with np.asarray(..., dtype=float) and raises ValueError; the updater itself "
+    "handles 'None'",
+    ValueError,
+)
+OBSERVATION_HANDLING_DISAGREEMENTS: Dict[str, Disagreement] = {
+    "ContinuousLightDarkPOMDP[observation_model_type=DISTANCE_BASED]": _LIGHT_DARK_NONE_READING,
+    "ContinuousLightDarkPOMDP[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": (
+        _LIGHT_DARK_NONE_READING
+    ),
+    "DiscreteLightDarkPOMDP[observation_model_type=DISTANCE_BASED]": _LIGHT_DARK_NONE_READING,
+    "DiscreteLightDarkPOMDP[observation_model_type=NO_OBS_IN_DARK]": _LIGHT_DARK_NONE_READING,
+    "ContinuousLightDarkPOMDPDiscreteActions[observation_model_type=DISTANCE_BASED]": (
+        _LIGHT_DARK_NONE_READING
+    ),
+    "ContinuousLightDarkPOMDPDiscreteActions[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": (
+        _LIGHT_DARK_NONE_READING
+    ),
+}
+TRANSITION_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {}
+TRANSITION_SHARED_SEED_DISAGREEMENTS: Dict[str, Disagreement] = {}
+BELIEF_UPDATE_DISAGREEMENTS: Dict[str, Disagreement] = {}
+# No static entry for the light-dark "None" crash: whether the posterior
+# test's seeded draw lands in the dark depends on the platform's RNG stream
+# (it does on Linux for the continuous variants and not on macOS). The test
+# confirms the crash on a "None" reading and xfails at runtime instead; see
+# OBSERVATION_HANDLING_DISAGREEMENTS.
+POSTERIOR_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {}
+
+
+# The same checks on terminal states: the updater's transition and likelihood,
+# and the belief-level terminal test.
+TERMINAL_TRANSITION_DISAGREEMENTS: Dict[str, Disagreement] = {}
+TERMINAL_OBSERVATION_LIKELIHOOD_DISAGREEMENTS: Dict[str, Disagreement] = {}
+TERMINAL_BELIEF_DISAGREEMENTS: Dict[str, Disagreement] = {}
+
+
+# ---------------------------------------------------------------------------
+# Source-tree discovery
+# ---------------------------------------------------------------------------
+
+_PACKAGE_ROOT = Path(__file__).resolve().parents[2]
+_ENVIRONMENTS_ROOT = _PACKAGE_ROOT / "environments"
+
+UPDATER_ROOT = "VectorizedParticleBeliefUpdater"
+BELIEF_ROOT = "VectorizedWeightedParticleBelief"
+
+# A class satisfies the VectorizedGenerativeModel protocol structurally, so it
+# is recognised by the methods it defines rather than by a base class.
+_MODEL_METHODS = frozenset(
+    {
+        "sample_next_states",
+        "sample_observations",
+        "rewards",
+        "terminal_mask",
+        "observation_log_probs",
+    }
+)
+
+
+@dataclass
+class DiscoveredClasses:
+    """Vectorized classes defined under ``POMDPPlanners/environments``.
+
+    Attributes:
+        updaters: Concrete and abstract subclasses of the updater ABC.
+        beliefs: Subclasses of ``VectorizedWeightedParticleBelief``.
+        models: Classes defining every ``VectorizedGenerativeModel`` kernel.
+    """
+
+    updaters: Set[str] = field(default_factory=set)
+    beliefs: Set[str] = field(default_factory=set)
+    models: Set[str] = field(default_factory=set)
+
+
+def discover_vectorized_classes() -> DiscoveredClasses:
+    """Find every vectorized class in the environments package by parsing source.
+
+    Parsing rather than importing keeps the scan complete when an optional
+    simulator (Isaac, CARLA, highway-env) is missing: a module that cannot be
+    imported still has its classes found.
+
+    Returns:
+        The discovered class names, grouped by kind.
+    """
+    bases_of: Dict[str, Set[str]] = {}
+    methods_of: Dict[str, Set[str]] = {}
+    for path in sorted(_ENVIRONMENTS_ROOT.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                bases_of[node.name] = {_base_name(base) for base in node.bases}
+                methods_of[node.name] = {
+                    item.name
+                    for item in node.body
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                }
+
+    found = DiscoveredClasses()
+    found.updaters = _descendants(UPDATER_ROOT, bases_of)
+    found.beliefs = _descendants(BELIEF_ROOT, bases_of)
+    found.models = {name for name, methods in methods_of.items() if _MODEL_METHODS <= methods}
+    return found
+
+
+def _base_name(node: ast.expr) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Subscript):
+        return _base_name(node.value)
+    return ""
+
+
+def _descendants(root: str, bases_of: Dict[str, Set[str]]) -> Set[str]:
+    known = {root}
+    changed = True
+    while changed:
+        changed = False
+        for name, bases in bases_of.items():
+            if name not in known and bases & known:
+                known.add(name)
+                changed = True
+    return known - {root}
+
+
+# ---------------------------------------------------------------------------
+# Model-side registry
+# ---------------------------------------------------------------------------
+
+
+def _copy_row(env: Any, row: np.ndarray) -> np.ndarray:
+    """Default row-to-value conversion: the value is the row itself."""
+    del env
+    return row.copy()
+
+
+def _float_row(env: Any, value: Any) -> np.ndarray:
+    """Default value-to-row conversion: the value's flattened float64 array."""
+    del env
+    return np.asarray(value, dtype=np.float64).ravel()
+
+
+@dataclass(frozen=True)
+class ModelSpec:
+    """One vectorized generative model and its scalar environment.
+
+    The conversions are the only environment knowledge the model conformance
+    test uses. They translate between the model's tensor encoding and the
+    scalar environment's values; none of them re-implements any dynamics.
+
+    Attributes:
+        model_id: Test id.
+        model_class: Name of the model class, for the coverage test.
+        build: Returns ``(env, model)``, the model on CPU in float64. Imports
+            what it needs lazily, so a missing optional simulator surfaces as
+            ``ImportError`` and the test skips.
+        action_of_index: ``(env, model, index) -> action`` for the scalar env.
+        state_of_row: ``(env, row) -> state``; ``row`` is a 1-D float64 array.
+        row_of_state: ``(env, state) -> row`` as a 1-D float64 array.
+        observation_of_row: ``(env, row) -> observation`` for the scalar env.
+        row_of_observation: ``(env, observation) -> row`` as a 1-D float64 array.
+        num_actions: ``(env, model) -> int``.
+        required_modules: Optional simulator modules; the test skips when one
+            is missing.
+        probe_states: ``env -> states`` checked first, before the rollout
+            states. For a branch short random rollouts rarely reach; it is
+            data, and the checks treat it like any other state.
+        observation_not_comparable: Why the model's observation kernels have
+            no scalar counterpart, or ``None``. The two observation checks
+            skip with this reason; the other kernels are still compared.
+        initial_state: ``(env, rng) -> state`` for a model env with no
+            initial-state prior. Those envs are seeded from the real world's
+            first observation, so the test needs some other plausible state to
+            start from; ``None`` means ``env.initial_state_dist()``.
+        env_id: ``ENV_BUILDERS`` id of the scalar environment, for a model
+            built as ``Model(env)`` from a registry environment. ``None`` for
+            a model with a builder of its own. Set by :func:`_registry_model`;
+            it is what lets the swept configuration variants be derived.
+        model_module: Module that defines the model class, with ``env_id``.
+    """
+
+    model_id: str
+    model_class: str
+    build: Callable[[], Tuple[Any, Any]]
+    action_of_index: Callable[[Any, Any, int], Any]
+    num_actions: Callable[[Any, Any], int]
+    state_of_row: Callable[[Any, np.ndarray], Any] = _copy_row
+    row_of_state: Callable[[Any, Any], np.ndarray] = _float_row
+    observation_of_row: Callable[[Any, np.ndarray], Any] = _copy_row
+    row_of_observation: Callable[[Any, Any], np.ndarray] = _float_row
+    required_modules: Tuple[str, ...] = ()
+    initial_state: Optional[Callable[[Any, np.random.Generator], Any]] = None
+    observation_not_comparable: Optional[str] = None
+    probe_states: Optional[Callable[[Any], List[Any]]] = None
+    env_id: Optional[str] = None
+    model_module: Optional[str] = None
+
+
+def _cpu64() -> Dict[str, Any]:
+    import torch  # pylint: disable=import-outside-toplevel
+
+    return {"device": torch.device("cpu"), "dtype": torch.float64}
+
+
+def _discrete_action(env: Any, model: Any, index: int) -> Any:
+    del model
+    return env.get_actions()[index]  # type: ignore[attr-defined]
+
+
+def _discrete_action_count(env: Any, model: Any) -> int:
+    del model
+    return len(env.get_actions())  # type: ignore[attr-defined]
+
+
+def _from_builder(env_id: str, model_path: str, model_name: str) -> Callable[[], Tuple[Any, Any]]:
+    """Build the env from ENV_BUILDERS and the model with ``Model(env, cpu, float64)``."""
+
+    def build() -> Tuple[Any, Any]:
+        env = _ENV_BUILDER_BY_ID[env_id]()
+        model_class = getattr(importlib.import_module(model_path), model_name)
+        return env, model_class(env, **_cpu64())
+
+    return build
+
+
+def _registry_model(env_id: str, model_module: str, model_class: str, **conversions: Any) -> Any:
+    """A spec for a model built as ``Model(env)`` from an ENV_BUILDERS environment."""
+    return ModelSpec(
+        model_class,
+        model_class,
+        _from_builder(env_id, model_module, model_class),
+        env_id=env_id,
+        model_module=model_module,
+        **conversions,
+    )
+
+
+def _tiger_labels() -> Tuple[List[str], List[str], List[str]]:
+    from POMDPPlanners.environments.tiger_pomdp.tiger_pomdp import ACTIONS, OBSERVATIONS, STATES
+
+    return list(STATES), list(ACTIONS), list(OBSERVATIONS)
+
+
+def _rock_sample_labels() -> Tuple[str, ...]:
+    # The torch model's observation code is an index into this tuple.
+    return ("none", "good", "bad")
+
+
+def _maze_observation_of_row(env: Any, row: np.ndarray) -> str:
+    # The maze and T-Maze torch models' observation code is an index into OBSERVATIONS.
+    del env
+    from POMDPPlanners.environments.maze_pomdp.maze_pomdp import OBSERVATIONS
+
+    return OBSERVATIONS[int(row[0])]
+
+
+def _maze_row_of_observation(env: Any, observation: str) -> np.ndarray:
+    del env
+    from POMDPPlanners.environments.maze_pomdp.maze_pomdp import OBSERVATIONS
+
+    return np.array([float(OBSERVATIONS.index(str(observation)))])
+
+
+def _build_racetrack() -> Tuple[Any, Any]:
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_known_track_model import (
+        KnownTrackModel,
+    )
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_track_geometry import (
+        TrackGeometry,
+    )
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_vectorized_model import (
+        RacetrackVectorizedModel,
+    )
+
+    # A short lap with three curvature changes, as in the racetrack parity test,
+    # so a few steps cross segment boundaries.
+    geometry = TrackGeometry(
+        segment_starts=np.array([0.0, 12.0, 30.0, 45.0]),
+        segment_curvatures=np.array([0.0, 0.05, -0.03, 0.0]),
+        total_length_m=60.0,
+    )
+    env = KnownTrackModel(track_geometry=geometry, discount_factor=0.95)
+    return env, RacetrackVectorizedModel(env, **_cpu64())
+
+
+def _racetrack_keys() -> Tuple[str, ...]:
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_sensor_model import (
+        CURVATURE_AHEAD_KEY,
+        DETECTIONS_KEY,
+        EGO_POSE_KEY,
+        EGO_SPEED_KEY,
+        LANE_POSE_KEY,
+    )
+
+    # The torch row's channel order, from racetrack_schema.
+    return (EGO_POSE_KEY, EGO_SPEED_KEY, LANE_POSE_KEY, CURVATURE_AHEAD_KEY, DETECTIONS_KEY)
+
+
+def _racetrack_observation_of_row(env: Any, row: np.ndarray) -> Dict[str, np.ndarray]:
+    from POMDPPlanners.environments.racetrack_pomdp.racetrack_schema import (
+        DETECTION_SLOT_WIDTH,
+        OBSERVED_EGO_POSE_WIDTH,
+        OBSERVED_EGO_SPEED_WIDTH,
+        OBSERVED_LANE_POSE_WIDTH,
+    )
+
+    widths = (
+        OBSERVED_EGO_POSE_WIDTH,
+        OBSERVED_EGO_SPEED_WIDTH,
+        OBSERVED_LANE_POSE_WIDTH,
+        len(env.curvature_lookahead_m),
+    )
+    keys = _racetrack_keys()
+    observation: Dict[str, np.ndarray] = {}
+    start = 0
+    for key, width in zip(keys, widths):
+        observation[key] = row[start : start + width].copy()
+        start += width
+    observation[keys[-1]] = row[start:].reshape(-1, DETECTION_SLOT_WIDTH).copy()
+    return observation
+
+
+def _racetrack_row_of_observation(env: Any, observation: Dict[str, Any]) -> np.ndarray:
+    del env
+    return np.concatenate(
+        [np.asarray(observation[key], dtype=np.float64).ravel() for key in _racetrack_keys()]
+    )
+
+
+def _build_carla_kinematic() -> Tuple[Any, Any]:
+    from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_kinematic_model_pomdp import (
+        KinematicCarlaModelPOMDP,
+    )
+    from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_kinematic_vectorized_model import (
+        CarlaKinematicVectorizedModel,
+    )
+
+    env = KinematicCarlaModelPOMDP(discount_factor=0.95, dt=0.05)
+    return env, CarlaKinematicVectorizedModel(env, **_cpu64())
+
+
+def _build_isaac_lab_surrogate() -> Tuple[Any, Any]:
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_model_pomdp import (
+        IsaacLabModelPOMDP,
+        LinearGaussianTransition,
+        LinearRewardModel,
+    )
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_lab_vectorized_model import (
+        IsaacLabVectorizedModel,
+    )
+
+    # A fitted surrogate with arbitrary (seeded) coefficients: the model is
+    # built from the same fitted components the scalar env plans with.
+    rng = np.random.default_rng(0)
+    state_dim, action_dim = 6, 2
+    env = IsaacLabModelPOMDP(
+        observation_dim=state_dim,
+        action_presets=list(rng.standard_normal((4, action_dim))),
+        discount_factor=0.95,
+        observation_noise_std=0.1,
+        transition=LinearGaussianTransition(
+            np.eye(state_dim) + 0.05 * rng.standard_normal((state_dim, state_dim)),
+            0.3 * rng.standard_normal((state_dim, action_dim)),
+            0.1 * rng.standard_normal(state_dim),
+            np.diag(0.01 + 0.02 * rng.random(state_dim)),
+        ),
+        reward_model=LinearRewardModel(
+            rng.standard_normal(state_dim),
+            rng.standard_normal(action_dim),
+            rng.standard_normal(state_dim),
+            float(rng.standard_normal()),
+        ),
+    )
+    # pylint: disable=protected-access
+    model = IsaacLabVectorizedModel(
+        env._transition,
+        env._observation_model,
+        env._reward_model,
+        np.stack(env.action_presets),
+        **_cpu64(),
+    )
+    return env, model
+
+
+def _gaussian_channel_observations(schema: Any, noise_std: float) -> Dict[str, Any]:
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_perception.observation_models.proprioception_models import (
+        GaussianChannelObservationModel,
+    )
+
+    # The torch models observe the whole state through one isotropic Gaussian;
+    # per-channel Gaussians of the same width are the scalar equivalent.
+    return {
+        name: GaussianChannelObservationModel(channel=name, noise_std=noise_std)
+        for name in schema.names
+    }
+
+
+_ISAAC_OBSERVATION_NOISE = 0.1
+
+
+def _build_isaac_manipulator() -> Tuple[Any, Any]:
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models import (
+        IsaacChannelSchema,
+        ManipulatorIsaacModel,
+        franka_panda_chain,
+    )
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_manipulator_vectorized_model import (
+        ManipulatorVectorizedModel,
+    )
+
+    schema = IsaacChannelSchema(
+        (("joint_pos", 7), ("joint_vel", 7), ("command", 7), ("last_action", 7))
+    )
+    env = ManipulatorIsaacModel(
+        state_schema=schema,
+        action_presets=[
+            np.zeros(7),
+            np.full(7, 0.4),
+            np.full(7, -0.4),
+            np.linspace(-0.5, 0.5, 7),
+        ],
+        discount_factor=0.99,
+        step_dt=0.1,
+        tracking_gain=0.4,
+        chain=franka_panda_chain(),
+        default_joint_positions=np.array([0.0, -0.569, 0.0, -2.810, 0.0, 3.037, 0.741]),
+        action_scale=0.5,
+        observation_models=_gaussian_channel_observations(schema, _ISAAC_OBSERVATION_NOISE),
+    )
+    model = ManipulatorVectorizedModel(
+        env, observation_noise_std=_ISAAC_OBSERVATION_NOISE, **_cpu64()
+    )
+    return env, model
+
+
+def _build_isaac_navigation() -> Tuple[Any, Any]:
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models import (
+        NavigationIsaacModel,
+        navigation_state_schema,
+    )
+    from POMDPPlanners.environments.isaac_lab_pomdp.isaac_generative_models.isaac_navigation_vectorized_model import (
+        NavigationVectorizedModel,
+    )
+
+    schema = navigation_state_schema()
+    env = NavigationIsaacModel(
+        state_schema=schema,
+        action_presets=[
+            np.zeros(3),
+            np.array([1.0, 0.0, 0.0]),
+            np.array([-1.0, 0.0, 0.0]),
+            np.array([0.0, 0.0, 1.0]),
+            np.array([0.6, -0.4, 0.5]),
+        ],
+        discount_factor=0.99,
+        step_dt=0.2,
+        linear_scale=0.8,
+        angular_scale=0.6,
+        observation_models=_gaussian_channel_observations(schema, _ISAAC_OBSERVATION_NOISE),
+    )
+    model = NavigationVectorizedModel(
+        env, observation_noise_std=_ISAAC_OBSERVATION_NOISE, **_cpu64()
+    )
+    return env, model
+
+
+# Plausible starting states for the model envs that are seeded from the real
+# world's first observation and so have no initial-state prior. Ranges follow
+# each model's own parity test.
+
+
+def _carla_initial_state(env: Any, rng: np.random.Generator) -> np.ndarray:
+    agents = env.max_tracked_agents
+    ego = np.concatenate(
+        [
+            rng.uniform(-20.0, 20.0, size=2),
+            rng.uniform(-180.0, 180.0, size=1),
+            rng.uniform(-5.0, 10.0, size=2),
+            rng.uniform(-3.0, 3.0, size=1),
+            rng.uniform(-0.5, 0.5, size=1),
+        ]
+    )
+    slots = np.stack(
+        [
+            (rng.uniform(size=agents) < 0.6).astype(float),
+            rng.uniform(-60.0, 60.0, size=agents),
+            rng.uniform(-8.0, 8.0, size=agents),
+            rng.uniform(-np.pi, np.pi, size=agents),
+            rng.uniform(0.0, 10.0, size=agents),
+        ],
+        axis=1,
+    )
+    return np.concatenate([ego, slots.ravel()])
+
+
+def _carla_occlusion_probe(env: Any) -> List[np.ndarray]:
+    """One agent directly ahead and a second at the edge of its shadow.
+
+    The second agent sits where the first one's occlusion disc just touches the
+    ego's line of sight to it, so whether it is seen turns on the occlusion rule
+    itself. Rollouts from random states almost never land there.
+    """
+    from POMDPPlanners.environments.carla_pomdp.carla_generative_models.carla_kinematic_vectorized_model import (  # noqa: E501  pylint: disable=line-too-long
+        CarlaKinematicVectorizedModel,
+    )
+
+    radius = CarlaKinematicVectorizedModel(
+        env, **_cpu64()
+    )._occlusion_radius  # pylint: disable=protected-access
+    state = np.zeros(7 + 5 * env.max_tracked_agents)
+    state[3] = 5.0
+    agents = state[7:].reshape(env.max_tracked_agents, 5)
+    agents[0] = [1.0, 20.0, 0.0, 0.0, 5.0]
+    agents[1] = [1.0, 40.0, 2.0 * radius, 0.0, 5.0]
+    return [state]
+
+
+def _carla_collision_probe(env: Any) -> List[np.ndarray]:
+    """One agent inside the ego's collision footprint: the model's terminal state.
+
+    Random rollouts from random states end this way on about one seed in ten,
+    which is too rare to rely on across platforms.
+    """
+    state = np.zeros(7 + 5 * env.max_tracked_agents)
+    state[3] = 5.0
+    agents = state[7:].reshape(env.max_tracked_agents, 5)
+    agents[0] = [1.0, 0.5 * env.collision_gap, 0.0, 0.0, 5.0]
+    return [state]
+
+
+def _carla_probe_states(env: Any) -> List[np.ndarray]:
+    return _carla_occlusion_probe(env) + _carla_collision_probe(env)
+
+
+def _isaac_surrogate_initial_state(env: Any, rng: np.random.Generator) -> np.ndarray:
+    return rng.standard_normal(env.observation_dim)
+
+
+def _manipulator_initial_state(env: Any, rng: np.random.Generator) -> np.ndarray:
+    schema = env.state_schema
+    state = np.zeros(schema.total_dim)
+    for name, low, high in (
+        ("joint_pos", -0.6, 0.6),
+        ("joint_vel", -1.0, 1.0),
+        ("command", -0.6, 0.6),
+        ("last_action", -1.0, 1.0),
+    ):
+        block = schema.slice_of(name)
+        state[block] = rng.uniform(low, high, size=block.stop - block.start)
+    return state
+
+
+def _navigation_initial_state(env: Any, rng: np.random.Generator) -> np.ndarray:
+    schema = env.state_schema
+    state = np.zeros(schema.total_dim)
+    state[schema.slice_of("base_lin_vel")] = rng.uniform(-1.0, 1.0, size=3)
+    state[schema.slice_of("projected_gravity")] = rng.uniform(-0.2, 0.2, size=3)
+    goal = schema.slice_of("pose_command")
+    state[goal.start : goal.start + 2] = rng.uniform(-3.0, 3.0, size=2)
+    state[goal.start + 2] = rng.uniform(-0.05, 0.05)
+    state[goal.start + 3] = rng.uniform(-np.pi, np.pi)
+    return state
+
+
+def _schema_observation_of_row(env: Any, row: np.ndarray) -> Dict[str, np.ndarray]:
+    return env.state_schema.split(row.copy())
+
+
+def _schema_row_of_observation(env: Any, observation: Dict[str, Any]) -> np.ndarray:
+    return np.concatenate(
+        [np.asarray(observation[name], dtype=np.float64).ravel() for name in env.state_schema.names]
+    )
+
+
+def _snake_probe_states(env: Any) -> List[np.ndarray]:
+    """Snake states from which GO_STRAIGHT eats, wins or starves.
+
+    Six random steps from the start seldom eat, so without these the respawn
+    draw, the win and the starvation rule would go unchecked. The win probe is
+    a ``target_length - 1`` snake laid along the grid's row-by-row serpentine,
+    with its head mid-row and the food on the next serpentine cell.
+    """
+    from POMDPPlanners.environments.snake_pomdp.snake_pomdp import create_snake_state
+
+    size, target = env.grid_size, env.target_length
+    centre = size // 2
+    start = [(centre, centre), (centre, centre - 1), (centre, centre - 2)]
+    serpentine = [
+        (row, col if row % 2 == 0 else size - 1 - col) for row in range(size) for col in range(size)
+    ]
+    head = next(
+        k
+        for k in range(target - 2, len(serpentine) - 1)
+        if serpentine[k - 1][0] == serpentine[k][0] == serpentine[k + 1][0]
+    )
+    long_body = serpentine[head - target + 2 : head + 1][::-1]
+    return [
+        create_snake_state(start, (centre, centre + 1), target_length=target),
+        create_snake_state(long_body, serpentine[head + 1], target_length=target),
+        create_snake_state(
+            start, (0, 0), steps_since_food=env.starvation_limit - 1, target_length=target
+        ),
+    ]
+
+
+def _capture_the_flag_probe_states(env: Any) -> List[np.ndarray]:
+    """Capture-the-flag states one step from a pick-up, both kinds of tag, and a capture.
+
+    Random steps from the spawn leave both teams on their own bases, so without
+    these the pick-up, tagging and scoring rules would go unchecked. The cells
+    are those of the pinned field; another field gets no probes.
+    """
+    teams = (env.n_blue, env.n_red, env.n_red_defenders)
+    if teams != (2, 2, 1) or env.red_flag_candidates[0] != (7, 1):
+        return []
+    layout = env.layout
+    contested = np.zeros(layout.size)
+    # Blue 0 steps south onto the red flag, beside the defender; blue 1 steps
+    # north onto its own flag, where the red attacker is heading.
+    layout.write_blue_cells(contested, [(7, 2), (1, 2)])
+    layout.write_red_cells(contested, [(8, 1), (1, 4)])
+    scoring = np.zeros(layout.size)
+    # Blue 0 carries the red flag one step north of its base.
+    layout.write_blue_cells(scoring, [(0, 2), (0, 3)])
+    layout.write_red_cells(scoring, [(8, 3), (8, 4)])
+    scoring[layout.carrier_red_flag] = 1.0
+    return [contested, scoring]
+
+
+_ENVS = "POMDPPlanners.environments"
+
+# One entry per vectorized model, on its environment's pinned configuration.
+# The swept configuration variants are added below, in MODEL_SPECS.
+_HAND_WRITTEN_MODEL_SPECS: List[ModelSpec] = [
+    _registry_model(
+        "BattleshipPOMDP",
+        f"{_ENVS}.battleship_pomdp.battleship_vectorized_model",
+        "BattleshipVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: int(row[0]),
+    ),
+    ModelSpec(
+        "CarlaKinematicVectorizedModel",
+        "CarlaKinematicVectorizedModel",
+        _build_carla_kinematic,
+        action_of_index=lambda env, model, i: int(i),
+        num_actions=lambda env, model: len(env.action_presets),
+        observation_of_row=lambda env, row: {"gnss": row[:2].copy(), "agents": row[2:].copy()},
+        row_of_observation=lambda env, o: np.concatenate(
+            [np.asarray(o["gnss"], dtype=np.float64).ravel(), np.asarray(o["agents"]).ravel()]
+        ),
+        initial_state=_carla_initial_state,
+        probe_states=_carla_probe_states,
+    ),
+    _registry_model(
+        "CaptureTheFlagPOMDP",
+        f"{_ENVS}.capture_the_flag_pomdp.capture_the_flag_vectorized_model",
+        "CaptureTheFlagVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: tuple(float(v) for v in row),
+        probe_states=_capture_the_flag_probe_states,
+    ),
+    _registry_model(
+        "CartPolePOMDP",
+        f"{_ENVS}.cartpole_pomdp.cartpole_vectorized_model",
+        "CartPoleVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        # The [fully_observable] variant is swept in from ENV_BUILDERS.
+        "ChicheckInvadersPOMDP",
+        f"{_ENVS}.chicheck_invaders_pomdp.chicheck_invaders_vectorized_model",
+        "ChicheckInvadersVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        # The continuous-action ContinuousLaserTagPOMDP has no finite action set,
+        # so only the discrete-action subclass has a model.
+        "ContinuousLaserTagPOMDPDiscreteActions",
+        f"{_ENVS}.laser_tag_pomdp.continuous_laser_tag_vectorized_model",
+        "ContinuousLaserTagVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        # The torch model declines the hazard-terminal slot (is_obstacle_hit_terminal,
+        # the environment's default) with NotImplementedError, so it is built on the
+        # variant with the slot off -- the only configuration VOPP can plan on. See
+        # test_vectorized_config_contract.py.
+        "ContinuousLightDarkPOMDP[is_obstacle_hit_terminal=False]",
+        f"{_ENVS}.light_dark_pomdp.continuous_light_dark_vectorized_model",
+        "ContinuousLightDarkVectorizedModel",
+        # The model plans over a fixed set of unit moves; the scalar env takes
+        # the move vector itself.
+        action_of_index=lambda env, model, i: model.action_vectors[i].cpu().numpy().copy(),
+        num_actions=lambda env, model: int(model.action_vectors.shape[0]),
+    ),
+    replace(
+        # The same model serves the discrete-action subclass: its default action
+        # table is the subclass's up/down/right/left vectors, in the same order.
+        # Built on the variant with the hazard-terminal slot off, as above.
+        _registry_model(
+            "ContinuousLightDarkPOMDPDiscreteActions[is_obstacle_hit_terminal=False]",
+            f"{_ENVS}.light_dark_pomdp.continuous_light_dark_vectorized_model",
+            "ContinuousLightDarkVectorizedModel",
+            action_of_index=_discrete_action,
+            num_actions=_discrete_action_count,
+        ),
+        model_id="ContinuousLightDarkVectorizedModel(DiscreteActions)",
+    ),
+    _registry_model(
+        # The continuous-action ContinuousPushPOMDP has no finite action set, so
+        # only the discrete-action subclass has a model.
+        "ContinuousPushPOMDPDiscreteActions",
+        f"{_ENVS}.push_pomdp.continuous_push_vectorized_model",
+        "ContinuousPushVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        "DiscreteLightDarkPOMDP",
+        f"{_ENVS}.light_dark_pomdp.discrete_light_dark_vectorized_model",
+        "DiscreteLightDarkVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        "DiscreteMazePOMDP",
+        f"{_ENVS}.maze_pomdp.maze_vectorized_model",
+        "DiscreteMazeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_maze_observation_of_row,
+        row_of_observation=_maze_row_of_observation,
+    ),
+    _registry_model(
+        "FirefightingPOMDP",
+        f"{_ENVS}.firefighting_pomdp.firefighting_vectorized_model",
+        "FirefightingVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    ModelSpec(
+        "IsaacLabVectorizedModel",
+        "IsaacLabVectorizedModel",
+        _build_isaac_lab_surrogate,
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        initial_state=_isaac_surrogate_initial_state,
+    ),
+    _registry_model(
+        "LaserTagPOMDP",
+        f"{_ENVS}.laser_tag_pomdp.laser_tag_vectorized_model",
+        "LaserTagVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: tuple(float(v) for v in row),
+    ),
+    ModelSpec(
+        "ManipulatorVectorizedModel",
+        "ManipulatorVectorizedModel",
+        _build_isaac_manipulator,
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_schema_observation_of_row,
+        row_of_observation=_schema_row_of_observation,
+        initial_state=_manipulator_initial_state,
+    ),
+    _registry_model(
+        "MountainCarPOMDP",
+        f"{_ENVS}.mountain_car_pomdp.mountain_car_vectorized_model",
+        "MountainCarVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    ModelSpec(
+        "NavigationVectorizedModel",
+        "NavigationVectorizedModel",
+        _build_isaac_navigation,
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_schema_observation_of_row,
+        row_of_observation=_schema_row_of_observation,
+        initial_state=_navigation_initial_state,
+        # NavigationIsaacModel ships without an observation model, and the torch
+        # model wraps the pose_command heading residual into (-pi, pi]. The
+        # per-channel Gaussians configured here match every channel except
+        # that one, and no scalar observation model observes the whole state
+        # with a wrapped heading (GoalRelativePoseObservationModel wraps, but
+        # emits a 3-vector). So there is no scalar twin to compare with.
+        observation_not_comparable=(
+            "no scalar observation model observes the navigation state with the "
+            "heading residual wrapped, as the torch model does"
+        ),
+    ),
+    _registry_model(
+        "PacManPOMDP",
+        f"{_ENVS}.pacman_pomdp.pacman_vectorized_model",
+        "PacManVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: env.array_to_observation(row.copy()),
+        row_of_observation=lambda env, o: np.asarray(env.observation_to_array(o), dtype=np.float64),
+    ),
+    _registry_model(
+        "PushPOMDP",
+        f"{_ENVS}.push_pomdp.push_vectorized_model",
+        "PushVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    ModelSpec(
+        "RacetrackVectorizedModel",
+        "RacetrackVectorizedModel",
+        _build_racetrack,
+        action_of_index=lambda env, model, i: int(i),
+        num_actions=lambda env, model: len(env.action_presets),
+        observation_of_row=_racetrack_observation_of_row,
+        row_of_observation=_racetrack_row_of_observation,
+    ),
+    _registry_model(
+        "RockSamplePOMDP",
+        f"{_ENVS}.rock_sample_pomdp.rocksample_vectorized_model",
+        "RockSampleVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=lambda env, row: _rock_sample_labels()[int(row[0])],
+        row_of_observation=lambda env, o: np.array([float(_rock_sample_labels().index(str(o)))]),
+    ),
+    _registry_model(
+        "SafeAntVelocityPOMDP",
+        f"{_ENVS}.safety_ant_velocity_pomdp.safety_ant_velocity_vectorized_model",
+        "SafetyAntVelocityVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+    ),
+    _registry_model(
+        "SanityPOMDP",
+        f"{_ENVS}.sanity_pomdp.sanity_pomdp_vectorized_model",
+        "SanityVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        state_of_row=lambda env, row: int(row[0]),
+        observation_of_row=lambda env, row: int(row[0]),
+    ),
+    _registry_model(
+        "SnakePOMDP",
+        f"{_ENVS}.snake_pomdp.snake_vectorized_model",
+        "SnakeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        # The scalar reading is a variable-length int tuple; the model pads it
+        # to 4 + 2 * target_length columns with -1.
+        observation_of_row=lambda env, row: importlib.import_module(
+            f"{_ENVS}.snake_pomdp.snake_vectorized_model"
+        ).snake_row_to_observation(env, row),
+        row_of_observation=lambda env, o: importlib.import_module(
+            f"{_ENVS}.snake_pomdp.snake_vectorized_model"
+        ).snake_observation_to_row(env, o),
+        probe_states=_snake_probe_states,
+    ),
+    _registry_model(
+        "TMazePOMDP",
+        f"{_ENVS}.maze_pomdp.t_maze_vectorized_model",
+        "TMazeVectorizedModel",
+        action_of_index=_discrete_action,
+        num_actions=_discrete_action_count,
+        observation_of_row=_maze_observation_of_row,
+        row_of_observation=_maze_row_of_observation,
+    ),
+    _registry_model(
+        "TigerPOMDP",
+        f"{_ENVS}.tiger_pomdp.tiger_pomdp_vectorized_model",
+        "TigerVectorizedModel",
+        action_of_index=lambda env, model, i: _tiger_labels()[1][i],
+        num_actions=lambda env, model: len(_tiger_labels()[1]),
+        state_of_row=lambda env, row: _tiger_labels()[0][int(row[0])],
+        row_of_state=lambda env, s: np.array([float(_tiger_labels()[0].index(s))]),
+        observation_of_row=lambda env, row: _tiger_labels()[2][int(row[0])],
+        row_of_observation=lambda env, o: np.array([float(_tiger_labels()[2].index(o))]),
+    ),
+]
+
+
+# Swept variants the model declines to build, and its stated reason. A torch
+# model implements a subset of its environment's configurations and guards the
+# rest with NotImplementedError; test_vectorized_config_contract.py owns that
+# triage for the enum switches. This list also carries the bool and string
+# switches that sweep cannot see, and it is what keeps a declined variant out
+# of MODEL_SPECS. The coverage test fails on an entry that now builds.
+_CONSTANT_REWARD_ONLY = "only the CONSTANT_HAZARD_PENALTY reward model is vectorized"
+_NO_HAZARD_TERMINAL_SLOT = "the hazard-terminal absorbing slot is not vectorized"
+_INDEPENDENT_GHOSTS_ONLY = "only 'independent' ghost coordination is vectorized"
+_NORMAL_NOISE_ONLY = "only the NORMAL_NOISE observation model is vectorized"
+MODEL_VARIANT_DECLINES: Dict[str, str] = {
+    # Hazard-hit termination is this environment's default, so the pinned
+    # configuration is the one the model cannot plan on.
+    "ContinuousLightDarkVectorizedModel[pinned]": _NO_HAZARD_TERMINAL_SLOT,
+    "ContinuousLightDarkVectorizedModel[observation_model_type=DISTANCE_BASED]": (
+        _NORMAL_NOISE_ONLY
+    ),
+    "ContinuousLightDarkVectorizedModel[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": (
+        _NORMAL_NOISE_ONLY
+    ),
+    "ContinuousLightDarkVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    "ContinuousLightDarkVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    # The discrete-action subclass declines the same five configurations as
+    # its parent above, through the same guards.
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)[pinned]": _NO_HAZARD_TERMINAL_SLOT,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)[observation_model_type=DISTANCE_BASED]": (
+        _NORMAL_NOISE_ONLY
+    ),
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[observation_model_type=NORMAL_NOISE_NO_OBS_IN_DARK]": _NORMAL_NOISE_ONLY,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": _CONSTANT_REWARD_ONLY,
+    "ContinuousLightDarkVectorizedModel(DiscreteActions)"
+    "[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+    "DiscreteLightDarkVectorizedModel[is_obstacle_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
+    # NO_OBS_IN_DARK and DISTANCE_BASED emit the string "None" far from every
+    # beacon, and an [N, 2] observation tensor has no row for it.
+    "DiscreteLightDarkVectorizedModel[observation_model_type=DISTANCE_BASED]": (
+        "only the NORMAL observation model is vectorized"
+    ),
+    "DiscreteLightDarkVectorizedModel[observation_model_type=NO_OBS_IN_DARK]": (
+        "only the NORMAL observation model is vectorized"
+    ),
+    "LaserTagVectorizedModel[is_dangerous_area_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
+    "LaserTagVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    "LaserTagVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+    "PacManVectorizedModel[ghost_coordination=coordinated]": _INDEPENDENT_GHOSTS_ONLY,
+    "PacManVectorizedModel[ghost_coordination=mixed]": _INDEPENDENT_GHOSTS_ONLY,
+    "PacManVectorizedModel[is_dangerous_area_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
+    "PacManVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    "PacManVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+    "PushVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    "PushVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+    "RockSampleVectorizedModel[is_dangerous_area_hit_terminal=True]": _NO_HAZARD_TERMINAL_SLOT,
+    "RockSampleVectorizedModel[reward_model_type=DISTANCE_DECAYED_HAZARD_PENALTY]": (
+        _CONSTANT_REWARD_ONLY
+    ),
+    "RockSampleVectorizedModel[reward_model_type=ZERO_MEAN_HAZARD_SHOCK]": _CONSTANT_REWARD_ONLY,
+}
+
+
+# Id suffix of the variant built on the pinned configuration, for a model whose
+# own entry is built on a variant.
+_PINNED_SUFFIX = "[pinned]"
+
+
+def model_variants(spec: ModelSpec) -> List[ModelSpec]:
+    """One spec per other registered configuration of ``spec``'s environment.
+
+    Declined ones are included; ``MODEL_SPECS`` filters them. A model with a
+    builder of its own (no ``env_id``) has no variants here: its environment is
+    not in ENV_BUILDERS, so nothing sweeps it. A model whose own entry is built
+    on a variant (continuous light-dark) is swept over the rest, the pinned
+    configuration included.
+    """
+    if spec.env_id is None or spec.model_module is None:
+        return []
+    base_id = base_id_of(spec.env_id)
+    variants = []
+    for env_id, _ in ENV_BUILDERS:
+        if env_id == spec.env_id or base_id_of(env_id) != base_id:
+            continue
+        variants.append(
+            replace(
+                spec,
+                model_id=f"{spec.model_id}{env_id[len(base_id):] or _PINNED_SUFFIX}",
+                env_id=env_id,
+                build=_from_builder(env_id, spec.model_module, spec.model_class),
+            )
+        )
+    return variants
+
+
+MODEL_SPECS: List[ModelSpec] = sorted(
+    [
+        *_HAND_WRITTEN_MODEL_SPECS,
+        *(
+            variant
+            for spec in _HAND_WRITTEN_MODEL_SPECS
+            for variant in model_variants(spec)
+            if variant.model_id not in MODEL_VARIANT_DECLINES
+        ),
+    ],
+    key=lambda spec: spec.model_id,
+)
+
+
+# Model classes found in the source tree that no ModelSpec exercises, and why.
+MODEL_CLASS_EXCLUSIONS: Dict[str, str] = {}
+
+OBSERVATION_LOG_PROB_DISAGREEMENTS: Dict[str, Disagreement] = {}
+REWARD_DISAGREEMENTS: Dict[str, Disagreement] = {}
+TERMINAL_MASK_DISAGREEMENTS: Dict[str, Disagreement] = {}
+
+# Models whose scalar environment has no terminal state, and why. Keyed by the
+# model's pinned id; every variant inherits it. The registry environments
+# among them are declared in _terminal_states.ENVS_WITHOUT_TERMINAL_STATES as
+# well, and test_models_without_terminal_states_agree_with_the_environment_list
+# checks the two agree.
+_WORLD_OWNS_TERMINATION = (
+    "the planning model never terminates: the simulator owns termination, and a model "
+    "that guessed at it would prune states the episode can still visit"
+)
+MODELS_WITHOUT_TERMINAL_STATES: Dict[str, str] = {
+    "IsaacLabVectorizedModel": _WORLD_OWNS_TERMINATION,
+    "ManipulatorVectorizedModel": _WORLD_OWNS_TERMINATION,
+    "NavigationVectorizedModel": _WORLD_OWNS_TERMINATION,
+    "SanityVectorizedModel": "SanityPOMDP has no terminal states",
+    "TigerVectorizedModel": "TigerPOMDP.is_terminal always returns False",
+}
+
+NEXT_STATE_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {}
+# The scalar FactoredAgentObservationModel.render decides each slot's occlusion
+# against the rows it is rewriting in place: an earlier slot has already had
+# pose noise added (or been zeroed) when a later slot's sight line is tested.
+# So an agent just behind another is reported or dropped at random, while the
+# torch sampler -- and both log-likelihoods -- test occlusion on the clean
+# state. A zeroed earlier slot also stops occluding. The registry's probe
+# state puts one agent at the occlusion boundary behind another, so the
+# disagreement shows on every run: the scalar sensor reports it in about half
+# the draws, the torch sampler never.
+OBSERVATION_DISTRIBUTION_DISAGREEMENTS: Dict[str, Disagreement] = {
+    "CarlaKinematicVectorizedModel": (
+        "scalar CARLA agent sensor tests occlusion against rows it has already "
+        "noised or zeroed, so an agent at the occlusion boundary is dropped at "
+        "random; the torch sampler tests the clean state",
+        AssertionError,
+    ),
+}
+
+# The model checks on terminal states: stepping from one, observing one, and
+# scoring it and the step that enters it.
+TERMINAL_NEXT_STATE_DISAGREEMENTS: Dict[str, Disagreement] = {}
+# The CARLA occlusion disagreement above, on a terminal state: a collision puts
+# an agent directly ahead of the ego, where it shadows the agents behind it.
+TERMINAL_OBSERVATION_DISAGREEMENTS: Dict[str, Disagreement] = {
+    "CarlaKinematicVectorizedModel": OBSERVATION_DISTRIBUTION_DISAGREEMENTS[
+        "CarlaKinematicVectorizedModel"
+    ],
+}
+TERMINAL_REWARD_DISAGREEMENTS: Dict[str, Disagreement] = {}
+TERMINAL_ENTRY_REWARD_DISAGREEMENTS: Dict[str, Disagreement] = {}
+
+
+def missing_module(modules: Tuple[str, ...]) -> Optional[str]:
+    """Return the first of ``modules`` that cannot be imported, or ``None``."""
+    for module in modules:
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            return module
+    return None

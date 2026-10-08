@@ -4,11 +4,13 @@ import random
 from typing import List
 
 import numpy as np
+import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planners.sparse_sampling import (
     SparseSamplingDiscreteActionsPlanner,
@@ -17,6 +19,7 @@ from POMDPPlanners.simulations.simulation_statistics import (
     StandardMetrics,
     compute_statistics_environment_policy_pair,
     compute_statistics_environments_policies_comparison,
+    get_available_optimization_metrics,
     get_metric_names_from_environment_policy_pair,
 )
 
@@ -33,6 +36,13 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
             resampling=False,
         )
 
+    # Measured as EpisodeRunner._record_step measures it. TigerPOMDP derives its
+    # environment metrics from the per-step channel, so a history built without
+    # info is not a stand-in for a recorded one -- it is an unmeasured history,
+    # which compute_metrics rejects rather than scoring as zero.
+    environment = TigerPOMDP(discount_factor=discount_factor)
+    step_info = environment.step_info("tiger_left", "listen", "tiger_left") or None
+
     steps = [
         StepData(
             state="tiger_left",
@@ -41,6 +51,7 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
             observation="hear_left",
             reward=r,
             belief=create_test_belief("tiger_left"),
+            info=step_info,
         )
         for r in rewards
     ]
@@ -350,9 +361,14 @@ def test_compute_statistics_environment_policy_pair():
         ),
     ]
 
-    # Compute statistics
+    # Compute statistics. The histories are measured first, exactly as the
+    # episode runner measures a recorded one: TigerPOMDP's metrics come from the
+    # per-step channel, which a hand-built history carries nothing in.
     statistics = compute_statistics_environment_policy_pair(
-        env=environment, histories=histories, alpha=0.1, confidence_interval_level=0.95
+        env=environment,
+        histories=attach_step_info(environment, histories),
+        alpha=0.1,
+        confidence_interval_level=0.95,
     )
 
     # Verify statistics
@@ -513,10 +529,11 @@ def test_compute_statistics_environments_policies_comparison():
         ),
     ]
 
-    # Create histories dictionary
+    # Create histories dictionary, measured as the episode runner measures a
+    # recorded history: TigerPOMDP's metrics come from the per-step channel.
     histories = {
-        "TigerPOMDP_1": {"Policy1": history1},
-        "TigerPOMDP_2": {"Policy2": history2},
+        "TigerPOMDP_1": {"Policy1": attach_step_info(env1, history1)},
+        "TigerPOMDP_2": {"Policy2": attach_step_info(env2, history2)},
     }
 
     # Compute statistics
@@ -549,7 +566,7 @@ def test_get_metric_names_from_environment_policy_pair_basic():
 
     Given: TigerPOMDP environment and POMCP policy class
     When: get_metric_names_from_environment_policy_pair is called
-    Then: Returns list containing environment metrics (success_rate, average_listens), policy info metrics (prefixed with policy_info_), and all standard metrics in correct order
+    Then: Returns list containing environment metrics (task_completion_rate, average_listens), policy info metrics (prefixed with policy_info_), and all standard metrics in correct order
 
     Test type: unit
     """
@@ -563,7 +580,7 @@ def test_get_metric_names_from_environment_policy_pair_basic():
         ), f"Missing standard metric: {standard_metric.value}"
 
     # Verify environment-specific metrics are present
-    assert "success_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert "average_listens" in metric_names
 
     # Verify policy info metrics are present with proper prefix
@@ -640,7 +657,7 @@ def test_get_metric_names_from_environment_policy_pair_policy_without_info_vars(
         assert standard_metric.value in metric_names
 
     # Verify environment metrics are present
-    assert "success_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert "average_listens" in metric_names
 
 
@@ -724,7 +741,7 @@ def test_get_metric_names_from_environment_policy_pair_multiple_environments():
     assert metric_names1 == metric_names2
 
     # Verify they contain the expected TigerPOMDP metrics
-    assert "success_rate" in metric_names1
+    assert "task_completion_rate" in metric_names1
     assert "average_listens" in metric_names1
 
 
@@ -829,3 +846,48 @@ def test_metric_estimates_within_confidence_intervals():
             f"Metric '{metric.name}': value {metric.value} not within CI "
             f"[{metric.lower_confidence_bound}, {metric.upper_confidence_bound}]"
         )
+
+
+def test_cvar_return_rejects_samples_outside_declared_reward_range():
+    """CVaR concentration bounds must not use an invalid return support."""
+    histories = [create_test_history([-100.0], discount_factor=0.0) for _ in range(10)]
+    environment = TigerPOMDP(discount_factor=0.0)
+    environment.reward_range = (-1.0, 1.0)
+
+    with pytest.raises(ValueError, match="outside the distribution support"):
+        compute_statistics_environment_policy_pair(
+            env=environment,
+            histories=histories,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+        )
+
+
+def test_cvar_metric_omitted_without_reward_range():
+    """CVaR is unavailable when the environment has no known reward support."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    environment.reward_range = None
+    histories = [create_test_history([float(i)]) for i in range(1, 11)]
+
+    metrics = compute_statistics_environment_policy_pair(
+        env=environment,
+        histories=histories,
+        alpha=0.1,
+        confidence_interval_level=0.95,
+    )
+    assert StandardMetrics.RETURN_CVAR.value not in {metric.name for metric in metrics}
+
+    dataframe = compute_statistics_environments_policies_comparison(
+        histories={environment.name: {"test_policy": histories}},
+        environments=[environment],
+        alpha=0.1,
+        confidence_interval_level=0.95,
+    )
+    assert not any(column.startswith("return_cvar") for column in dataframe.columns)
+
+    assert StandardMetrics.RETURN_CVAR.value not in get_metric_names_from_environment_policy_pair(
+        environment, POMCP
+    )
+    assert StandardMetrics.RETURN_CVAR.value not in get_available_optimization_metrics(
+        environment, POMCP
+    )

@@ -256,6 +256,10 @@ class EpisodeRunner:
 
     def _record_step(self, action: Any, next_state: Any, observation: Any, reward: float) -> None:
         """Record step data in history."""
+        # Collected from the world (not the planner's model): only the world can
+        # measure what actually happened, and the values must ride back inside
+        # History because compute_metrics runs in the parent process.
+        info = self.environment.step_info(self.state, action, next_state)
         step_data = StepData(
             state=self.state,
             action=action,
@@ -263,11 +267,17 @@ class EpisodeRunner:
             observation=observation,
             reward=reward,
             belief=self.belief,
+            info=info or None,
         )
         self.history.append(step_data)
 
     def _add_terminal_step(self) -> None:
         """Add terminal step to history."""
+        # Measured like any other step: metrics that scan every recorded state
+        # must see the final one too, and it is only ever recorded here. The
+        # transition arguments are None because no transition was taken -- an
+        # environment reports whatever it can measure from the state alone.
+        info = self.environment.step_info(self.state, None, None)
         terminal_step = StepData(
             state=self.state,
             action=None,
@@ -275,6 +285,7 @@ class EpisodeRunner:
             observation=None,
             reward=None,
             belief=self.belief,
+            info=info or None,
         )
         self.history.append(terminal_step)
 

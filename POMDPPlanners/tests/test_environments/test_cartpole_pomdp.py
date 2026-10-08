@@ -11,7 +11,6 @@ This module tests the CartPole POMDP environment, focusing on:
 
 # pylint: disable=too-many-lines
 
-import copy
 import random
 
 import numpy as np
@@ -24,6 +23,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
     _native,
 )
 from POMDPPlanners.tests.test_utils.env_pinned_kwargs import cartpole_pinned_kwargs
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -39,44 +39,6 @@ def base_cartpole_environment() -> CartPolePOMDP:
 
 class TestCartPolePOMDPEquality:
     """Test suite for CartPolePOMDP equality comparisons."""
-
-    def test_same_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with same discount factor are equal.
-
-        Purpose: Validates that CartPolePOMDP equality comparison works correctly for identical discount factors
-
-        Given: Two CartPolePOMDP environments with identical discount_factor=0.95 and noise_cov
-        When: Equality comparison is performed between the environments
-        Then: Both environments are equal to each other, demonstrating symmetry of equality operator
-
-        Test type: unit
-        """
-        other_env = CartPolePOMDP(
-            discount_factor=0.95,
-            noise_cov=base_cartpole_environment.noise_cov,
-            **cartpole_pinned_kwargs(),
-        )
-        assert base_cartpole_environment == other_env
-        assert other_env == base_cartpole_environment  # Test symmetry
-
-    def test_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with different discount factors are not equal.
-
-        Purpose: Validates that CartPolePOMDP equality comparison correctly identifies different discount factors
-
-        Given: Two CartPolePOMDP environments with different discount factors (0.95 vs 0.8) but same noise_cov
-        When: Equality comparison is performed between the environments
-        Then: Environments are not equal to each other, demonstrating symmetry of inequality operator
-
-        Test type: unit
-        """
-        other_env = CartPolePOMDP(
-            discount_factor=0.8,
-            noise_cov=base_cartpole_environment.noise_cov,
-            **cartpole_pinned_kwargs(),
-        )
-        assert base_cartpole_environment != other_env
-        assert other_env != base_cartpole_environment  # Test symmetry
 
     def test_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
         """Test that CartPolePOMDPs with different noise covariance are not equal.
@@ -164,60 +126,9 @@ class TestCartPolePOMDPEquality:
         delattr(other_env, "masscart")
         assert base_cartpole_environment != other_env
 
-    def test_deep_copy_equality(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that a deep copy of CartPolePOMDP is equal to original.
-
-        Purpose: Validates that CartPolePOMDP equality comparison works correctly with deep copies
-
-        Given: A CartPolePOMDP environment and its deep copy with identical attributes
-        When: Equality comparison is performed between original and deep copy
-        Then: Both environments are equal to each other, demonstrating symmetry and deep copy integrity
-
-        Test type: unit
-        """
-        copied_env = copy.deepcopy(base_cartpole_environment)
-        assert copied_env == base_cartpole_environment
-        assert base_cartpole_environment == copied_env  # Test symmetry
-
 
 class TestCartPolePOMDPConfigId:
     """Test suite for CartPolePOMDP config_id functionality."""
-
-    def test_config_id_consistency(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is consistent for identical environments.
-
-        Purpose: Validates that CartPolePOMDP config_id generates consistent identifiers for identical configurations
-
-        Given: Two CartPolePOMDP environments with identical discount_factor=0.95 and noise_cov
-        When: Config IDs are generated for both environments
-        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
-
-        Test type: configuration
-        """
-        other_env = CartPolePOMDP(
-            discount_factor=0.95,
-            noise_cov=base_cartpole_environment.noise_cov,
-            **cartpole_pinned_kwargs(),
-        )
-        assert base_cartpole_environment.config_id == other_env.config_id
-
-    def test_config_id_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id changes with different discount factor.
-
-        Purpose: Validates that CartPolePOMDP config_id generates different identifiers for different discount factors
-
-        Given: Two CartPolePOMDP environments with different discount factors (0.95 vs 0.8) but same noise_cov
-        When: Config IDs are generated for both environments
-        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
-
-        Test type: configuration
-        """
-        other_env = CartPolePOMDP(
-            discount_factor=0.8,
-            noise_cov=base_cartpole_environment.noise_cov,
-            **cartpole_pinned_kwargs(),
-        )
-        assert base_cartpole_environment.config_id != other_env.config_id
 
     def test_config_id_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
         """Test that config_id changes with different noise covariance.
@@ -263,37 +174,6 @@ class TestCartPolePOMDPConfigId:
         )
         other_env.masscart = 2.0  # Different cart mass
         assert base_cartpole_environment.config_id != other_env.config_id
-
-    def test_config_id_format(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is a valid SHA-256 hash.
-
-        Purpose: Validates that CartPolePOMDP config_id generates properly formatted SHA-256 hash identifiers
-
-        Given: A CartPolePOMDP environment with specific configuration
-        When: Config ID is generated for the environment
-        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
-
-        Test type: configuration
-        """
-        config_id = base_cartpole_environment.config_id
-        assert isinstance(config_id, str)
-        assert len(config_id) == 64  # SHA-256 hash length
-        assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
-
-    def test_config_id_deterministic(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-
-        Purpose: Validates that CartPolePOMDP config_id generates deterministic identifiers for identical configurations
-
-        Given: A CartPolePOMDP environment with specific configuration
-        When: Config ID is generated multiple times for the same environment
-        Then: All generated config_ids are identical, demonstrating deterministic behavior
-
-        Test type: configuration
-        """
-        config_id1 = base_cartpole_environment.config_id
-        config_id2 = base_cartpole_environment.config_id
-        assert config_id1 == config_id2
 
 
 def test_state_transition_model(base_cartpole_environment):
@@ -729,20 +609,20 @@ def test_cartpole_observation_model_probability_values_reasonable():
 
 
 def test_get_metric_names():
-    """Test that get_metric_names returns goal_reaching_rate.
+    """Test that get_metric_names returns task_completion_rate.
 
     Purpose: Validates that CartPolePOMDP returns the correct metric names
 
     Given: A CartPolePOMDP environment
     When: get_metric_names is called
-    Then: Returns list containing "goal_reaching_rate"
+    Then: Returns list containing "task_completion_rate"
 
     Test type: unit
     """
     noise_cov = np.eye(4) * 0.1
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, **cartpole_pinned_kwargs())
     metric_names = env.get_metric_names()
-    assert "goal_reaching_rate" in metric_names
+    assert "task_completion_rate" in metric_names
     assert len(metric_names) == 1
 
 
@@ -753,7 +633,7 @@ def test_compute_metrics_goal_reaching():
 
     Given: Three simulation histories - 2 completing successfully (no crash), 1 crashing
     When: compute_metrics analyzes the simulation histories
-    Then: Returns goal_reaching_rate=2/3 with confidence bounds
+    Then: Returns task_completion_rate=2/3 with confidence bounds
 
     Test type: unit
     """
@@ -857,14 +737,14 @@ def test_compute_metrics_goal_reaching():
     )
 
     # Compute metrics
-    metrics = env.compute_metrics([history1, history2, history3])
+    metrics = env.compute_metrics(attach_step_info(env, [history1, history2, history3]))
 
     # Convert metrics to dictionary for easier access
     metrics_dict = {metric.name: metric for metric in metrics}
 
     # Test goal reaching rate
-    assert "goal_reaching_rate" in metrics_dict
-    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert "task_completion_rate" in metrics_dict
+    goal_rate = metrics_dict["task_completion_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories complete successfully
     assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
@@ -1002,7 +882,7 @@ def test_compute_metrics_values_within_confidence_intervals():
             )
         )
 
-    metrics = env.compute_metrics(histories)
+    metrics = env.compute_metrics(attach_step_info(env, histories))
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, env)
     verify_history_returns_bounded(histories, env)

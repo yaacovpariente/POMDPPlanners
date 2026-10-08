@@ -1,219 +1,117 @@
 Belief States
 =============
 
-Belief states represent the agent's uncertainty about the true state of the environment. POMDPPlanners provides flexible belief representations suitable for different problem types.
+A planner never sees the true state. It sees a *belief*: a probability
+distribution over states, built from the actions taken and the observations
+received so far. In this package the default belief is a set of weighted
+particles, and you rarely build one by hand: ``get_initial_belief`` makes the
+first one and the episode runner updates it after every step.
 
-Belief Representations
-----------------------
+This page shows how to create, inspect and update a belief. The class-by-class
+reference is in :doc:`../common/beliefs`.
 
-**Particle Filter Beliefs**
+Creating the initial belief
+---------------------------
 
-.. autosummary::
-   :toctree: ../api/
-
-   POMDPPlanners.core.belief.WeightedParticleBelief
-   POMDPPlanners.core.belief.UnweightedParticleBelief
-
-**Utility Functions**
-
-.. autosummary::
-   :toctree: ../api/
-
-   POMDPPlanners.core.belief.get_initial_belief
-
-Base Belief Interface
---------------------
-
-All belief representations inherit from the base Belief class:
-
-.. autoclass:: POMDPPlanners.core.belief.Belief
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Particle Filter Beliefs
------------------------
-
-**WeightedParticleBelief**
-   - Maintains particles with associated weights
-   - Efficient for complex observation models
-   - Supports importance sampling
-   - Handles continuous state spaces well
-
-**UnweightedParticleBelief**
-   - All particles have equal weight
-   - Simpler implementation
-   - Good for uniform beliefs
-   - Faster sampling operations
-
-Belief Operations
-----------------
-
-**Sampling from Beliefs**
-
-.. code-block:: python
-
-   from POMDPPlanners.core.belief import WeightedParticleBelief
-   import numpy as np
-
-   # Create belief with weighted particles
-   states = [0, 1, 2]
-   particles = [0, 0, 1, 1, 2]
-   weights = [0.3, 0.2, 0.2, 0.2, 0.1]
-
-   belief = WeightedParticleBelief(
-       particles=particles,
-       weights=weights,
-       state_space=states
-   )
-
-   # Sample from belief
-   state_sample = belief.sample()
-   print(f"Sampled state: {state_sample}")
-
-   # Get state probabilities
-   probabilities = belief.get_state_probabilities()
-   print(f"State probabilities: {probabilities}")
-
-**Creating Initial Beliefs**
+``get_initial_belief`` draws ``n_particles`` states from the environment's
+initial state distribution and gives them equal weight. It returns a
+:class:`~POMDPPlanners.core.belief.particle_beliefs.WeightedParticleBelief` with resampling on.
 
 .. code-block:: python
 
    from POMDPPlanners.core.belief import get_initial_belief
    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
-   env = TigerPOMDP()
+   env = TigerPOMDP(discount_factor=0.95)
+   belief = get_initial_belief(env, n_particles=500)
 
-   # Create uniform initial belief
-   belief = get_initial_belief(env, n_particles=1000)
+   state = belief.sample()  # one state, drawn by weight
 
-   # Sample from initial belief
-   initial_state = belief.sample()
+The particles are drawn at random, so two calls give two different beliefs. If
+you run a batch through the simulation API, seed NumPy before this call:
+the belief is part of the cache key, and an unseeded belief makes every rerun
+start from zero (see :doc:`simulations`).
 
-Belief Updates
--------------
+Reading a belief
+----------------
 
-Beliefs are updated based on actions and observations:
-
-.. code-block:: python
-
-   # After taking action and receiving observation
-   action = "listen"
-   observation = "hear_left"
-
-   # Update belief (typically done by planner)
-   updated_belief = planner.update_belief(
-       current_belief=belief,
-       action=action,
-       observation=observation
-   )
-
-Advanced Belief Operations
--------------------------
-
-**State Probability Queries**
+For a discrete state space, ``to_unique_support_distribution`` merges equal
+particles and sums their weights:
 
 .. code-block:: python
 
-   # Get probability of specific state
-   prob_tiger_left = belief.get_state_probabilities()["tiger_left"]
+   dist = belief.to_unique_support_distribution()
+   print(dict(zip(dist.values, dist.probs)))
+   # e.g. {'tiger_left': 0.49, 'tiger_right': 0.51}
 
-   # Check if belief is concentrated
-   max_prob = max(belief.get_state_probabilities().values())
-   is_concentrated = max_prob > 0.8
+For a continuous state space, read the particles and their weights directly:
+``belief.particles`` and ``belief.normalized_weights``.
 
-**Effective Sample Size**
+Updating a belief
+-----------------
 
-.. code-block:: python
-
-   # For weighted particle beliefs
-   if hasattr(belief, 'effective_sample_size'):
-       eff_size = belief.effective_sample_size()
-       if eff_size < 100:  # Threshold for resampling
-           print("Consider particle resampling")
-
-**Belief Entropy**
+``update`` applies one action and one observation and returns a new belief. It
+does not change the old one. For a weighted particle belief, it moves every
+particle through the transition model, then multiplies each weight by the
+likelihood of the observation from that particle.
 
 .. code-block:: python
 
-   import numpy as np
+   for observation in ["hear_left", "hear_left"]:
+       belief = belief.update(action="listen", observation=observation, pomdp=env)
 
-   probs = list(belief.get_state_probabilities().values())
-   entropy = -sum(p * np.log(p) for p in probs if p > 0)
-   print(f"Belief entropy: {entropy:.3f}")
+   dist = belief.to_unique_support_distribution()
+   print(dict(zip(dist.values, dist.probs)))  # most weight now on tiger_left
 
-Working with Continuous States
-------------------------------
+The episode runner makes this call for you after each step. You only call it
+yourself to inspect a belief, or in a custom episode of your own.
 
-For continuous state spaces, particles represent state samples:
-
-.. code-block:: python
-
-   from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-   import numpy as np
-
-   env = CartPolePOMDP()
-
-   # Create belief with continuous state particles
-   particles = [
-       np.array([0.1, 0.0, 0.05, 0.0]),  # [position, velocity, angle, angular_velocity]
-       np.array([0.0, 0.1, -0.02, 0.1]),
-       np.array([-0.05, -0.05, 0.0, -0.05])
-   ]
-
-   belief = WeightedParticleBelief(
-       particles=particles,
-       weights=[0.4, 0.3, 0.3],
-       state_space=None  # Continuous space
-   )
-
-   # Sample continuous state
-   continuous_state = belief.sample()
-   print(f"Sampled state: {continuous_state}")
-
-Custom Belief Implementations
------------------------------
-
-To create custom belief representations:
+To simulate one step without an observation from the world,
+``sample_next_belief`` draws a state from the belief, steps the environment,
+and updates with the observation it sampled:
 
 .. code-block:: python
 
-   from POMDPPlanners.core.belief import Belief
+   from POMDPPlanners.core.belief import sample_next_belief
 
-   class GaussianBelief(Belief):
-       def __init__(self, mean, covariance):
-           self.mean = mean
-           self.covariance = covariance
+   next_belief, observation = sample_next_belief(belief, action="listen", pomdp=env)
 
-       def sample(self):
-           return np.random.multivariate_normal(self.mean, self.covariance)
+Resampling
+----------
 
-       def get_state_probabilities(self):
-           # For continuous beliefs, this might return density estimates
-           # or discretized approximations
-           pass
+After a few updates, most of the weight sits on a few particles and the rest
+carry almost none. The belief then acts as if it had far fewer particles. The
+*effective sample size*, ``1 / sum(w**2)`` over the normalized weights,
+measures this.
 
-Performance Considerations
--------------------------
+With resampling on, ``update`` resamples whenever the effective sample size
+falls below ``ess_factor * n_particles``. It draws ``n_particles`` particles
+from the current set by systematic resampling, so each particle is copied in
+proportion to its weight, and gives every copy equal weight. ``ess_factor``
+defaults to 0.5. Leave resampling on unless you are studying the filter
+itself: without it the belief degrades into a few particles over a long
+episode.
 
-**Particle Count**
-   - More particles → better approximation, slower computation
-   - Typical range: 100-10,000 particles
-   - Adjust based on problem complexity
+Other belief types
+------------------
 
-**Resampling**
-   - Monitor effective sample size
-   - Resample when weights become too uneven
-   - Use systematic resampling for efficiency
+Particles work for any model the environment can sample from, which is why
+they are the default. When the model is linear or close to it, a Gaussian
+belief stores only a mean and a covariance. Its Kalman filter update is exact
+for a linear model with Gaussian noise; the extended and unscented filters
+approximate a nonlinear one:
 
-**Memory Usage**
-   - Particle beliefs scale with particle count
-   - Consider state compression for large states
-   - Use appropriate data types (float32 vs float64)
+- :class:`~POMDPPlanners.core.belief.gaussian_belief.GaussianBelief`, with a Kalman filter
+  updater: ``LinearKalmanFilterUpdater``, ``ExtendedKalmanFilterUpdater`` or
+  ``UnscentedKalmanFilterUpdater``.
+- :class:`~POMDPPlanners.core.belief.gaussian_mixture_belief.GaussianMixtureBelief`, for a belief with
+  several modes.
 
-See Also
+The ``belief_representations`` notebook in :doc:`../examples/index` builds each
+of them and compares them on the same problem.
+
+See also
 --------
 
-- :doc:`../examples/beliefs` - Belief usage examples
-- :doc:`planners` - How planners use beliefs
-- :doc:`../api/core` - Complete API reference
+- :doc:`../common/beliefs` — the belief API reference.
+- :doc:`simulations` — running episodes, where beliefs are updated for you.

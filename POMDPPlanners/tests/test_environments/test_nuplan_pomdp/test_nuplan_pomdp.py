@@ -231,6 +231,23 @@ def test_collision_is_terminal_and_penalised(monkeypatch: pytest.MonkeyPatch) ->
     assert reward < -50.0
 
 
+def test_compute_metrics_empty_histories_is_rejected(world: NuPlanPOMDP) -> None:
+    """compute_metrics rejects an empty batch of episodes.
+
+    Purpose: Validates that an empty batch is rejected rather than scored. A
+        zero collision_rate over no episodes is indistinguishable from a run in
+        which the ego never crashed.
+
+    Given: A NuPlanPOMDP world and an empty history list
+    When: compute_metrics is called
+    Then: A ValueError naming the environment is raised
+
+    Test type: unit
+    """
+    with pytest.raises(ValueError, match="received no episode histories"):
+        world.compute_metrics([])
+
+
 def test_compute_metrics_reports_named_metrics(world: NuPlanPOMDP) -> None:
     """compute_metrics returns the declared nuPlan metric names.
 
@@ -276,7 +293,7 @@ def test_near_miss_metrics_include_the_final_reached_state(world: NuPlanPOMDP) -
 
     Given: A one-transition episode starting 10 m from an agent and ending 1 m from it
     When: compute_metrics is called
-    Then: min_vehicle_distance is 1 m and one near-miss event is counted
+    Then: min_vehicle_distance_m is 1 m and one near-miss event is counted
 
     Test type: unit
     """
@@ -302,8 +319,8 @@ def test_near_miss_metrics_include_the_final_reached_state(world: NuPlanPOMDP) -
         policy_run_data=[],
     )
     metrics = {metric.name: metric.value for metric in world.compute_metrics([history])}
-    assert metrics[NuPlanPOMDPMetrics.MIN_VEHICLE_DISTANCE.value] == pytest.approx(1.0)
-    assert metrics[NuPlanPOMDPMetrics.NEAR_MISS_COUNT.value] == pytest.approx(1.0)
+    assert metrics[NuPlanPOMDPMetrics.MIN_VEHICLE_DISTANCE_M.value] == pytest.approx(1.0)
+    assert metrics[NuPlanPOMDPMetrics.AVERAGE_NEAR_MISSES.value] == pytest.approx(1.0)
 
 
 def test_compute_metrics_handles_terminal_step_without_next_state(world: NuPlanPOMDP) -> None:
@@ -352,7 +369,7 @@ def test_compute_metrics_handles_terminal_step_without_next_state(world: NuPlanP
     assert set(metrics) == set(world.get_metric_names())
     assert metrics[NuPlanPOMDPMetrics.COLLISION_RATE.value] == 1.0
     assert metrics[NuPlanPOMDPMetrics.AVERAGE_PROGRESS.value] == pytest.approx(1.0)
-    assert metrics[NuPlanPOMDPMetrics.AVERAGE_SPEED.value] == pytest.approx(1.0)
+    assert metrics[NuPlanPOMDPMetrics.AVERAGE_SPEED_MPS.value] == pytest.approx(1.0)
 
 
 def test_pickle_drops_live_session(world: NuPlanPOMDP) -> None:

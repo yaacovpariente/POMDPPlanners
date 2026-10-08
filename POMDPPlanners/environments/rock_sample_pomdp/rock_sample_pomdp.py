@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+# pylint: disable=too-many-lines  # one environment, its reward variants and its artifacts
+
 """Module for RockSample POMDP environment.
 
 This module provides the RockSample POMDP environment implementation based on the
@@ -19,17 +21,23 @@ import warnings
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.rock_sample_pomdp import _native
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_sample_reward_models import (
     BaseRockSampleRewardModel,
@@ -37,15 +45,31 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp_utils.rock_s
     RockSampleZeroMeanHazardShockRewardModel,
     RockSampleRewardModel,
 )
-from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (
+        RockSampleVisualizer,
+    )
+
+
+# Actions are plain ints: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i.
+SAMPLE_ACTION = 0
+
+
+class RockSampleStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`RockSamplePOMDP.step_info`."""
+
+    SAMPLED_ROCK = "sampled_rock"
+    TERMINAL_STATE = "terminal_state"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
 
 
 class RockSamplePOMDPMetrics(Enum):
     """Metric names for RockSample POMDP environment."""
 
-    AVG_ROCKS_SAMPLED = "avg_rocks_sampled"
-    EXIT_SUCCESS_RATE = "exit_success_rate"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
+    AVERAGE_ROCKS_SAMPLED = "average_rocks_sampled"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
 
 
 class RewardModelType(Enum):
@@ -135,6 +159,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
     must navigate a grid, use sensors to evaluate rocks, and decide which ones
     to sample while balancing exploration costs and sampling rewards.
 
+    Observation model:
+        A check action on rock *i* returns ``"good"`` or ``"bad"``, correct
+        with probability ``(1 + 2 ** (-d / sensor_efficiency)) / 2`` where
+        ``d`` is the Euclidean distance from the robot to that rock. This is
+        the accuracy of Smith & Simmons, "Heuristic Search Value Iteration
+        for POMDPs" (2004). It is 1.0 at the rock and falls towards 0.5 with
+        distance, never below it, so a check from far away is uninformative
+        rather than misleading. Every other action returns ``"none"``.
+
     Stochasticity:
         The dangerous-area penalty can be applied either deterministically
         (the default) or stochastically. When
@@ -155,7 +188,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         map_size: Grid dimensions as (rows, cols)
         rock_positions: List of rock positions as (row, col) tuples
         init_pos: Initial robot position
-        sensor_efficiency: Sensor noise parameter (higher = less noise)
+        sensor_efficiency: Distance at which the check sensor is 75% accurate
+            (Smith & Simmons' ``d0``); larger means accuracy holds up further
+            from the rock
         bad_rock_penalty: Penalty for sampling a bad rock
         good_rock_reward: Reward for sampling a good rock
         step_penalty: Cost for each action
@@ -182,7 +217,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         False
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-statements
         self,
         map_size: Tuple[int, int] = (5, 5),
         rock_positions: Optional[List[Tuple[int, int]]] = None,
@@ -212,7 +247,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
             map_size: Grid dimensions (rows, cols). Defaults to (5, 5).
             rock_positions: Rock locations. Defaults to [(0,0), (2,2), (3,3)].
             init_pos: Initial robot position. Defaults to (0, 0).
-            sensor_efficiency: Sensor parameter. Defaults to 20.0.
+            sensor_efficiency: Half-life of the check sensor's informative
+                part, in grid cells: accuracy is
+                ``(1 + 2 ** (-d / sensor_efficiency)) / 2``, so 1.0 at the
+                rock, 0.75 at ``d == sensor_efficiency``, and it approaches
+                0.5 as ``d`` grows. Defaults to 10.0.
             bad_rock_penalty: Bad rock penalty. Defaults to -10.0.
             good_rock_reward: Good rock reward. Defaults to 10.0.
             step_penalty: Action cost. Defaults to 0.0.
@@ -314,6 +353,13 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         )
         self.init_pos = init_pos
         self.sensor_efficiency = sensor_efficiency
+        # Version 1 was the rock-check accuracy ``exp(-d / sensor_efficiency)``,
+        # which fell below 0.5 and made a far check reliably wrong. Version 2 is
+        # Smith & Simmons (2004), ``(1 + 2^(-d / sensor_efficiency)) / 2``.
+        # ``config_id`` hashes every public attribute, so bumping this is what
+        # stops a cached episode from the old observation law being reused for
+        # the new one — the constructor arguments are identical across the fix.
+        self.sensor_contract_version = 2
         self.bad_rock_penalty = bad_rock_penalty
         self.good_rock_reward = good_rock_reward
         self.step_penalty = step_penalty
@@ -826,120 +872,87 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-p
         # Discrete int actions; already hashable.
         return action
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of RockSample POMDP specific metrics.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report the sampling action, terminal status and hazard exposure.
+
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step. On the terminal step this carries the exit
+                sentinel position, which the dangerous-area test is applied to
+                exactly as it always was.
+            action: The action taken, or ``None`` on the terminal step.
+            next_state: Unused; each state is scored when it is recorded.
 
         Returns:
-            List containing metric names: avg_rocks_sampled, exit_success_rate,
-            and average_dangerous_area_steps
+            The ``sampled_rock``, ``terminal_state`` and ``in_dangerous_area``
+            indicators for this step.
         """
-        return [metric.value for metric in RockSamplePOMDPMetrics]
+        del next_state
+        robot_pos = get_robot_pos(state)
+        return {
+            # ``action == SAMPLE_ACTION`` is False for the terminal step's None,
+            # which is how the historical scan counted it too.
+            RockSampleStepChannel.SAMPLED_ROCK.value: float(action == SAMPLE_ACTION),
+            RockSampleStepChannel.TERMINAL_STATE.value: float(self.is_terminal(state)),
+            RockSampleStepChannel.IN_DANGEROUS_AREA.value: float(
+                self._is_in_dangerous_area(robot_pos)
+            ),
+        }
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute environment-specific metrics."""
-        if not histories:
-            return []
+        """Compute the RockSample metrics, always reporting every declared name.
 
-        metrics = []
+        Args:
+            histories: List of simulation histories.
 
-        # Calculate average number of rocks sampled
-        rocks_sampled = []
-        for history in histories:
-            sampled_count = 0
-            for step in history.history:
-                if hasattr(step, "action") and step.action == 0:  # Sample action
-                    sampled_count += 1
-            rocks_sampled.append(sampled_count)
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
 
-        if rocks_sampled:
-            mean_rocks = float(np.mean(rocks_sampled))
-            ci_low, ci_high = confidence_interval(rocks_sampled)
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
-                    value=mean_rocks,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        # Every declared name is reported: the shared aggregator
+        # omits a metric no episode reported, which an episode with no recorded
+        # steps would trigger, where this environment counted a zero.
+        return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
 
-        # Calculate exit success rate
-        exits = [
-            1 if any(self.is_terminal(step.state) for step in history.history) else 0
-            for history in histories
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the RockSample metrics derived from the per-step channels.
+
+        Returns:
+            Specs for ``average_rocks_sampled``, ``task_completion_rate`` and
+            ``average_dangerous_area_steps``.
+        """
+        return [
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.AVERAGE_ROCKS_SAMPLED.value,
+                channel=RockSampleStepChannel.SAMPLED_ROCK.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.TASK_COMPLETION_RATE.value,
+                channel=RockSampleStepChannel.TERMINAL_STATE.value,
+                per_episode=EpisodeReduction.ANY,
+            ),
+            StepInfoMetric(
+                name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=RockSampleStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
         ]
 
-        if exits:
-            exit_rate = float(np.mean(exits))
-            ci_low, ci_high = confidence_interval(exits)
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
-                    value=exit_rate,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        # Calculate dangerous area metrics
-        dangerous_area_steps = []
-        for history in histories:
-            steps_in_danger = 0
-            for step in history.history:
-                robot_pos = get_robot_pos(step.state)
-                if self._is_in_dangerous_area(robot_pos):
-                    steps_in_danger += 1
-            dangerous_area_steps.append(steps_in_danger)
-
-        if dangerous_area_steps:
-            avg_dangerous_steps = float(np.mean(dangerous_area_steps))
-            ci_low, ci_high = confidence_interval(dangerous_area_steps)
-
-            metrics.append(
-                MetricValue(
-                    name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
-                    value=avg_dangerous_steps,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        return metrics
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache visualization of episode history.
-
-        Args:
-            history: Episode history containing states, actions, and rewards
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
-        """
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
+    def episode_visualizer(self) -> "RockSampleVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualization.rock_sample_visualizer import (
             RockSampleVisualizer,
         )
 
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = RockSampleVisualizer(self)
-        visualizer.create_visualization(history, cache_path)
-
-    def visualize_path(
-        self, path: List["RockSampleState"], actions: List[int], cache_path: Path
-    ) -> None:
-        """Visualize robot path through the environment.
-
-        Args:
-            path: List of states representing the path
-            actions: List of actions taken at each state
-            cache_path: Path where to save the animation (must end with .gif)
-        """
-        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (  # pylint: disable=import-outside-toplevel
-            RockSampleVisualizer,
-        )
-
-        visualizer = RockSampleVisualizer(self)
-        visualizer.visualize_path(path, actions, cache_path)
+        return RockSampleVisualizer(self)
 
 
 def create_random_rock_sample(

@@ -52,17 +52,18 @@ class CPFT_DPW(ConstrainedMCTSMixin, PFT_DPW):
     that also clears the per-belief-child cost cache.
 
     Args mirror :class:`PFT_DPW` plus:
-        environment: A :class:`ConstrainedEnvironment` — constraint cost
-            is read via ``environment.constraint_cost(s, a, s')``.
-            Passing a plain :class:`Environment` raises ``TypeError``.
-        cost_budget: Discounted-cost budget. Scalar or 1-D array of length
-            ``K``. See :meth:`ConstrainedMCTSMixin._validate_and_pack_constraint_params`.
-        lambda_init: Initial Lagrange multiplier per constraint dimension.
-            Defaults to ``0.0``.
-        lambda_step: Dual-ascent step size (> 0). Defaults to ``0.1``.
-        return_minimal_cost: Enable the minimal-cost propagation trick
-            from Jamgochian et al. (2023, Section 4 "Cost backpropagation").
-            Defaults to ``True``.
+
+    - ``environment``: A :class:`ConstrainedEnvironment` — constraint cost
+      is read via ``environment.constraint_cost(s, a, s')``.
+      Passing a plain :class:`Environment` raises ``TypeError``.
+    - ``cost_budget``: Discounted-cost budget. Scalar or 1-D array of length
+      ``K``. See :meth:`ConstrainedMCTSMixin._validate_and_pack_constraint_params`.
+    - ``lambda_init``: Initial Lagrange multiplier per constraint dimension.
+      Defaults to ``0.0``.
+    - ``lambda_step``: Dual-ascent step size (> 0). Defaults to ``0.1``.
+    - ``return_minimal_cost``: Enable the minimal-cost propagation trick
+      from Jamgochian et al. (2023, Section 4 "Cost backpropagation").
+      Defaults to ``True``.
 
     Raises:
         TypeError: If ``environment`` is not a :class:`ConstrainedEnvironment`.
@@ -186,10 +187,12 @@ class CPFT_DPW(ConstrainedMCTSMixin, PFT_DPW):
         action_visits = tree.get_visit_count(action_id)
         children_count = len(tree.get_children_ids(action_id))
         if children_count <= self.k_o * action_visits**self.alpha_o:
-            next_belief_id, immediate_reward, immediate_cost = (
-                self._sample_new_belief_node_with_cost(
-                    tree=tree, belief_id=belief_id, action_id=action_id
-                )
+            (
+                next_belief_id,
+                immediate_reward,
+                immediate_cost,
+            ) = self._sample_new_belief_node_with_cost(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
             state = tree.get_belief(next_belief_id).sample()
             v_child, c_child = cost_aware_random_rollout(
@@ -204,10 +207,12 @@ class CPFT_DPW(ConstrainedMCTSMixin, PFT_DPW):
             total_v = immediate_reward + self.discount_factor * v_child
             total_c = immediate_cost + self.discount_factor * c_child
         else:
-            next_belief_id, immediate_reward, immediate_cost = (
-                self._sample_existing_belief_node_with_cost(
-                    tree=tree, belief_id=belief_id, action_id=action_id
-                )
+            (
+                next_belief_id,
+                immediate_reward,
+                immediate_cost,
+            ) = self._sample_existing_belief_node_with_cost(
+                tree=tree, belief_id=belief_id, action_id=action_id
             )
             v_child, c_child = self._simulate_path_with_cost(
                 tree=tree, belief_id=next_belief_id, depth=depth + 1

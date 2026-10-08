@@ -198,13 +198,13 @@ def test_terminal_mask_matches_native(case: _Case) -> None:
 
 
 def test_observation_sampling_reproduces_sensor_efficiency() -> None:
-    """Check-action sampling reproduces the exp(-dist/eff) sensor accuracy.
+    """Check-action sampling reproduces the Smith & Simmons sensor accuracy.
 
     Purpose: Validates the stochastic Bernoulli sensor in expectation
 
     Given: A robot one cell from a good rock, checked many times
     When: The empirical fraction of correct ("good") observations is measured
-    Then: It matches exp(-distance / sensor_efficiency) within 0.02
+    Then: It matches (1 + 2 ** (-distance / sensor_efficiency)) / 2 within 0.02
 
     Test type: unit
     """
@@ -215,7 +215,7 @@ def test_observation_sampling_reproduces_sensor_efficiency() -> None:
     batch = np.tile(next_state, (40000, 1))
     observations = model.sample_observations(_tensor(batch), _action_col(5, 40000))
     frac_good = float((observations[:, 0] == 1).to(torch.float64).mean())
-    expected = float(np.exp(-1.0 / 3.0))
+    expected = 0.5 * (1.0 + 2.0 ** (-1.0 / 3.0))
     assert abs(frac_good - expected) < 0.02
 
 

@@ -14,9 +14,14 @@ from typing import Any, Dict, List, cast
 
 import numpy as np
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
 from POMDPPlanners.core.simulation.tasks import SimulationTask, DataBaseInterface
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.simulations.episodes import run_episode
+from POMDPPlanners.utils.logger import get_logger
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -341,3 +346,252 @@ def test_task_manager_external_db_all_cached():
     assert len(successful_ids) == 2
     assert "id1" in successful_ids
     assert "id2" in successful_ids
+
+
+class _StepInfoTigerPOMDP(TigerPOMDP):
+    """Tiger variant that reports a per-step channel through ``step_info``.
+
+    Written the way the contract asks for: both channels are keyed off ``action``
+    with equality tests, so the terminal bookkeeping step -- which passes
+    ``action=None`` -- reports ``0.0`` for each rather than an accidental truthy
+    value. ``float(action != "listen")`` would have been ``1.0`` there.
+    """
+
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        del state, next_state
+        opened_door = action in ("open_left", "open_right")
+        return {"success": float(opened_door), "listened": float(action == "listen")}
+
+
+def test_step_data_info_defaults_to_none():
+    """Test that StepData.info is optional and defaults to None.
+
+    Purpose: Validates that the per-step info channel is purely additive, so
+        every existing construction site keeps working unchanged
+
+    Given: A StepData constructed without the info argument
+    When: Its info attribute is read
+    Then: It is None and the tuple still exposes the original six values
+
+    Test type: unit
+    """
+    step = StepData(
+        state="s",
+        action="a",
+        next_state="s2",
+        observation="o",
+        reward=1.0,
+        belief=create_test_belief(),
+    )
+
+    assert step.info is None
+    assert step[:5] == ("s", "a", "s2", "o", 1.0)
+
+
+def test_step_data_info_round_trips_through_history_dict():
+    """Test that per-step info survives History serialization.
+
+    Purpose: Validates that measurements reach compute_metrics through the
+        JSON-shaped History payload used by the caching layer
+
+    Given: A History whose steps carry info mappings
+    When: It is converted with to_dict() and rebuilt with from_dict()
+    Then: Each step's info mapping is preserved exactly
+
+    Test type: unit
+    """
+    steps = [
+        StepData(
+            state="s",
+            action="a",
+            next_state="s2",
+            observation="o",
+            reward=1.0,
+            belief=create_test_belief(),
+            info={"success": 1.0, "impact": 2.5},
+        ),
+        StepData(
+            state="s2",
+            action="a2",
+            next_state="s3",
+            observation="o2",
+            reward=0.0,
+            belief=create_test_belief(),
+        ),
+    ]
+    history = History(
+        history=steps,
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=False,
+        policy_run_data=[],
+    )
+
+    restored = History.from_dict(history.to_dict())
+
+    assert restored.history[0].info == {"success": 1.0, "impact": 2.5}
+    assert restored.history[1].info is None
+
+
+def test_history_from_dict_accepts_payload_without_info_key():
+    """Test that History payloads predating the info field still deserialize.
+
+    Purpose: Validates backward compatibility for cached histories written
+        before the per-step info channel existed
+
+    Given: A serialized History whose step dicts have no "info" key
+    When: History.from_dict() is called on it
+    Then: Deserialization succeeds and info defaults to None
+
+    Test type: unit
+    """
+    payload = History(
+        history=[
+            StepData(
+                state="s",
+                action="a",
+                next_state="s2",
+                observation="o",
+                reward=1.0,
+                belief=create_test_belief(),
+            )
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=1,
+        reach_terminal_state=False,
+        policy_run_data=[],
+    ).to_dict()
+    for step_dict in payload["history"]:
+        step_dict.pop("info")
+
+    restored = History.from_dict(payload)
+
+    assert restored.history[0].info is None
+
+
+def test_environment_step_info_defaults_to_empty_mapping():
+    """Test that the base Environment reports no per-step measurements.
+
+    Purpose: Validates that the new hook is opt-in, so environments that do not
+        implement it are entirely unaffected
+
+    Given: An environment that does not override step_info. SanityPOMDP is used
+        rather than TigerPOMDP because Tiger now reports its own channels, so it
+        would no longer demonstrate the default
+    When: step_info() is called with an arbitrary transition
+    Then: An empty mapping is returned
+
+    Test type: unit
+    """
+    env = SanityPOMDP(discount_factor=0.95)
+
+    reported = env.step_info(env.initial_state_dist().sample()[0], env.get_actions()[0], None)
+
+    assert isinstance(reported, dict)
+    assert not reported
+
+
+def test_episode_runner_records_environment_step_info():
+    """Test that the episode loop stores step_info on each recorded step.
+
+    Purpose: Validates the end-to-end transport from an environment's
+        measurement hook into the episode History
+
+    Given: An environment overriding step_info and a POMCP policy
+    When: An episode is run
+    Then: Every non-terminal step carries the reported channels
+
+    Test type: integration
+    """
+    env = _StepInfoTigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=env,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="step-info-test",
+        n_simulations=5,
+    )
+    belief = get_initial_belief(env, n_particles=10)
+    history = run_episode(env, policy, belief, num_steps=3, logger=get_logger("t", debug=False))
+
+    recorded = [step for step in history.history if step.action is not None]
+    assert recorded, "episode produced no non-terminal steps"
+    for step in recorded:
+        assert step.info is not None
+        assert set(step.info) == {"success", "listened"}
+        assert step.info["listened"] == float(step.action == "listen")
+
+
+class _TerminalStepInfoTigerPOMDP(_StepInfoTigerPOMDP):
+    """Step-info tiger whose initial state is already terminal.
+
+    ``TigerPOMDP.is_terminal`` is hardcoded ``False``, so the stock environment
+    never produces a terminal bookkeeping step. This variant does, which is what
+    makes the terminal branch of the episode loop reachable in a test.
+    """
+
+    def is_terminal(self, state: str) -> bool:
+        del state
+        return True
+
+
+def test_episode_runner_records_step_info_on_the_terminal_step():
+    """Test that the terminal bookkeeping step is measured like any other.
+
+    Purpose: Validates that the final state of a terminated episode reaches
+        compute_metrics. Metrics that count every visited state need it, and it
+        is recorded nowhere else
+
+    Given: An environment reporting step_info whose initial state is terminal
+    When: An episode is run, so the loop takes its terminal branch immediately
+    Then: The single recorded step is the terminal one, and it carries the
+        channels measured with action and next_state both None
+
+    Test type: integration
+    """
+    env = _TerminalStepInfoTigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=env,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="terminal-step-info-test",
+        n_simulations=5,
+    )
+    belief = get_initial_belief(env, n_particles=10)
+    history = run_episode(env, policy, belief, num_steps=3, logger=get_logger("t", debug=False))
+
+    assert len(history.history) == 1, "expected only the terminal bookkeeping step"
+    terminal_step = history.history[0]
+    assert terminal_step.action is None
+    assert terminal_step.next_state is None
+    # Reported, not skipped -- and neutral, because both channels are keyed off
+    # an action that does not exist on this step.
+    assert terminal_step.info == {"success": 0.0, "listened": 0.0}
+
+
+def test_environment_step_info_tolerates_the_terminal_argument_shape():
+    """Test that the default step_info accepts the terminal step's None arguments.
+
+    Purpose: Validates that the terminal-step call cannot break an environment
+        that does not implement the hook
+
+    Given: A stock environment using the base-class step_info
+    When: It is called the way _add_terminal_step calls it
+    Then: It returns an empty mapping rather than raising
+
+    Test type: unit
+    """
+    env = SanityPOMDP(discount_factor=0.95)
+    assert not env.step_info(env.initial_state_dist().sample()[0], None, None)

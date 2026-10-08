@@ -125,6 +125,45 @@ _ENV_FACTORY_REGISTRY: dict[str, tuple[str, str, BeliefType]] = {
         "create_rocksample_belief",
         BeliefType.VECTORIZED_PARTICLE,
     ),
+    # The Battleship, Snake and Chicheck Invaders entries point at beliefs that
+    # redraw or reinvigorate rather than resample: their observation models are
+    # sharp enough that a plain weight-and-resample filter empties out. Each
+    # module's docstring says how it avoids that.
+    "BattleshipPOMDP": (
+        "POMDPPlanners.environments.battleship_pomdp.battleship_vectorized_belief",
+        "create_battleship_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "DiscreteMazePOMDP": (
+        "POMDPPlanners.environments.maze_pomdp.maze_pomdp_beliefs",
+        "create_discrete_maze_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ContinuousMazePOMDP": (
+        "POMDPPlanners.environments.maze_pomdp.maze_pomdp_beliefs",
+        "create_continuous_maze_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "FirefightingPOMDP": (
+        "POMDPPlanners.environments.firefighting_pomdp.firefighting_vectorized_belief",
+        "create_firefighting_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "SnakePOMDP": (
+        "POMDPPlanners.environments.snake_pomdp.snake_vectorized_belief",
+        "create_snake_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "CaptureTheFlagPOMDP": (
+        "POMDPPlanners.environments.capture_the_flag_pomdp.capture_the_flag_vectorized_belief",
+        "create_capture_the_flag_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
+    "ChicheckInvadersPOMDP": (
+        "POMDPPlanners.environments.chicheck_invaders_pomdp.chicheck_invaders_vectorized_belief",
+        "create_chicheck_invaders_vectorized_belief",
+        BeliefType.VECTORIZED_PARTICLE,
+    ),
 }
 
 

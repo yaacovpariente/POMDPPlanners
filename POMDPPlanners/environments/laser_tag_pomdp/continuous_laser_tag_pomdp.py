@@ -40,10 +40,11 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -52,20 +53,33 @@ from POMDPPlanners.core.environment import (
     SpaceType,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.laser_tag_pomdp import _native
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
-)
-from POMDPPlanners.environments.laser_tag_pomdp.continuous_laser_tag_visualizer import (
-    ContinuousLaserTagVisualizer,
 )
 from POMDPPlanners.planners.planners_utils.rollout import python_random_rollout
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+        ContinuousLaserTagVisualizer,
+    )
 
-# Default walls matching the discrete LaserTag grid, converted to AABBs
-# Original wall cells (row, col) on an 11×7 grid with half-size 0.5
+
+# Default walls matching the discrete LaserTag grid, converted to AABBs.
+# Original wall cells (row, col) on an 11×7 grid with half-size 0.5.
+# The row stays the first coordinate, so continuous ``(x, y) == (row, col)``:
+# +x is grid south and +y is grid east.  The renderer draws +x rightward and
+# +y upward, so the continuous picture is the grid map turned a quarter turn.
+# That is why the laser beam order in ``continuous_laser_tag_geometry`` is
+# rotated two places from the discrete one -- see the note on
+# ``LASER_DIRECTIONS`` there before comparing beams across the two variants.
 _DEFAULT_WALL_HALF_SIZE = 0.5
 _DEFAULT_WALLS_CELLS = [
     (1, 2),
@@ -94,16 +108,26 @@ _DEFAULT_DANGEROUS_AREAS: List[Tuple[float, float]] = [
 ]
 
 
+class ContinuousLaserTagStepChannel(Enum):
+    """Per-step channels reported by :meth:`ContinuousLaserTagPOMDP.step_info`."""
+
+    TAGGED = "tagged"
+    RECORDED_STEP = "recorded_step"
+    WALL_COLLISION = "wall_collision"
+    IN_DANGEROUS_AREA = "in_dangerous_area"
+    DANGEROUS_ENCOUNTER = "dangerous_encounter"
+
+
 class ContinuousLaserTagPOMDPMetrics(Enum):
     """Metric names for Continuous LaserTag POMDP."""
 
     TAG_SUCCESS_RATE = "tag_success_rate"
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
     AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
-    AVERAGE_WALL_COLLISIONS = "average_wall_collisions"
-    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
-    AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-methods
@@ -253,7 +277,16 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
             use_queue_logger=use_queue_logger,
         )
 
-        self.grid_size_tuple = grid_size
+        # Normalised to the documented tuple form rather than stored verbatim.
+        # ``to_dict`` serializes the ``grid_size`` *property*, which is the
+        # derived ndarray, so a to_dict/from_dict round trip hands an ndarray
+        # back to this constructor -- and an env whose grid_size_tuple was an
+        # ndarray would not compare equal to the tuple-valued original.
+        _grid_size_values = np.asarray(grid_size, dtype=float).reshape(-1)
+        self.grid_size_tuple: Tuple[float, float] = (
+            float(_grid_size_values[0]),
+            float(_grid_size_values[1]),
+        )
         self._grid_size = np.array(grid_size, dtype=float)
         wall_list = walls if walls is not None else _DEFAULT_WALLS
         self._walls = np.array(wall_list, dtype=float).reshape(-1, 4)
@@ -298,8 +331,18 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         # label to a single cached ndarray).
         self._trans_kernel_cache: Dict[bytes, Any] = {}
         self._obs_kernel_cache: Dict[bytes, Any] = {}
+        # Only action arrays this env owns are eligible for the id-keyed
+        # shortcut, and they are registered through _pin_action_vectors. An
+        # id() is a valid key only while the object it names is alive: CPython
+        # hands the same id to the next object allocated at that address, so
+        # caching a transient action array by id lets an unrelated later array
+        # collide with its entry and be simulated with the wrong action's
+        # kernel. Pinning keeps a strong reference for the env's lifetime,
+        # which is what makes the id stable.
         self._trans_kernel_id_cache: Dict[int, Any] = {}
         self._obs_kernel_id_cache: Dict[int, Any] = {}
+        self._pinned_actions: Tuple[np.ndarray, ...] = ()
+        self._pinned_action_ids: FrozenSet[int] = frozenset()
         # Static params for cont_simulate_rollout: built once, unpacked per call.
         self._rollout_static_params: Dict[str, Any] = {
             "robot_covariance": self._robot_transition_dist.covariance,
@@ -327,6 +370,28 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     # Skip the Python wrapper subclass; fetch/reuse a cached per-action C++
     # kernel (Cholesky factored once, walls repacked once) and mutate only
     # the stored state via set_state / set_next_state.
+
+    def _pin_action_vectors(self, actions: Sequence[np.ndarray]) -> None:
+        """Declare action arrays this env owns as eligible for id() caching.
+
+        The id() shortcut in :meth:`_get_trans_kernel` and
+        :meth:`_get_obs_kernel` is only sound for objects that outlive the
+        cache entry naming them. Pinning stores a strong reference here, so the
+        id stays bound to that array for as long as the env lives and can never
+        be handed to a later, unrelated action array.
+
+        Args:
+            actions: The env-owned action vectors (the DiscreteActions
+                wrapper's one ndarray per action label).
+        """
+        # Drop entries keyed by the previously pinned arrays first: replacing
+        # the tuple releases the only strong reference to them, so their ids
+        # become recyclable and a stale entry would be exactly the collision
+        # this pinning prevents.
+        self._trans_kernel_id_cache.clear()
+        self._obs_kernel_id_cache.clear()
+        self._pinned_actions = tuple(actions)
+        self._pinned_action_ids = frozenset(id(a) for a in self._pinned_actions)
 
     def _get_trans_kernel(self, action: np.ndarray) -> Any:
         cached = self._trans_kernel_id_cache.get(id(action))
@@ -358,7 +423,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 is_dangerous_area_hit_terminal=self.is_dangerous_area_hit_terminal,
             )
             self._trans_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._trans_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -379,7 +444,7 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
                 opponent_radius=self.opponent_radius,
             )
             self._obs_kernel_cache[key] = kernel
-        if isinstance(action, np.ndarray):
+        if id(action) in self._pinned_action_ids:
             self._obs_kernel_id_cache[id(action)] = kernel
         return kernel
 
@@ -404,13 +469,16 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     def transition_log_probability(
         self, state: np.ndarray, action: np.ndarray, next_states: Any
     ) -> np.ndarray:
-        kernel = self._get_trans_kernel(action)
-        kernel.set_state(state)
-        # kernel.probability returns a C-contiguous float64 ndarray; skip
-        # the redundant np.asarray wrap.
-        probs = kernel.probability(next_states)
-        with np.errstate(divide="ignore"):
-            return np.log(probs)
+        # The move is a Gaussian step projected onto the free space by wall
+        # collision and clamping, which has no tractable closed-form density.
+        # The native kernel's ``probability`` is a placeholder that returns
+        # zeros; taking its log would report every next state -- including one
+        # ``sample_next_state`` just drew -- as impossible.
+        del state, action, next_states
+        raise NotImplementedError(
+            f"{type(self).__name__} has no transition density: the Gaussian move is "
+            "projected by wall collision and clamping. Use sample_next_state."
+        )
 
     def observation_log_probability(
         self, next_state: np.ndarray, action: np.ndarray, observations: Any
@@ -809,7 +877,8 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         centers = self._dangerous_areas_arr.reshape(-1, 2)
         positions = next_arr[hazard_hit, :2]
         deltas = positions[:, None, :] - centers[None, :, :]
-        counts = np.sum(np.sum(deltas * deltas, axis=2) <= (self.dangerous_area_radius**2), axis=1)
+        radius_sq = self.dangerous_area_radius**2
+        counts = np.sum(np.sum(deltas * deltas, axis=2) <= radius_sq, axis=1)
         rewards[hazard_hit] -= counts.astype(np.float64) * float(self.dangerous_area_penalty)
         return rewards
 
@@ -937,32 +1006,111 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
     def get_metric_names(self) -> List[str]:
         return [m.value for m in ContinuousLaserTagPOMDPMetrics]
 
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        if not histories:
-            return []
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report tag status and hazard exposure for this step.
 
-        episode_data = self._collect_episode_data(histories)
-        cis = self._compute_confidence_intervals(episode_data)
-        return self._build_metrics(episode_data, cis)
+        Args:
+            state: The state the step was taken from, or the final state on the
+                terminal step.
+            action: Unused; every channel here is a property of the state.
+            next_state: Unused; each state is scored when it is recorded.
+
+        Returns:
+            The per-step channels. ``recorded_step`` is a constant 1.0 so that
+            summing it reproduces ``len(history.history)``, terminal bookkeeping
+            step included.
+
+        Note:
+            ``tag_success_rate`` and ``average_failed_tag_attempts`` are defined
+            in terms of the realised reward, which ``step_info`` is not given, so
+            they stay in :meth:`compute_metrics`.
+        """
+        del action, next_state
+        is_state_valid = isinstance(state, np.ndarray) and len(state) == 5
+        in_dangerous_area = float(self._is_in_dangerous_area(state[:2])) if is_state_valid else 0.0
+        return {
+            ContinuousLaserTagStepChannel.TAGGED.value: (
+                float(bool(state[4])) if is_state_valid else 0.0
+            ),
+            ContinuousLaserTagStepChannel.RECORDED_STEP.value: 1.0,
+            # Constant zero, preserved deliberately: the historical counter was
+            # initialised to zero and never incremented, so average_collisions
+            # has always reported 0.0. This is a preserved dead metric, not a
+            # measurement -- and it is why average_dangerous_encounters equals
+            # the dangerous-area count.
+            ContinuousLaserTagStepChannel.WALL_COLLISION.value: 0.0,
+            ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value: in_dangerous_area,
+            ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value: in_dangerous_area,
+        }
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the metrics derived from the per-step channels.
+
+        Returns:
+            Specs for the five state-derived metrics, in enum order. The two
+            reward-derived metrics are produced by :meth:`compute_metrics`.
+        """
+        return [
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.TASK_COMPLETION_RATE.value,
+                channel=ContinuousLaserTagStepChannel.TAGGED.value,
+                per_episode=EpisodeReduction.ANY,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
+                channel=ContinuousLaserTagStepChannel.RECORDED_STEP.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_COLLISIONS.value,
+                channel=ContinuousLaserTagStepChannel.WALL_COLLISION.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
+                channel=ContinuousLaserTagStepChannel.IN_DANGEROUS_AREA.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+            StepInfoMetric(
+                name=ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
+                channel=ContinuousLaserTagStepChannel.DANGEROUS_ENCOUNTER.value,
+                per_episode=EpisodeReduction.SUM,
+            ),
+        ]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute all seven metrics, in declaration order.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            All seven metrics, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        computed = list(super().compute_metrics(histories)) + self._reward_derived_metrics(
+            histories
+        )
+        return order_and_fill_metrics(self.get_metric_names(), computed)
 
     # ------------------------------------------------------------------
     # Visualization
     # ------------------------------------------------------------------
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = ContinuousLaserTagVisualizer(
-            grid_size=self._grid_size,
-            walls=self._walls,
-            robot_radius=self.robot_radius,
-            opponent_radius=self.opponent_radius,
-            dangerous_areas=self.dangerous_areas,
-            dangerous_area_radius=self.dangerous_area_radius,
+    def episode_visualizer(self) -> "ContinuousLaserTagVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualization.laser_tag_visualizer import (
+            ContinuousLaserTagVisualizer,
         )
-        visualizer.create_visualization(history, cache_path)
-        self.logger.info("Saved ContinuousLaserTag visualization to %s", cache_path)
+
+        return ContinuousLaserTagVisualizer(self)
 
     # ------------------------------------------------------------------
     # Accessors used by the vectorized updater
@@ -999,6 +1147,11 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         self._obs_kernel_cache = {}
         self._trans_kernel_id_cache = {}
         self._obs_kernel_id_cache = {}
+        # Unpickling rebuilds the pinned arrays as new objects, so the ids
+        # recorded before the round trip name nothing here (and could collide
+        # with an unrelated later array). Re-derive them from the arrays that
+        # actually came back.
+        self._pin_action_vectors(getattr(self, "_pinned_actions", ()))
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -1023,88 +1176,52 @@ class ContinuousLaserTagPOMDP(Environment):  # pylint: disable=too-many-public-m
         dy = centers[:, 1] - float(position[1])
         return int(np.sum(dx * dx + dy * dy <= self.dangerous_area_radius**2))
 
-    def _collect_episode_data(self, histories: List[History]) -> Dict[str, list]:
-        data: Dict[str, list] = {
-            "lengths": [],
-            "success": [],
-            "goal_reached": [],
-            "failed_tags": [],
-            "wall_collisions": [],
-            "dangerous_steps": [],
-            "all_dangerous": [],
-        }
+    def _reward_derived_metrics(self, histories: List[History]) -> List[MetricValue]:
+        # Both are defined in terms of the realised reward recorded on the step,
+        # which the per-step channel cannot carry.
+        success_indicators: List[int] = []
+        failed_tags_per_episode: List[int] = []
         for history in histories:
             steps = history.history
-            data["lengths"].append(len(steps))
-            data["success"].append(
-                1 if steps and steps[-1].reward is not None and steps[-1].reward > 0 else 0
-            )
-            goal = any(
-                isinstance(s.state, np.ndarray) and len(s.state) == 5 and bool(s.state[4])
-                for s in steps
-            )
-            data["goal_reached"].append(1 if goal else 0)
+            # A terminated episode's last recorded step is the terminal
+            # bookkeeping step, whose reward is None, so it has never counted as
+            # a success. Preserved deliberately.
+            successful = bool(steps) and steps[-1].reward is not None and steps[-1].reward > 0
+            success_indicators.append(1 if successful else 0)
+            failed_tags_per_episode.append(self._count_failed_tags(steps))
 
-            failed, wall_col, danger_steps = self._count_episode_metrics(steps)
-            data["failed_tags"].append(failed)
-            data["wall_collisions"].append(wall_col)
-            data["dangerous_steps"].append(danger_steps)
-            data["all_dangerous"].append(wall_col + danger_steps)
-        return data
+        return [
+            self._metric_from_samples(
+                ContinuousLaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value, success_indicators
+            ),
+            self._metric_from_samples(
+                ContinuousLaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value,
+                failed_tags_per_episode,
+            ),
+        ]
 
-    def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
+    def _count_failed_tags(self, steps: List[StepData]) -> int:
         failed_tags = 0
-        wall_collisions = 0
-        dangerous_steps = 0
-
         for step in steps:
             action = np.asarray(step.action, dtype=float) if step.action is not None else None
             if action is not None and len(action) >= 3 and action[2] > 0.5:
                 if step.reward is not None and step.reward < 0:
                     failed_tags += 1
+        return failed_tags
 
-            if isinstance(step.state, np.ndarray) and len(step.state) == 5:
-                if self._is_in_dangerous_area(step.state[:2]):
-                    dangerous_steps += 1
-
-        return failed_tags, wall_collisions, dangerous_steps
-
-    def _compute_confidence_intervals(
-        self, data: Dict[str, list]
-    ) -> Dict[str, Tuple[float, float]]:
-        n = len(data["lengths"])
-        if n < 2:
-            return {k: (-np.inf, np.inf) for k in data}
-        return {k: confidence_interval(data=v, confidence=0.95) for k, v in data.items()}
-
-    def _build_metrics(
-        self,
-        data: Dict[str, list],
-        cis: Dict[str, Tuple[float, float]],
-    ) -> List[MetricValue]:
-        n = len(data["lengths"])
-        metric_map = [
-            (ContinuousLaserTagPOMDPMetrics.TAG_SUCCESS_RATE, "success"),
-            (ContinuousLaserTagPOMDPMetrics.GOAL_REACHING_RATE, "goal_reached"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH, "lengths"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS, "failed_tags"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_WALL_COLLISIONS, "wall_collisions"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS, "dangerous_steps"),
-            (ContinuousLaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS, "all_dangerous"),
-        ]
-        metrics = []
-        for metric_enum, key in metric_map:
-            val = float(np.mean(data[key])) if n > 0 else 0.0
-            ci = cis[key]
-            metrics.append(
-                MetricValue(
-                    name=metric_enum.value,
-                    value=val,
-                    lower_confidence_bound=ci[0],
-                    upper_confidence_bound=ci[1],
-                )
-            )
-        return metrics
+    @staticmethod
+    def _metric_from_samples(name: str, samples: List[int]) -> MetricValue:
+        mean_value = float(np.mean(samples))
+        if len(samples) >= 2:
+            lower, upper = confidence_interval(data=samples, confidence=0.95)
+        else:
+            lower, upper = (-np.inf, np.inf)
+        return MetricValue(
+            name=name,
+            value=mean_value,
+            lower_confidence_bound=float(lower),
+            upper_confidence_bound=float(upper),
+        )
 
 
 class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteActionsEnvironment):
@@ -1199,6 +1316,9 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             "left": np.ascontiguousarray([-1.0, 0.0, 0.0], dtype=np.float64),
             "tag": np.ascontiguousarray([0.0, 0.0, 1.0], dtype=np.float64),
         }
+        # These five arrays live as long as the env, so the per-action kernel
+        # caches may key them by id().
+        self._pin_action_vectors(list(self.action_to_vector.values()))
 
     def get_actions(self) -> List[str]:
         return self.actions
@@ -1308,14 +1428,16 @@ class ContinuousLaserTagPOMDPDiscreteActions(ContinuousLaserTagPOMDP, DiscreteAc
             rows.append(self.action_to_vector[action_str])
         return np.ascontiguousarray(np.stack(rows, axis=0))
 
-    def _count_episode_metrics(self, steps: List[StepData]) -> Tuple[int, int, int]:
+    def _count_failed_tags(self, steps: List[StepData]) -> int:
+        # Actions are str labels here; the base counter reads the tag component
+        # of an action vector, so map them before delegating.
         converted = []
         for step in steps:
             if step.action is not None and isinstance(step.action, str):
                 converted.append(step._replace(action=self.action_to_vector[step.action]))
             else:
                 converted.append(step)
-        return super()._count_episode_metrics(converted)
+        return super()._count_failed_tags(converted)
 
     def hash_action(self, action: Any) -> Hashable:
         # Discrete-action variant: actions are str labels (e.g. "up").

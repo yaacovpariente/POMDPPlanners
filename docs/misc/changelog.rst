@@ -9,8 +9,121 @@ This project adheres to `Semantic Versioning <https://semver.org/spec/v2.0.0.htm
 Each ``#NNN`` links to the pull request that introduced the change.
 
 
-Release 0.5.0 (WIP)
--------------------
+Release 0.6.0
+-------------
+
+**New environments, a results website with 3D episode viewers, and vectorized models across the board**
+
+Breaking Changes:
+^^^^^^^^^^^^^^^^^
+
+- Common metrics now share one name across all environments, defined in
+  ``CommonMetricName`` (for example ``task_completion_rate`` replaces
+  ``success_rate``, ``goal_reaching_rate`` and ``win_rate``). Values are
+  unchanged (:gh:`310`).
+- Environments report metrics through the per-step ``step_info`` channel
+  (:gh:`231`, :gh:`232`).
+- Each environment's episodes are drawn by one ``episode_visualizer()``; the
+  per-environment GIF renderers are gone (:gh:`304`).
+- The Tiger and Sanity vectorized models and the Tiger visualizer moved into
+  their own packages. The environment classes keep their import paths
+  (:gh:`292`).
+- ``compute_metrics`` raises ``ValueError`` for an episode cached before
+  ``StepData.info`` existed, instead of scoring it as zeros. Names, values and
+  ordering are unchanged for new histories.
+- The same check runs per episode on any history whose steps lack the declared
+  channels. Episodes with no transition steps are exempt.
+- ``compute_metrics`` raises ``ValueError`` on an empty history list in every
+  environment. Before, environments returned zeros, ``[]`` or an unrelated error.
+
+New Features:
+^^^^^^^^^^^^^
+
+- New environments: Battleship (:gh:`252`), discrete and continuous Maze
+  (:gh:`253`), Firefighting (:gh:`287`), CaptureTheFlag (:gh:`288`), Chicken
+  Invaders (:gh:`289`) and Snake (:gh:`290`).
+- ``RacetrackPOMDP`` on HighwayEnv's ``racetrack-v0``, with a matched
+  fully-observed baseline that shares its dynamics and reward (:gh:`234`,
+  :gh:`236`, :gh:`238`). The POMDP arm sees its own pose, speed, lane pose,
+  road curvature ahead and noisy detections of nearby cars; only cars out of
+  range (``max_detection_range_m``) or hidden behind others are withheld.
+- Racetrack planner models: ``KnownTrackModel`` uses the track map and
+  ``ObservedTrackModel`` uses only the camera's curvature readings. Both have
+  matching torch versions for VOPP, and ``highway-env`` is a dev-only
+  dependency.
+- Results website, started with the new ``pomdp-report`` command. Browse runs
+  and tuning studies and replay any episode in a 3D viewer (:gh:`296`,
+  :gh:`318`, :gh:`319`).
+- 3D episode viewers for every environment, also embedded in the docs and
+  README (:gh:`297`, :gh:`298`, :gh:`299`, :gh:`300`, :gh:`305`, :gh:`323`,
+  :gh:`324`).
+- Torch vectorized models for ten more environments (:gh:`333`) and
+  vectorized beliefs for the six that lacked one (:gh:`294`).
+- C++ kernels for six more environments (:gh:`334`).
+- Isaac Lab: factored generative and perception models, and analytic
+  planner-side models for Franka reach and ANYmal navigation (:gh:`233`,
+  :gh:`237`).
+- Model learning: DAgger loop for transition models, batched transitions and
+  rewards, evaluation by planning return, and MLflow logging of every fitted
+  model (:gh:`245`–:gh:`250`).
+- Optuna studies stop early once the Pareto front plateaus, and plot the
+  evidence (:gh:`243`). ``EarlyStoppingConfig`` is now in
+  ``POMDPPlanners.core.simulation`` (:gh:`244`).
+- Danger zones are visible in Light-Dark, PacMan and Laser Tag episodes
+  (:gh:`313`, :gh:`314`).
+- Tiger, CartPole, MountainCar, RockSample, LaserTag and Push now compute
+  metrics through ``step_info`` and ``get_metric_specs`` (:gh:`232`). PacMan
+  and Light-Dark keep their own ``compute_metrics``.
+- A resumed run reruns only cache entries written before the per-step channel
+  existed, instead of discarding the whole cache.
+- ``Environment.step_info`` is also called once on the terminal step, with
+  ``action`` and ``next_state`` set to ``None``.
+- Added ``order_and_fill_metrics``, which returns every declared metric in
+  declaration order.
+
+Bug Fixes:
+^^^^^^^^^^
+
+- Fixed CVaR return confidence intervals (:gh:`239`).
+- Fixed reward ranges for zero-mean danger shocks (:gh:`240`).
+- Fixed the RockSample rock-check sensor accuracy law (:gh:`286`).
+- Fixed the violations found by the new cross-environment conformance and
+  terminal-state tests (:gh:`241`, :gh:`315`).
+
+Documentation:
+^^^^^^^^^^^^^^
+
+- Docs restructured into guide, common-API, environment and planner sections,
+  with one page per environment (:gh:`266`, :gh:`295`, :gh:`321`).
+- Every environment page has a precise, self-contained formal definition
+  (:gh:`293`, :gh:`301`, :gh:`322`, :gh:`328`, :gh:`329`, :gh:`331`,
+  :gh:`332`).
+- README: every environment listed, a planner comparison on a time budget,
+  pip install, the results site and a tuning walkthrough, with videos
+  (:gh:`302`, :gh:`306`–:gh:`308`, :gh:`311`, :gh:`312`, :gh:`316`,
+  :gh:`320`).
+
+Others:
+^^^^^^^
+
+- Bumped the package version to 0.6.0.
+- Tests: vectorized beliefs and models checked against their scalar
+  environments, stronger planner correctness tests, visualization coverage,
+  and per-env API checks folded into the cross-env harnesses (:gh:`220`,
+  :gh:`254`, :gh:`277`, :gh:`283`, :gh:`309`, :gh:`317`).
+- CI runs the Docker tests daily on develop (:gh:`275`).
+- Extended the frozen metric baseline with a terminated-episode shape, a
+  metric-ordering snapshot and a confidence-bounds snapshot, which is what
+  makes the migration's "no name, value or ordering moved" claim checkable
+  rather than assumed. The bounds matter on their own: a declared reduction
+  that yields the right mean from the wrong per-episode samples leaves the
+  point estimate intact and moves only the interval.
+- Tiger now reports a real 95% t-interval instead of a zero-width one. An
+  episode that never reports a metric's channel is left out of that metric's
+  average.
+
+Release 0.5.0
+-------------
 
 **CARLA, nuPlan and Isaac Lab environments; vectorized planning and batched GPU beliefs**
 
@@ -156,10 +269,8 @@ Release 0.3.1 (2026-05-12)
 Bug Fixes:
 ^^^^^^^^^^
 
-- Bundled the C++ headers in the sdist. Without them ``pip install`` from
-  PyPI failed to compile, because ``setup.py``'s ``include_dirs`` pointed at
-  paths absent from the tarball. Added packaging regression tests
-  (:gh:`168`).
+- Bundled the C++ headers in the sdist, without which ``pip install`` from
+  PyPI failed to compile. Added packaging regression tests (:gh:`168`).
 
 Others:
 ^^^^^^^

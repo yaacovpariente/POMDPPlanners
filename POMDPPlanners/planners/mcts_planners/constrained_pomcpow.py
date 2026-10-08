@@ -47,17 +47,18 @@ class CPOMCPOW(ConstrainedMCTSMixin, POMCPOW):
     :meth:`_simulate_state_path_with_cost`, alongside its constructor.
 
     Args mirror :class:`POMCPOW` plus:
-        environment: A :class:`ConstrainedEnvironment` — constraint cost
-            is read via ``environment.constraint_cost(s, a, s')``.
-            Passing a plain :class:`Environment` raises ``TypeError``.
-        cost_budget: Discounted-cost budget. Scalar or 1-D array of length
-            ``K``. See :meth:`ConstrainedMCTSMixin._validate_and_pack_constraint_params`.
-        lambda_init: Initial Lagrange multiplier per constraint dimension.
-            Defaults to ``0.0``.
-        lambda_step: Dual-ascent step size (> 0). Defaults to ``0.1``.
-        return_minimal_cost: Enable the minimal-cost propagation trick
-            from Jamgochian et al. (2023, Section 4 "Cost backpropagation").
-            Defaults to ``True``.
+
+    - ``environment``: A :class:`ConstrainedEnvironment` — constraint cost
+      is read via ``environment.constraint_cost(s, a, s')``.
+      Passing a plain :class:`Environment` raises ``TypeError``.
+    - ``cost_budget``: Discounted-cost budget. Scalar or 1-D array of length
+      ``K``. See :meth:`ConstrainedMCTSMixin._validate_and_pack_constraint_params`.
+    - ``lambda_init``: Initial Lagrange multiplier per constraint dimension.
+      Defaults to ``0.0``.
+    - ``lambda_step``: Dual-ascent step size (> 0). Defaults to ``0.1``.
+    - ``return_minimal_cost``: Enable the minimal-cost propagation trick
+      from Jamgochian et al. (2023, Section 4 "Cost backpropagation").
+      Defaults to ``True``.
 
     Raises:
         TypeError: If ``environment`` is not a :class:`ConstrainedEnvironment`.

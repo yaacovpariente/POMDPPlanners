@@ -22,10 +22,7 @@ import torch
 from POMDPPlanners.core.environment.vectorized_generative_model import (
     VectorizedGenerativeModel,
 )
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
-    LaserTagPOMDP,
-    RewardModelType,
-)
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp_utils import (
     OpponentPolicy,
 )
@@ -325,25 +322,6 @@ def test_keys_are_deterministic_and_discriminating(case: _Case) -> None:
     assert keys_first[0] != keys_first[2]
 
 
-def test_unsupported_reward_model_raises() -> None:
-    """Constructing on an unsupported reward model is rejected.
-
-    Purpose: Validates the scope guard on reward model type
-
-    Given: An env configured with the distance-decayed hazard reward model
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    env = LaserTagPOMDP(
-        discount_factor=0.95,
-        reward_model_type=RewardModelType.DISTANCE_DECAYED_HAZARD_PENALTY,
-    )
-    with pytest.raises(NotImplementedError):
-        LaserTagVectorizedModel(env)
-
-
 @pytest.mark.parametrize(
     "policy",
     [OpponentPolicy.EVADE, OpponentPolicy.PURSUE, OpponentPolicy.EVADE_WHEN_SPOTTED],
@@ -379,21 +357,5 @@ def test_unsupported_transition_error_raises() -> None:
     Test type: unit
     """
     env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.1)
-    with pytest.raises(NotImplementedError):
-        LaserTagVectorizedModel(env)
-
-
-def test_hazard_terminal_config_raises() -> None:
-    """The draw-coupled hazard-terminal config is rejected.
-
-    Purpose: Validates the scope guard on the hazard-terminal absorbing slot
-
-    Given: An env configured with is_dangerous_area_hit_terminal=True
-    When: A vectorized model is constructed from it
-    Then: NotImplementedError is raised
-
-    Test type: unit
-    """
-    env = LaserTagPOMDP(discount_factor=0.95, is_dangerous_area_hit_terminal=True)
     with pytest.raises(NotImplementedError):
         LaserTagVectorizedModel(env)

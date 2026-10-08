@@ -11,30 +11,45 @@ the center and ``(hx, hy)`` the half-extents.  Entity radii are used for
 circle-AABB overlap tests during collision resolution.
 
 Functions:
-    ray_aabb_distances: Vectorized ray-AABB slab intersection for multiple
-        rays originating from a single point against an array of AABBs.
-    ray_circle_distance: Distance along a ray to the nearest intersection
-        with a circle.
-    compute_laser_measurements: Full 8-direction laser scan from a position.
-    resolve_wall_collision: Push a circular entity out of overlapping AABBs.
-    clamp_to_grid: Clamp a 2-D position to the grid boundaries.
+
+    - ``ray_aabb_distances``: Vectorized ray-AABB slab intersection for multiple
+      rays originating from a single point against an array of AABBs.
+    - ``ray_circle_distance``: Distance along a ray to the nearest intersection
+      with a circle.
+    - ``compute_laser_measurements``: Full 8-direction laser scan from a position.
+    - ``resolve_wall_collision``: Push a circular entity out of overlapping AABBs.
+    - ``clamp_to_grid``: Clamp a 2-D position to the grid boundaries.
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-# 8 laser ray unit-direction vectors: N, NE, E, SE, S, SW, W, NW
+# 8 laser ray unit-direction vectors.
+#
+# Frame: continuous positions are ``(x, y) = (row, col)`` of the discrete grid.
+# ``_cells_to_aabbs`` puts wall cell ``(row, col)`` at AABB center
+# ``(cx, cy) = (row, col)``, the default dangerous areas use the same order, and
+# the default ``grid_size`` is ``(11, 7)`` for the 11-row x 7-col map.  So +x is
+# increasing row (grid *south*) and +y is increasing column (grid *east*).
+#
+# These are the same eight headings as the discrete ``_LASER_DIRECTIONS`` table,
+# but not in the same order: continuous beam ``i`` is discrete beam
+# ``(i + 2) % 8``.  Never index one variant's observation with the other's beam
+# number.
+#
+# Drawn with +x rightward and +y upward, beam 0 points up, which is why the discrete-action variant names
+# ``[0, 1]`` "up" -- those are screen directions, not grid compass directions.
 LASER_DIRECTIONS = np.array(
     [
-        [0.0, 1.0],  # N
-        [1.0, 1.0],  # NE
-        [1.0, 0.0],  # E
-        [1.0, -1.0],  # SE
-        [0.0, -1.0],  # S
-        [-1.0, -1.0],  # SW
-        [-1.0, 0.0],  # W
-        [-1.0, 1.0],  # NW
+        [0.0, 1.0],  # +y   (grid east; drawn up)
+        [1.0, 1.0],  # +x+y (grid south-east)
+        [1.0, 0.0],  # +x   (grid south; drawn right)
+        [1.0, -1.0],  # +x-y (grid south-west)
+        [0.0, -1.0],  # -y   (grid west; drawn down)
+        [-1.0, -1.0],  # -x-y (grid north-west)
+        [-1.0, 0.0],  # -x   (grid north; drawn left)
+        [-1.0, 1.0],  # -x+y (grid north-east)
     ],
     dtype=np.float64,
 )

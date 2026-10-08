@@ -37,6 +37,10 @@ ext_modules = [
         sources=["POMDPPlanners/environments/mountain_car_pomdp/_cpp/mountain_car.cpp"],
     ),
     _make_ext(
+        name="POMDPPlanners.environments.battleship_pomdp._native",
+        sources=["POMDPPlanners/environments/battleship_pomdp/_cpp/battleship.cpp"],
+    ),
+    _make_ext(
         name="POMDPPlanners.environments.cartpole_pomdp._native",
         sources=["POMDPPlanners/environments/cartpole_pomdp/_cpp/cartpole.cpp"],
     ),
@@ -61,10 +65,30 @@ ext_modules = [
         sources=["POMDPPlanners/environments/rock_sample_pomdp/_cpp/rock_sample.cpp"],
     ),
     _make_ext(
+        name="POMDPPlanners.environments.capture_the_flag_pomdp._native",
+        sources=["POMDPPlanners/environments/capture_the_flag_pomdp/_cpp/capture_the_flag.cpp"],
+    ),
+    _make_ext(
+        name="POMDPPlanners.environments.firefighting_pomdp._native",
+        sources=["POMDPPlanners/environments/firefighting_pomdp/_cpp/firefighting.cpp"],
+    ),
+    _make_ext(
+        name="POMDPPlanners.environments.maze_pomdp._native",
+        sources=["POMDPPlanners/environments/maze_pomdp/_cpp/maze.cpp"],
+    ),
+    _make_ext(
+        name="POMDPPlanners.environments.snake_pomdp._native",
+        sources=["POMDPPlanners/environments/snake_pomdp/_cpp/snake.cpp"],
+    ),
+    _make_ext(
         name="POMDPPlanners.environments.safety_ant_velocity_pomdp._native",
         sources=[
             "POMDPPlanners/environments/safety_ant_velocity_pomdp/_cpp/safety_ant_velocity.cpp"
         ],
+    ),
+    _make_ext(
+        name="POMDPPlanners.environments.chicheck_invaders_pomdp._native",
+        sources=["POMDPPlanners/environments/chicheck_invaders_pomdp/_cpp/chicheck_invaders.cpp"],
     ),
 ]
 

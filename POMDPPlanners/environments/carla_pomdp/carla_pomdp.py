@@ -96,15 +96,20 @@ from collections.abc import Hashable
 from enum import Enum
 from pathlib import Path
 from queue import Queue
-from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.carla_pomdp.carla_server_pool import acquire_pool_lease
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.carla_pomdp.carla_visualization import CarlaVisualizer
 
 # Default discrete control presets as ``(throttle, steer, brake)`` triples.
 DEFAULT_ACTION_PRESETS: Tuple[Tuple[float, float, float], ...] = (
@@ -256,16 +261,16 @@ _EGO_VELOCITY_SLICE = slice(3, 5)  # (vx, vy) world velocity in m/s
 class CarlaPOMDPMetrics(Enum):
     """Metric names for the CARLA POMDP environment."""
 
-    COLLISION_RATE = "collision_rate"
-    SUCCESS_RATE = "success_rate"
-    ROUTE_COMPLETION = "route_completion"
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_ROUTE_COMPLETION = "average_route_completion"
     AVERAGE_PROGRESS = "average_progress"
-    AVERAGE_SPEED = "average_speed"
-    RED_LIGHT_VIOLATION_RATE = "red_light_violation_rate"
-    RED_LIGHT_VIOLATION_COUNT = "red_light_violation_count"
-    TRAFFIC_LIGHT_MALFUNCTION_COUNT = "traffic_light_malfunction_count"
-    NEAR_MISS_COUNT = "near_miss_count"
-    MIN_VEHICLE_DISTANCE = "min_vehicle_distance"
+    AVERAGE_SPEED_MPS = CommonMetricName.AVERAGE_SPEED_MPS.value
+    AVERAGE_RED_LIGHT_VIOLATION_FRACTION = "average_red_light_violation_fraction"
+    AVERAGE_RED_LIGHT_VIOLATIONS = "average_red_light_violations"
+    AVERAGE_TRAFFIC_LIGHT_MALFUNCTIONS = "average_traffic_light_malfunctions"
+    AVERAGE_NEAR_MISSES = CommonMetricName.AVERAGE_NEAR_MISSES.value
+    MIN_VEHICLE_DISTANCE_M = "min_vehicle_distance_m"
 
 
 def _relative_agent_row(
@@ -1396,10 +1401,10 @@ class CarlaPOMDP(Environment):
 
         Returns:
             The metric name strings produced by :meth:`compute_metrics`:
-            ``collision_rate``, ``success_rate``, ``route_completion``,
-            ``average_progress``, ``average_speed``, ``red_light_violation_rate``,
-            ``red_light_violation_count``, ``traffic_light_malfunction_count``,
-            ``near_miss_count`` and ``min_vehicle_distance``.
+            ``collision_rate``, ``task_completion_rate``, ``average_route_completion``,
+            ``average_progress``, ``average_speed_mps``, ``average_red_light_violation_fraction``,
+            ``average_red_light_violations``, ``average_traffic_light_malfunctions``,
+            ``average_near_misses`` and ``min_vehicle_distance_m``.
         """
         return [metric.value for metric in CarlaPOMDPMetrics]
 
@@ -1415,28 +1420,27 @@ class CarlaPOMDP(Environment):
 
             - ``collision_rate``: fraction of episodes that ended in a terminal state
               without reaching the destination (i.e. in a collision).
-            - ``success_rate``: fraction of episodes whose final state is within
+            - ``task_completion_rate``: fraction of episodes whose final state is within
               ``goal_radius`` of the episode destination.
-            - ``route_completion``: mean over episodes of the fraction of the planned
+            - ``average_route_completion``: mean over episodes of the fraction of the planned
               route's arc length covered by the end of the episode.
             - ``average_progress``: mean per-episode ground distance travelled by
               the ego, in metres.
-            - ``average_speed``: mean ego speed over the driven trajectory, in m/s.
-            - ``red_light_violation_rate``: fraction of *functioning*-light stop-line
+            - ``average_speed_mps``: mean ego speed over the driven trajectory, in m/s.
+            - ``average_red_light_violation_fraction``: fraction of *functioning*-light stop-line
               crossings taken while the light was red (averaged over episodes that crossed
               at least one working light).
-            - ``red_light_violation_count``: mean number of red-light crossings per episode.
-            - ``traffic_light_malfunction_count``: mean number of crossings per episode where
+            - ``average_red_light_violations``: mean number of red-light crossings per episode.
+            - ``average_traffic_light_malfunctions``: mean number of crossings per episode where
               the light was off / unknown — recorded separately and never counted as a
               violation, since the light was not operating.
-            - ``near_miss_count``: mean number of near-miss events per episode (a run within
+            - ``average_near_misses``: mean number of near-miss events per episode (a run within
               ``_NEAR_MISS_DISTANCE`` of another vehicle that did not become a collision).
-            - ``min_vehicle_distance``: mean over episodes of the closest the ego came to any
+            - ``min_vehicle_distance_m``: mean over episodes of the closest the ego came to any
               vehicle, in metres (a safety-margin metric; episodes that saw no vehicle are
               excluded).
         """
-        if not histories:
-            return []
+        require_non_empty_histories(histories, type(self).__name__)
         outcomes = [self._episode_goal_outcome(h) for h in histories]
         successes = [success for success, _completion in outcomes]
         completions = [completion for _success, completion in outcomes]
@@ -1455,19 +1459,25 @@ class CarlaPOMDP(Environment):
         min_distances = [dist for _count, dist in near if np.isfinite(dist)]
         return [
             self._metric_from_samples(CarlaPOMDPMetrics.COLLISION_RATE.value, collisions),
-            self._metric_from_samples(CarlaPOMDPMetrics.SUCCESS_RATE.value, successes),
-            self._metric_from_samples(CarlaPOMDPMetrics.ROUTE_COMPLETION.value, completions),
+            self._metric_from_samples(CarlaPOMDPMetrics.TASK_COMPLETION_RATE.value, successes),
+            self._metric_from_samples(
+                CarlaPOMDPMetrics.AVERAGE_ROUTE_COMPLETION.value, completions
+            ),
             self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_PROGRESS.value, path_lengths),
-            self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_SPEED.value, mean_speeds),
-            self._metric_from_samples(CarlaPOMDPMetrics.RED_LIGHT_VIOLATION_RATE.value, red_rates),
+            self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_SPEED_MPS.value, mean_speeds),
             self._metric_from_samples(
-                CarlaPOMDPMetrics.RED_LIGHT_VIOLATION_COUNT.value, red_counts
+                CarlaPOMDPMetrics.AVERAGE_RED_LIGHT_VIOLATION_FRACTION.value, red_rates
             ),
             self._metric_from_samples(
-                CarlaPOMDPMetrics.TRAFFIC_LIGHT_MALFUNCTION_COUNT.value, malfunctions
+                CarlaPOMDPMetrics.AVERAGE_RED_LIGHT_VIOLATIONS.value, red_counts
             ),
-            self._metric_from_samples(CarlaPOMDPMetrics.NEAR_MISS_COUNT.value, near_counts),
-            self._metric_from_samples(CarlaPOMDPMetrics.MIN_VEHICLE_DISTANCE.value, min_distances),
+            self._metric_from_samples(
+                CarlaPOMDPMetrics.AVERAGE_TRAFFIC_LIGHT_MALFUNCTIONS.value, malfunctions
+            ),
+            self._metric_from_samples(CarlaPOMDPMetrics.AVERAGE_NEAR_MISSES.value, near_counts),
+            self._metric_from_samples(
+                CarlaPOMDPMetrics.MIN_VEHICLE_DISTANCE_M.value, min_distances
+            ),
         ]
 
     def _episode_near_misses(self, history: History) -> Tuple[int, float]:
@@ -1655,23 +1665,17 @@ class CarlaPOMDP(Environment):
             "density. Belief updates must run on the planner's model environment."
         )
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Save the episode as CARLA's own chase-camera MP4 footage.
+    def episode_visualizer(self) -> "CarlaVisualizer":
+        """Return the visualizer that writes CARLA's own chase-camera footage.
 
-        The episode ``history`` is unused: the video is the native camera
-        rendering buffered live while the world was stepped, not a plot
-        reconstructed from the step data. The environment must have been
-        constructed with ``record_camera=True``.
-
-        Args:
-            history: Episode step data (unused; kept for the hook signature).
-            output_dir: Directory into which the ``.mp4`` video is written.
-            episode_index: Zero-based episode index, used to name the file.
+        The video is the native camera rendering buffered live while the world
+        was stepped, not a plot reconstructed from the step data. The
+        environment must have been constructed with ``record_camera=True``.
         """
-        del history
-        self.save_camera_video(output_dir / f"agent_path_{episode_index}.mp4")
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.carla_pomdp.carla_visualization import CarlaVisualizer
+
+        return CarlaVisualizer(self)
 
     def save_camera_video(self, cache_path: Path, fps: int = 20) -> None:
         """Write CARLA's own chase-camera footage to an MP4 video.

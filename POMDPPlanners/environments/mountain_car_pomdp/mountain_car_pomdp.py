@@ -24,30 +24,43 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple, Union
 
-import matplotlib
 import numpy as np
 from numpy.typing import NDArray
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import (
+    EpisodeReduction,
+    StepInfoMetric,
+    order_and_fill_metrics,
+)
 from POMDPPlanners.environments.mountain_car_pomdp import _native
 from POMDPPlanners.utils.multivariate_normal import CovarianceParameterizedMultivariateNormal
-from POMDPPlanners.utils.statistics_utils import confidence_interval
 
-matplotlib.use("Agg")  # Use non-interactive backend
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_visualization.mountain_car_visualizer import (
+        MountainCarVisualizer,
+    )
+
+
+class MountainCarStepChannel(Enum):
+    """Per-step measurement channels reported by :meth:`MountainCarPOMDP.step_info`."""
+
+    AT_GOAL = "at_goal"
 
 
 class MountainCarPOMDPMetrics(Enum):
     """Metric names for Mountain Car POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -367,11 +380,16 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        # No per-episode visualization for this environment.
-        pass
+    def episode_visualizer(self) -> "MountainCarVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.mountain_car_pomdp.mountain_car_visualization.mountain_car_visualizer import (
+            MountainCarVisualizer,
+        )
+
+        return MountainCarVisualizer(self)
 
     def is_equal_observation(
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]
@@ -382,41 +400,54 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Discrete int actions (-1, 0, 1); already hashable.
         return action
 
-    def get_metric_names(self) -> List[str]:
-        """Get names of Mountain Car POMDP specific metrics.
-
-        Returns:
-            List containing metric names: goal_reaching_rate
-        """
-        return [metric.value for metric in MountainCarPOMDPMetrics]
-
-    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute Mountain Car POMDP specific metrics from simulation histories.
+    def step_info(self, state: Any, action: Any, next_state: Any) -> Dict[str, float]:
+        """Report whether the car has reached the goal position in this state.
 
         Args:
-            histories: List of simulation histories
+            state: The ``(position, velocity)`` state the step was taken from,
+                or the final state on the terminal step.
+            action: Unused; reaching the goal is a property of the state alone.
+            next_state: Unused; each state is scored when it is recorded.
 
         Returns:
-            List of MetricValue objects containing the computed metrics
+            The ``at_goal`` indicator for this step's state.
         """
-        goal_reached = []
-        for history in histories:
-            goal_reached_in_history = False
-            for step in history.history:
-                position, _ = step.state
-                if position >= self.goal_position:
-                    goal_reached_in_history = True
-                    break
-            goal_reached.append(1 if goal_reached_in_history else 0)
+        del action, next_state
+        position, _ = state
+        return {MountainCarStepChannel.AT_GOAL.value: float(position >= self.goal_position)}
 
-        avg_goal_reached = float(np.mean(goal_reached))
-        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute the Mountain Car metrics, always reporting every declared name.
 
+        The shared aggregator omits a metric no episode reported, which happens
+        for an episode with no recorded steps. This environment has always
+        reported a zero-valued task_completion_rate in that case, so the declared
+        names are filled rather than dropped.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name, in declaration order.
+
+        Raises:
+            ValueError: If ``histories`` is empty, or if an episode ran without
+                being measured. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        return order_and_fill_metrics(self.get_metric_names(), super().compute_metrics(histories))
+
+    def get_metric_specs(self) -> List[StepInfoMetric]:
+        """Declare the Mountain Car metric derived from the per-step channel.
+
+        Returns:
+            A spec for ``task_completion_rate``. ``ANY`` reproduces the historical
+            scan, which stopped at the first state past the goal.
+        """
         return [
-            MetricValue(
-                name=MountainCarPOMDPMetrics.GOAL_REACHING_RATE.value,
-                value=avg_goal_reached,
-                lower_confidence_bound=goal_reached_ci[0],
-                upper_confidence_bound=goal_reached_ci[1],
-            ),
+            StepInfoMetric(
+                name=MountainCarPOMDPMetrics.TASK_COMPLETION_RATE.value,
+                channel=MountainCarStepChannel.AT_GOAL.value,
+                per_episode=EpisodeReduction.ANY,
+            )
         ]

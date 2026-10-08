@@ -10,9 +10,11 @@ from typing import Any, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.light_dark_pomdp import (
     _native,  # pylint: disable=no-name-in-module
 )
@@ -26,11 +28,11 @@ from POMDPPlanners.utils.statistics_utils import confidence_interval
 class DiscreteLightDarkPOMDPMetrics(Enum):
     """Metric names for Discrete Light-Dark POMDP environment."""
 
-    GOAL_REACHING_RATE = "goal_reaching_rate"
-    OBSTACLE_HIT_RATE = "obstacle_hit_rate"
-    AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    COLLISION_RATE = CommonMetricName.COLLISION_RATE.value
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
     OUT_OF_GRID_RATE = "out_of_grid_rate"
-    AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER = "avg_high_variance_states_counter"
+    AVERAGE_HIGH_VARIANCE_STEPS = "average_high_variance_steps"
 
 
 class ObservationModelType(Enum):
@@ -863,7 +865,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     def sample_next_state_batch(
         self, states: Union[np.ndarray, Sequence[Any]], action: str
     ) -> np.ndarray:
-        states_arr = np.asarray(states)
+        # float64, matching sample_next_state: that path casts to float64 for
+        # the native call and so always returns float64. Left as the caller's
+        # dtype, an integer particle array would come back int64 here, and a
+        # belief that mixes the batch and single paths would silently truncate
+        # half its particles to the grid.
+        states_arr = np.asarray(states, dtype=np.float64)
         if self._hazard_terminal_enabled:
             return self._sample_next_state_batch_hazard(states_arr, action)
         n = len(states_arr)
@@ -1013,12 +1020,13 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         """Get names of Discrete Light-Dark POMDP specific metrics.
 
         Returns:
-            List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            avg_obstacle_hit_counter, out_of_grid_rate, and avg_high_variance_states_counter
+            List containing metric names: task_completion_rate, collision_rate,
+            average_collisions, out_of_grid_rate, and average_high_variance_steps
         """
         return [metric.value for metric in DiscreteLightDarkPOMDPMetrics]
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        require_non_empty_histories(histories, type(self).__name__)
         goal_reached = []
         obstacle_hits = []
         obstacle_hit_counter = []
@@ -1061,9 +1069,9 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         avg_goal_reached = float(np.mean(goal_reached))
         avg_obstacle_hits = float(np.mean(obstacle_hits))
-        avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
+        average_collisions = float(np.mean(obstacle_hit_counter))
         avg_out_of_grid = float(np.mean(out_of_grid))
-        avg_high_variance_states_counter = float(np.mean(high_variance_states_counter))
+        average_high_variance_steps = float(np.mean(high_variance_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
@@ -1074,20 +1082,20 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return [
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.GOAL_REACHING_RATE.value,
+                name=DiscreteLightDarkPOMDPMetrics.TASK_COMPLETION_RATE.value,
                 value=avg_goal_reached,
                 lower_confidence_bound=goal_reached_ci[0],
                 upper_confidence_bound=goal_reached_ci[1],
             ),
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.OBSTACLE_HIT_RATE.value,
+                name=DiscreteLightDarkPOMDPMetrics.COLLISION_RATE.value,
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],
             ),
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.AVG_OBSTACLE_HIT_COUNTER.value,
-                value=avg_obstacle_hit_counter,
+                name=DiscreteLightDarkPOMDPMetrics.AVERAGE_COLLISIONS.value,
+                value=average_collisions,
                 lower_confidence_bound=obstacle_hit_counter_ci[0],
                 upper_confidence_bound=obstacle_hit_counter_ci[1],
             ),
@@ -1098,8 +1106,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 upper_confidence_bound=out_of_grid_ci[1],
             ),
             MetricValue(
-                name=DiscreteLightDarkPOMDPMetrics.AVG_ZERO_MEAN_HAZARD_SHOCK_COUNTER.value,
-                value=avg_high_variance_states_counter,
+                name=DiscreteLightDarkPOMDPMetrics.AVERAGE_HIGH_VARIANCE_STEPS.value,
+                value=average_high_variance_steps,
                 lower_confidence_bound=high_variance_states_counter_ci[0],
                 upper_confidence_bound=high_variance_states_counter_ci[1],
             ),

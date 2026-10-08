@@ -5,8 +5,8 @@
 Produces, per environment:
 - A discounted-returns histogram for each policy.
 - A multi-policy comparison histogram across all policies.
-- Optional per-episode environment-specific caches (e.g. agent trajectory
-  animations) when ``cache_visualizations=True``.
+- One visualization file per episode, written by the environment's own
+  episode visualizer, when ``cache_visualizations=True``.
 
 The visualizer is dispatched to worker processes via the simulator's task
 manager, so it must remain picklable and stateless. Module-level helpers
@@ -16,7 +16,7 @@ across worker processes is the standard library logger.
 
 import gc
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -39,9 +39,8 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
     ``output_dir/<policy_name>/plots/discounted_returns_histogram.png``.
     A multi-policy comparison histogram is written to
     ``output_dir/policy_comparison_histogram.png``. When
-    ``cache_visualizations`` is True, the environment's own
-    ``cache_visualization`` hook is invoked once per episode to render
-    environment-specific artifacts (typically agent-path animations) under
+    ``cache_visualizations`` is True, the environment's episode visualizer
+    writes one file per episode (a trace or a simulator video) under
     ``output_dir/<policy_name>/visualizations/``.
 
     The class holds no instance state and is therefore picklable for dispatch
@@ -87,8 +86,8 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
                 of ``policy_results``.
             output_dir: Directory under which artifacts are written. Must
                 already exist.
-            cache_visualizations: When True, also produce per-episode
-                environment-specific caches via ``environment.cache_visualization``.
+            cache_visualizations: When True, also write one visualization file
+                per episode through ``environment.episode_visualizer()``.
 
         Returns:
             ``output_dir`` itself.
@@ -141,6 +140,7 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
                 environment=environment,
                 policy_histories=policy_histories,
                 policy_dir=policy_dir,
+                policy_name=policy.name,
             )
 
     def _cache_episodes(
@@ -148,16 +148,23 @@ class EpisodeReturnsVisualizer(ExperimentVisualizer):
         environment: Environment,
         policy_histories: List[History],
         policy_dir: Path,
+        policy_name: Optional[str] = None,
     ) -> None:
+        visualizer = environment.episode_visualizer()
+        if visualizer is None:
+            return
+
         viz_dir = policy_dir / "visualizations"
         viz_dir.mkdir(exist_ok=True)
 
         for episode_idx, history in enumerate(policy_histories):
+            # A failed episode loses its visualization, not the run.
             try:
-                environment.cache_visualization(
+                visualizer.write(
                     history=history.history,
                     output_dir=viz_dir,
                     episode_index=episode_idx,
+                    policy_name=policy_name,
                 )
             except Exception as exc:  # pylint: disable=broad-exception-caught
                 logger.warning("Visualization failed for episode %s: %s", episode_idx, str(exc))

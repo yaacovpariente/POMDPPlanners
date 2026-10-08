@@ -23,17 +23,19 @@ Classes:
 from enum import Enum
 from pathlib import Path
 from collections.abc import Hashable
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 
+from POMDPPlanners.core.simulation.metrics import CommonMetricName
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.core.simulation.step_info_metrics import require_non_empty_histories
 from POMDPPlanners.environments.pacman_pomdp import _native  # pylint: disable=no-name-in-module
 from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_models import (
     BasePacManRewardModel,
@@ -43,6 +45,11 @@ from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp_utils.pacman_reward_mo
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
+if TYPE_CHECKING:
+    from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
+        PacManVisualizer,
+    )
+
 _GHOST_COORDINATION_CODES = {"independent": 0, "coordinated": 1, "mixed": 2}
 _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
 
@@ -50,13 +57,13 @@ _GHOST_STRATEGY_CODES = {"aggressive": 0, "patrol": 1, "ambush": 2}
 class PacManPOMDPMetrics(Enum):
     """Metric names for PacMan POMDP environment."""
 
-    WIN_RATE = "win_rate"
-    AVG_PELLETS_COLLECTED = "avg_pellets_collected"
-    AVG_EPISODE_LENGTH = "avg_episode_length"
-    AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
-    AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
-    AVG_DANGEROUS_AREA_STEPS = "avg_dangerous_area_steps"
-    AVG_ALL_DANGEROUS_ENCOUNTERS = "avg_all_dangerous_encounters"
+    TASK_COMPLETION_RATE = CommonMetricName.TASK_COMPLETION_RATE.value
+    AVERAGE_PELLETS_COLLECTED = "average_pellets_collected"
+    AVERAGE_EPISODE_LENGTH = CommonMetricName.AVERAGE_EPISODE_LENGTH.value
+    AVERAGE_CLOSEST_GHOST_DISTANCE = "average_closest_ghost_distance"
+    AVERAGE_COLLISIONS = CommonMetricName.AVERAGE_COLLISIONS.value
+    AVERAGE_DANGEROUS_AREA_STEPS = CommonMetricName.AVERAGE_DANGEROUS_AREA_STEPS.value
+    AVERAGE_DANGEROUS_ENCOUNTERS = CommonMetricName.AVERAGE_DANGEROUS_ENCOUNTERS.value
 
 
 class RewardModelType(Enum):
@@ -221,10 +228,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # is configured, so disabling the feature preserves the historical
         # reward range exactly.
         _has_dangerous_areas = bool(dangerous_areas)
-        min_reward = step_penalty + ghost_collision_penalty
         if _has_dangerous_areas:
-            min_reward -= float(dangerous_area_penalty)
-        max_reward = step_penalty + pellet_reward + win_reward
+            if reward_model_type == RewardModelType.ZERO_MEAN_HAZARD_SHOCK:
+                danger_term_min = -abs(dangerous_area_penalty)
+                danger_term_max = abs(dangerous_area_penalty)
+            else:
+                danger_contribution = -float(dangerous_area_penalty)
+                danger_term_min = min(0.0, danger_contribution)
+                danger_term_max = max(0.0, danger_contribution)
+        else:
+            danger_term_min = 0.0
+            danger_term_max = 0.0
+        min_reward = step_penalty + ghost_collision_penalty + danger_term_min
+        max_reward = step_penalty + pellet_reward + win_reward + danger_term_max
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
@@ -537,6 +553,33 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
     def get_terminal(self, state: np.ndarray) -> bool:
         """Return whether the state is terminal."""
         return bool(state[self._idx_terminal] > 0.5)
+
+    def state_layout(self) -> Dict[str, int]:
+        """Return where each field sits in a state array built by :meth:`make_state`.
+
+        The readers above are the way Python code should take a state apart.
+        A consumer outside Python cannot call them — a browser viewer replaying
+        a trace gets belief particles as raw arrays and has to slice them
+        itself — so the layout is published here rather than re-derived from
+        ``num_ghosts`` and the pellet count by every such reader, which would
+        be a second definition free to drift from this one.
+
+        Returns:
+            Index of each field in the canonical layout, plus the array's
+            total ``dim``. Ghost ``g`` occupies ``ghosts_start + 2 * g`` and
+            the slot after it; the pellet mask spans ``pellets_start`` up to
+            (but excluding) ``pellets_end``.
+        """
+        return {
+            "pacman_row": int(self._idx_pac_row),
+            "pacman_col": int(self._idx_pac_col),
+            "ghosts_start": int(self._idx_ghosts_start),
+            "pellets_start": int(self._idx_pellets_start),
+            "pellets_end": int(self._idx_pellets_end),
+            "score": int(self._idx_score),
+            "terminal": int(self._idx_terminal),
+            "dim": int(self._state_dim),
+        }
 
     def _require_state_array(self, state: Any) -> np.ndarray:
         if not isinstance(state, np.ndarray) or state.shape != (self._state_dim,):
@@ -1250,9 +1293,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         metrics_data["pellets_collected"] = self._count_pellets_collected(final_state)
 
         # Collect distances, collisions, and danger-area steps from episode steps
-        episode_distances, episode_collisions, episode_danger_steps = (
-            self._collect_step_distances_and_collisions(history)
-        )
+        (
+            episode_distances,
+            episode_collisions,
+            episode_danger_steps,
+        ) = self._collect_step_distances_and_collisions(history)
 
         if episode_distances:
             metrics_data["avg_distance"] = float(np.mean(episode_distances))
@@ -1334,7 +1379,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
                 if ghost_id < len(episode_avgs)
             ]
             metric = self._create_metric_value(
-                f"avg_pacman_ghost_{ghost_id}_distance", ghost_distance_values
+                f"average_ghost_{ghost_id}_distance", ghost_distance_values
             )
             if metric:
                 metrics.append(metric)
@@ -1354,13 +1399,13 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         """Get names of PacMan POMDP specific metrics.
 
         Returns:
-            List containing metric names including standard metrics (win_rate,
-            avg_pellets_collected, avg_episode_length, avg_pacman_closest_ghost_distance,
-            avg_collision_encounters, avg_dangerous_area_steps,
-            avg_all_dangerous_encounters) and dynamically generated per-ghost
+            List containing metric names including standard metrics (task_completion_rate,
+            average_pellets_collected, average_episode_length, average_closest_ghost_distance,
+            average_collisions, average_dangerous_area_steps,
+            average_dangerous_encounters) and dynamically generated per-ghost
             distance metrics for multi-ghost scenarios
-            (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.).
-            ``avg_all_dangerous_encounters`` is the per-step sum of
+            (average_ghost_0_distance, average_ghost_1_distance, etc.).
+            ``average_dangerous_encounters`` is the per-step sum of
             ghost-collision and dangerous-area-step events; a step that is both
             counts twice.
         """
@@ -1370,14 +1415,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Add dynamic per-ghost metrics for multi-ghost scenarios
         if self.num_ghosts > 1:
             for ghost_id in range(self.num_ghosts):
-                metric_names.append(f"avg_pacman_ghost_{ghost_id}_distance")
+                metric_names.append(f"average_ghost_{ghost_id}_distance")
 
         return metric_names
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
-        """Compute environment-specific metrics."""
-        if not histories:
-            return []
+        """Compute environment-specific metrics.
+
+        Args:
+            histories: List of simulation histories.
+
+        Returns:
+            One MetricValue per declared metric name.
+
+        Raises:
+            ValueError: If ``histories`` is empty. See
+                :meth:`~POMDPPlanners.core.environment.environment.Environment.compute_metrics`.
+        """
+        require_non_empty_histories(histories, type(self).__name__)
 
         # Collect metrics from all episodes
         wins = []
@@ -1403,14 +1458,14 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
         # Create standard metrics using helper
         metrics = []
         metric_definitions = [
-            (PacManPOMDPMetrics.WIN_RATE.value, wins),
-            (PacManPOMDPMetrics.AVG_PELLETS_COLLECTED.value, pellets_collected),
-            (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
-            (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
-            (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
-            (PacManPOMDPMetrics.AVG_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
+            (PacManPOMDPMetrics.TASK_COMPLETION_RATE.value, wins),
+            (PacManPOMDPMetrics.AVERAGE_PELLETS_COLLECTED.value, pellets_collected),
+            (PacManPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value, episode_lengths),
+            (PacManPOMDPMetrics.AVERAGE_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
+            (PacManPOMDPMetrics.AVERAGE_COLLISIONS.value, collision_encounters),
+            (PacManPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value, dangerous_area_steps),
             (
-                PacManPOMDPMetrics.AVG_ALL_DANGEROUS_ENCOUNTERS.value,
+                PacManPOMDPMetrics.AVERAGE_DANGEROUS_ENCOUNTERS.value,
                 all_dangerous_encounters,
             ),
         ]
@@ -1427,38 +1482,16 @@ class PacManPOMDP(DiscreteActionsEnvironment):  # pylint: disable=too-many-publi
 
         return metrics
 
-    def visualize_path(self, path: List[np.ndarray], actions: List[int], cache_path: Path):
-        """Visualize PacMan path through the maze using sprite-based rendering.
-
-        Args:
-            path: List of state arrays representing the path through the maze.
-            actions: List of actions taken at each step.
-            cache_path: Path where the GIF should be saved.
-        """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
+    def episode_visualizer(self) -> "PacManVisualizer":
+        """Return the visualizer that writes this environment's traces."""
+        # Imported here so the environment module does not import its own
+        # visualization package at load time.
+        # pylint: disable-next=import-outside-toplevel
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualization.pacman_visualizer import (
             PacManVisualizer,
-        )  # pylint: disable=import-outside-toplevel
+        )
 
-        visualizer = PacManVisualizer(self)
-        visualizer.visualize_path(path, actions, cache_path)
-
-    def cache_visualization(
-        self, history: List[StepData], output_dir: Path, episode_index: int
-    ) -> None:
-        """Cache visualization of episode history.
-
-        Args:
-            history: List of StepData objects representing the episode
-            output_dir: Directory into which the ``.gif`` visualization is written
-            episode_index: Zero-based episode index, used to name the file
-        """
-        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import (
-            PacManVisualizer,
-        )  # pylint: disable=import-outside-toplevel
-
-        cache_path = output_dir / f"agent_path_{episode_index}.gif"
-        visualizer = PacManVisualizer(self)
-        visualizer.cache_visualization(history, cache_path)
+        return PacManVisualizer(self)
 
 
 class _PacManInitialObservationDistribution(Distribution):

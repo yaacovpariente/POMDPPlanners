@@ -19,6 +19,7 @@ from POMDPPlanners.tests.test_utils.metric_invariants_utils import (
     verify_metric_sanity,
     verify_return_shift_linearity,
 )
+from POMDPPlanners.tests.test_utils.golden_metric_snapshot import attach_step_info
 
 np.random.seed(42)
 random.seed(42)
@@ -213,22 +214,6 @@ def test_reward_func_open_door(tiger_pomdp):
     assert tiger_pomdp.reward("tiger_left", "open_right") == 10.0
 
 
-def test_is_terminal(tiger_pomdp):
-    """Test terminal state detection.
-
-    Purpose: Validates that TigerPOMDP correctly identifies terminal states
-
-    Given: A TigerPOMDP environment and all possible states
-    When: is_terminal method is called for each state
-    Then: All states return False, confirming that TigerPOMDP currently has no terminal states
-
-    Test type: unit
-    """
-    # Currently always returns False
-    for state in tiger_pomdp.states:
-        assert not tiger_pomdp.is_terminal(state)
-
-
 def test_reward_range(tiger_pomdp):
     """Test that reward range is correctly set.
 
@@ -271,34 +256,6 @@ class TestTigerPOMDPConfigId:
 
     Test type: configuration
     """
-
-    def test_config_id_consistency(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id is consistent for identical configurations.
-
-        Purpose: Validates that TigerPOMDP config_id generates consistent identifiers for identical configurations
-
-        Given: Two TigerPOMDP environments with identical discount_factor=0.95
-        When: Config IDs are generated for both environments
-        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
-
-        Test type: configuration
-        """
-        other_env = TigerPOMDP(discount_factor=0.95)
-        assert tiger_pomdp.config_id == other_env.config_id
-
-    def test_config_id_different_discount_factor(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id changes with different discount factors.
-
-        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different discount factors
-
-        Given: Two TigerPOMDP environments with different discount factors (0.95 vs 0.8)
-        When: Config IDs are generated for both environments
-        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
-
-        Test type: configuration
-        """
-        other_env = TigerPOMDP(discount_factor=0.8)
-        assert tiger_pomdp.config_id != other_env.config_id
 
     def test_config_id_different_states(self, tiger_pomdp: TigerPOMDP):
         """Test that config_id changes with different states.
@@ -359,37 +316,6 @@ class TestTigerPOMDPConfigId:
         ]  # Different observations
         assert tiger_pomdp.config_id != other_env.config_id
 
-    def test_config_id_format(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id is a valid SHA-256 hash.
-
-        Purpose: Validates that TigerPOMDP config_id generates properly formatted SHA-256 hash identifiers
-
-        Given: A TigerPOMDP environment with specific configuration
-        When: Config ID is generated for the environment
-        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
-
-        Test type: configuration
-        """
-        config_id = tiger_pomdp.config_id
-        assert isinstance(config_id, str)
-        assert len(config_id) == 64  # SHA-256 hash length
-        assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
-
-    def test_config_id_deterministic(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-
-        Purpose: Validates that TigerPOMDP config_id generates deterministic identifiers for identical configurations
-
-        Given: A TigerPOMDP environment with specific configuration
-        When: Config ID is generated multiple times for the same environment
-        Then: All generated config_ids are identical, demonstrating deterministic behavior
-
-        Test type: unit
-        """
-        config_id1 = tiger_pomdp.config_id
-        config_id2 = tiger_pomdp.config_id
-        assert config_id1 == config_id2
-
 
 class TestTigerPOMDPMetrics:
     """Test suite for TigerPOMDP compute_metrics functionality."""
@@ -446,10 +372,10 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the perfect agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 100% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 1.0
 
         # Should have average of 3 listens
@@ -506,10 +432,10 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the failing agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 0% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 0.0
 
         # Should have average of 2 listens
@@ -565,36 +491,15 @@ class TestTigerPOMDPMetrics:
             )
 
         # Compute metrics for the mixed performance agent
-        metrics = tiger_pomdp.compute_metrics(histories)
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
         # Should have 50% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         assert success_metric.value == 0.5
 
         # Should have average of 1.9 listens (1, 2, 3, 1, 2, 3, 1, 2, 3, 1)
         listens_metric = next(m for m in metrics if m.name == "average_listens")
         assert listens_metric.value == 1.9
-
-    def test_compute_metrics_empty_histories(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics with empty history list.
-
-        Purpose: Validates that TigerPOMDP compute_metrics handles empty history lists correctly
-
-        Given: A TigerPOMDP environment and empty history list []
-        When: compute_metrics is called with empty histories
-        Then: Returns 0% success rate and 0 listens, confirming proper handling of empty input
-
-        Test type: unit
-        """
-        metrics = tiger_pomdp.compute_metrics([])
-
-        # Should have 0% success rate
-        success_metric = next(m for m in metrics if m.name == "success_rate")
-        assert success_metric.value == 0.0
-
-        # Should have 0 listens
-        listens_metric = next(m for m in metrics if m.name == "average_listens")
-        assert listens_metric.value == 0.0
 
     def test_compute_metrics_history_with_zero_steps(self, tiger_pomdp: TigerPOMDP):
         """Regression: compute_metrics must not IndexError when an episode has zero steps.
@@ -621,9 +526,9 @@ class TestTigerPOMDPMetrics:
             reach_terminal_state=False,
             policy_run_data=[],
         )
-        metrics = tiger_pomdp.compute_metrics([empty_history])
+        metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, [empty_history]))
 
-        success_metric = next(m for m in metrics if m.name == "success_rate")
+        success_metric = next(m for m in metrics if m.name == "task_completion_rate")
         listens_metric = next(m for m in metrics if m.name == "average_listens")
         assert success_metric.value == 0.0
         assert listens_metric.value == 0.0
@@ -691,53 +596,13 @@ def test_metrics_confidence_intervals(tiger_pomdp):
         )
 
     # Compute metrics
-    metrics = tiger_pomdp.compute_metrics(histories)
+    metrics = tiger_pomdp.compute_metrics(attach_step_info(tiger_pomdp, histories))
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
     verify_metric_sanity(metrics, histories, tiger_pomdp)
     verify_history_returns_bounded(histories, tiger_pomdp)
     verify_return_shift_linearity(histories, tiger_pomdp, shift=1.5)
-
-
-def test_metric_name_consistency(tiger_pomdp):
-    """Test that declared metric names match actual produced metrics.
-
-    Purpose: Validates that TigerPOMDP get_metric_names() returns exactly the metric names produced by compute_metrics()
-
-    Given: A TigerPOMDP environment and sample episode histories
-    When: get_metric_names() is called and compute_metrics() is executed
-    Then: The metric names declared match exactly the metric names produced (no missing or extra metrics)
-
-    Test type: unit
-    """
-    from POMDPPlanners.tests.test_metric_consistency_utils import (
-        verify_environment_metric_consistency,
-    )
-
-    # Create sample histories
-    steps = [
-        StepData(
-            state="tiger_left",
-            action="listen",
-            next_state="tiger_left",
-            observation="hear_left",
-            reward=-1,
-            belief=Mock(spec=Belief),
-        )
-        for _ in range(3)
-    ]
-
-    histories = [
-        build_test_history(
-            steps=steps,
-            reach_terminal=True,
-            policy_run_data=[PolicyRunData(info_variables=[])],
-        )
-    ]
-
-    # Verify consistency using reusable utility function
-    verify_environment_metric_consistency(tiger_pomdp, histories)
 
 
 # ---------------------------------------------------------------------------

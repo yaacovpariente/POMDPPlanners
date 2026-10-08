@@ -309,10 +309,10 @@ class ICVaR_POMCPOW(ArenaPathSimulationPolicyCostSetting):
             weights_sum += w
         if weights_sum > 0.0:
             weights = weights / weights_sum
-        tree.q_value[action_id] = (
-            immediate_cost
-            + self.discount_factor
-            * cvar_estimator_from_dist_fast_kernel(v_values, weights, self.alpha)
+        tree.q_value[
+            action_id
+        ] = immediate_cost + self.discount_factor * cvar_estimator_from_dist_fast_kernel(
+            v_values, weights, self.alpha
         )
 
     def _update_v_value(self, tree: Tree, belief_id: int) -> None:
