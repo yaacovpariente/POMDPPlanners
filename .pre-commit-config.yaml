@@ -1,3 +1,10 @@
+# Existing hooks run only at pre-commit; the no-ai-slop-in-commits hook opts into
+# commit-msg, since the message does not exist yet when pre-commit runs.
+default_stages: [pre-commit]
+# A plain `pre-commit install` installs only the pre-commit hook unless told
+# otherwise; this makes it install the commit-msg hook too.
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   - repo: https://github.com/psf/black
     rev: 25.9.0
@@ -8,6 +15,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: no-ai-slop-in-commits
+        name: no AI slop in the commit
+        entry: scripts/check_no_ai_slop_in_commits.sh
+        language: script
+        stages: [commit-msg]
+        always_run: true
+
       - id: pylint
         name: pylint
         entry: .venv/bin/python -m pylint
