@@ -9,7 +9,6 @@ authors:
   - name: Yaacov Pariente
     email: yaacovp@campus.technion.ac.il
     # TODO(author): add ORCID
-    corresponding: true
     affiliation: 1
   - name: Vadim Indelman
     email: vadim.indelman@technion.ac.il
