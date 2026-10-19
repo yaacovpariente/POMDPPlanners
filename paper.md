@@ -24,6 +24,9 @@ affiliations:
     name: Faculty of Data and Decision Sciences, Technion - Israel Institute of Technology, Haifa 3200003, Israel
 date: 21 September 2026
 bibliography: paper.bib
+header-includes:
+  - \renewcommand\Authand{, }
+  - \renewcommand\Authands{, }
 ---
 
 <!-- Every sentence below is copied from v1
