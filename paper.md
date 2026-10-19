@@ -17,11 +17,11 @@ authors:
     affiliation: "2, 3"
 affiliations:
   - index: 1
-    name: Faculty of Mathematics, Technion - Israel Institute of Technology, Haifa 3200003, Israel
+    name: Faculty of Mathematics, Technion - Israel Institute of Technology
   - index: 2
-    name: Stephen B. Klein Faculty of Aerospace Engineering, Technion - Israel Institute of Technology, Haifa 3200003, Israel
+    name: Stephen B. Klein Faculty of Aerospace Engineering, Technion - Israel Institute of Technology
   - index: 3
-    name: Faculty of Data and Decision Sciences, Technion - Israel Institute of Technology, Haifa 3200003, Israel
+    name: Faculty of Data and Decision Sciences, Technion - Israel Institute of Technology
 date: 21 September 2026
 bibliography: paper.bib
 header-includes:
